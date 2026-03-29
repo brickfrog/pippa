@@ -20,6 +20,16 @@ test "pippa create program" {
 }
 
 ///|
+test "pippa create program with on_resize" {
+  let _program : Program[Int, Unit] = Program::new(
+    init=fn() { UpdateResult::new(model=42, cmd=Cmd::none()) },
+    update=fn(model : Int, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+    view=fn(model : Int) { "Count: \{model}" },
+    on_resize=fn(_cols : Int, _rows : Int) { None },
+  )
+}
+
+///|
 test "pippa update result" {
   let result : UpdateResult[Int, Unit] = UpdateResult::new(
     model=10,
