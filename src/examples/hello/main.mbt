@@ -56,10 +56,13 @@ fn hello_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] {
 /// Map input events to messages.
 fn hello_sub(event : @pippa.InputEvent) -> Msg? {
   match event {
-    @pippa.Key(@pippa.Char('+')) | @pippa.Key(@pippa.Special("up")) => Some(Increment)
-    @pippa.Key(@pippa.Char('-')) | @pippa.Key(@pippa.Special("down")) => Some(Decrement)
+    @pippa.Key(@pippa.Char('+')) | @pippa.Key(@pippa.Special("up")) =>
+      Some(Increment)
+    @pippa.Key(@pippa.Char('-')) | @pippa.Key(@pippa.Special("down")) =>
+      Some(Decrement)
     @pippa.Key(@pippa.Char('r')) => Some(Reset)
-    @pippa.Key(@pippa.Char('q')) | @pippa.Key(@pippa.Modified("ctrl", "c")) => Some(Quit)
+    @pippa.Key(@pippa.Char('q')) | @pippa.Key(@pippa.Modified("ctrl", "c")) =>
+      Some(Quit)
     _ => None
   }
 }
