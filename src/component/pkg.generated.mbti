@@ -14,6 +14,8 @@ pub fn spinner(label? : String) -> Component[SpinnerModel, SpinnerMsg]
 
 pub fn text_input(placeholder~ : String) -> Component[TextInputModel, TextInputMsg]
 
+pub fn viewport(width~ : Int, height~ : Int) -> Component[ViewportModel, ViewportMsg]
+
 // Errors
 
 // Types and methods
@@ -86,6 +88,27 @@ pub(all) enum TextInputMsg {
 }
 pub impl Eq for TextInputMsg
 pub impl Show for TextInputMsg
+
+pub(all) struct ViewportModel {
+  content : String
+  width : Int
+  height : Int
+  offset : Int
+  total_lines : Int
+}
+pub impl Show for ViewportModel
+
+pub(all) enum ViewportMsg {
+  ScrollUp
+  ScrollDown
+  PageUp
+  PageDown
+  ScrollToTop
+  ScrollToBottom
+  SetContent(String)
+  Resize(Int, Int)
+}
+pub impl Show for ViewportMsg
 
 // Type aliases
 
