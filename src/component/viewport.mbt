@@ -1,24 +1,48 @@
 ///|
+/// Viewport component — a scrollable window over a larger body of text.
+
+///|
+/// Model for the Viewport component.
+///
+/// - `content`: the full body of text to be displayed
+/// - `width`: the visible width of the viewport
+/// - `height`: the visible height (number of lines) of the viewport
+/// - `offset`: the index of the first visible line (0-based)
 pub(all) struct ViewportModel {
   content : String
   width : Int
   height : Int
   offset : Int
-}
+} derive(Show)
 
 ///|
+/// Messages handled by the Viewport component.
 pub(all) enum ViewportMsg {
+  /// Scroll up one line.
   ScrollUp
+  /// Scroll down one line.
   ScrollDown
+  /// Scroll up one full page (height lines).
   PageUp
+  /// Scroll down one full page (height lines).
   PageDown
+  /// Scroll directly to the first line.
   ScrollToTop
+  /// Scroll directly to the last possible line.
   ScrollToBottom
+  /// Replace the current content and reset the offset to 0.
   SetContent(String)
+  /// Update the viewport dimensions and re-clamp the offset.
   Resize(Int, Int)
-}
+} derive(Show)
 
 ///|
+/// Construct a Viewport `Component`.
+///
+/// ```moonbit nocheck
+/// let vp = viewport(width=80, height=24)
+/// let { model, .. } = (vp.init)()
+/// ```
 pub fn viewport(
   width~ : Int,
   height~ : Int,
@@ -87,7 +111,8 @@ pub fn viewport(
         } else {
           ""
         }
-        let padded = @pippa.pad_right(raw_line, model.width)
+        let truncated = @pippa.truncate(raw_line, model.width)
+        let padded = @pippa.pad_right(truncated, model.width)
         buf.write_string(padded)
         if i < model.height - 1 {
           buf.write_char('\n')

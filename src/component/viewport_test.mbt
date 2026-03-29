@@ -75,3 +75,12 @@ test "viewport view padding when few lines" {
   let v = (vp.view)(m)
   assert_eq(v, "a   \nb   \n    ")
 }
+
+///|
+test "viewport truncation" {
+  let vp = viewport(width=3, height=1)
+  let mut m = (vp.init)().model
+  m = (vp.update)(m, SetContent("longline")).model
+  let v = (vp.view)(m)
+  assert_eq(v, "lon")
+}
