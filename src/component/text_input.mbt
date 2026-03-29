@@ -52,66 +52,93 @@ fn text_input_chars_to_string(chars : Array[Char]) -> String {
 }
 
 ///|
+// Clamp `v` to the closed interval [lo, hi].
+fn clamp(v : Int, lo : Int, hi : Int) -> Int {
+  if v < lo {
+    lo
+  } else if v > hi {
+    hi
+  } else {
+    v
+  }
+}
+
+///|
 fn text_input_update(
   model : TextInputModel,
   msg : TextInputMsg,
 ) -> @pippa.UpdateResult[TextInputModel, TextInputMsg] {
-  let chars = model.value.to_array()
-  let n = chars.length()
+  // Char-array allocation is deferred into the branches that actually need it.
+  // Focus/Blur/MoveCursorLeft/MoveToStart never allocate.
   let new_model : TextInputModel = match msg {
     InsertChar(c) => {
+      let chars = model.value.to_array()
+      let n = chars.length()
+      let cursor = clamp(model.cursor, 0, n)
       let new_chars : Array[Char] = []
-      for i in 0..<model.cursor {
+      for i in 0..<cursor {
         new_chars.push(chars[i])
       }
       new_chars.push(c)
-      for i in model.cursor..<n {
+      for i in cursor..<n {
         new_chars.push(chars[i])
       }
       {
         ..model,
         value: text_input_chars_to_string(new_chars),
-        cursor: model.cursor + 1,
+        cursor: cursor + 1,
       }
     }
-    DeleteBefore =>
-      if model.cursor > 0 {
+    DeleteBefore => {
+      let chars = model.value.to_array()
+      let n = chars.length()
+      let cursor = clamp(model.cursor, 0, n)
+      if cursor > 0 {
         let new_chars : Array[Char] = []
-        let end = model.cursor - 1
-        for i in 0..<end {
+        for i in 0..<(cursor - 1) {
           new_chars.push(chars[i])
         }
-        for i in model.cursor..<n {
+        for i in cursor..<n {
           new_chars.push(chars[i])
         }
         {
           ..model,
           value: text_input_chars_to_string(new_chars),
-          cursor: model.cursor - 1,
+          cursor: cursor - 1,
         }
       } else {
         model
       }
-    DeleteAfter =>
-      if model.cursor < n {
+    }
+    DeleteAfter => {
+      let chars = model.value.to_array()
+      let n = chars.length()
+      let cursor = clamp(model.cursor, 0, n)
+      if cursor < n {
         let new_chars : Array[Char] = []
-        for i in 0..<model.cursor {
+        for i in 0..<cursor {
           new_chars.push(chars[i])
         }
-        let start = model.cursor + 1
-        for i in start..<n {
+        for i in (cursor + 1)..<n {
           new_chars.push(chars[i])
         }
         { ..model, value: text_input_chars_to_string(new_chars) }
       } else {
         model
       }
+    }
     MoveCursorLeft =>
       { ..model, cursor: if model.cursor > 0 { model.cursor - 1 } else { 0 } }
-    MoveCursorRight =>
-      { ..model, cursor: if model.cursor < n { model.cursor + 1 } else { n } }
+    MoveCursorRight => {
+      let n = model.value.to_array().length()
+      let cursor = clamp(model.cursor, 0, n)
+      { ..model, cursor: if cursor < n { cursor + 1 } else { n } }
+    }
     MoveToStart => { ..model, cursor: 0 }
-    MoveToEnd => { ..model, cursor: n }
+    MoveToEnd => {
+      let n = model.value.to_array().length()
+      { ..model, cursor: n }
+    }
     Focus => { ..model, focused: true }
     Blur => { ..model, focused: false }
   }
@@ -130,13 +157,20 @@ fn text_input_view(model : TextInputModel) -> String {
     // Show value with '|' cursor marker at cursor position
     let chars = model.value.to_array()
     let n = chars.length()
+    let cursor = if model.cursor < 0 {
+      0
+    } else if model.cursor > n {
+      n
+    } else {
+      model.cursor
+    }
     for i in 0..<n {
-      if i == model.cursor {
+      if i == cursor {
         buf.write_char('|')
       }
       buf.write_char(chars[i])
     }
-    if model.cursor == n {
+    if cursor == n {
       buf.write_char('|')
     }
   } else {
