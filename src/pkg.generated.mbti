@@ -14,6 +14,8 @@ pub fn blink() -> String
 
 pub fn bold() -> String
 
+pub fn center(String, Int) -> String
+
 pub fn clear_line() -> String
 
 pub fn clear_screen() -> String
@@ -28,7 +30,15 @@ pub fn fg_rgb(Int, Int, Int) -> String
 
 pub fn hide_cursor() -> String
 
+pub fn line_count(String) -> Int
+
+pub fn max_line_width(String) -> Int
+
 pub fn move_cursor(Int, Int) -> String
+
+pub fn pad_left(String, Int) -> String
+
+pub fn pad_right(String, Int) -> String
 
 pub fn render_patch(Array[PatchOp]) -> String
 
@@ -38,7 +48,15 @@ pub fn reverse() -> String
 
 pub fn show_cursor() -> String
 
+pub fn split_lines(String) -> Array[String]
+
+pub fn strip_ansi(String) -> String
+
+pub fn truncate(String, Int) -> String
+
 pub fn underline() -> String
+
+pub fn visible_width(String) -> Int
 
 // Errors
 
