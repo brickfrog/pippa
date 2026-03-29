@@ -12,6 +12,8 @@ pub fn select_list(items? : Array[String]) -> Component[SelectListModel, SelectL
 
 pub fn spinner(label? : String) -> Component[SpinnerModel, SpinnerMsg]
 
+pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg]
+
 pub fn text_input(placeholder~ : String) -> Component[TextInputModel, TextInputMsg]
 
 pub fn viewport(width~ : Int, height~ : Int) -> Component[ViewportModel, ViewportMsg]
@@ -19,6 +21,12 @@ pub fn viewport(width~ : Int, height~ : Int) -> Component[ViewportModel, Viewpor
 // Errors
 
 // Types and methods
+pub(all) struct Column {
+  header : String
+  width : Int
+}
+pub impl Show for Column
+
 pub(all) struct Component[Model, Msg] {
   init : () -> @pippa.UpdateResult[Model, Msg]
   update : (Model, Msg) -> @pippa.UpdateResult[Model, Msg]
@@ -65,6 +73,22 @@ pub(all) enum SpinnerMsg {
   Tick
 }
 pub impl Show for SpinnerMsg
+
+pub(all) struct TableModel {
+  columns : Array[Column]
+  rows : Array[Array[String]]
+  cursor : Int
+  selected : Int
+}
+pub impl Show for TableModel
+
+pub(all) enum TableMsg {
+  CursorUp
+  CursorDown
+  Select
+  SetRows(Array[Array[String]])
+}
+pub impl Show for TableMsg
 
 pub(all) struct TextInputModel {
   value : String
