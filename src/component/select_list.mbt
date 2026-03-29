@@ -32,7 +32,7 @@ pub(all) enum SelectListMsg {
 ///
 /// ```moonbit nocheck
 /// let sl = select_list(items=["apple", "banana", "cherry"])
-/// let { model, .. } = sl.init()
+/// let { model, .. } = (sl.init)()
 /// ```
 pub fn select_list(
   items? : Array[String] = [],
@@ -54,18 +54,28 @@ pub fn select_list(
           )
         }
         CursorDown => {
-          let max = model.items.length() - 1
-          let next = if model.cursor + 1 > max { max } else { model.cursor + 1 }
+          let len = model.items.length()
+          let next = if len == 0 || model.cursor + 1 >= len {
+            model.cursor
+          } else {
+            model.cursor + 1
+          }
           @pippa.UpdateResult::new(
             model={ ..model, cursor: next },
             cmd=@pippa.Cmd::none(),
           )
         }
-        Select =>
+        Select => {
+          let selected = if model.items.length() == 0 {
+            -1
+          } else {
+            model.cursor
+          }
           @pippa.UpdateResult::new(
-            model={ ..model, selected: model.cursor },
+            model={ ..model, selected, },
             cmd=@pippa.Cmd::none(),
           )
+        }
         SetItems(new_items) =>
           @pippa.UpdateResult::new(
             model={ ..model, items: new_items, cursor: 0, selected: -1 },

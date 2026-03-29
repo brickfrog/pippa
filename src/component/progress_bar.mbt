@@ -12,7 +12,7 @@ pub(all) struct ProgressBarModel {
   width : Int
   /// Optional label shown before the bar.
   label : String
-}
+} derive(Show)
 
 ///|
 /// Messages handled by the progress bar component.
@@ -21,7 +21,7 @@ pub(all) enum ProgressBarMsg {
   SetPercent(Double)
   /// Update the label text.
   SetLabel(String)
-}
+} derive(Show)
 
 ///|
 /// Clamp a Double to [0.0, 100.0].

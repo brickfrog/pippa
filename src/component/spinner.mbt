@@ -21,17 +21,11 @@ pub(all) enum SpinnerMsg {
 } derive(Show)
 
 ///|
-/// Default braille animation frames.
-let default_frames : Array[String] = [
-  "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏",
-]
-
-///|
 /// Construct a Spinner `Component`.
 ///
 /// ```moonbit nocheck
 /// let s = spinner(label="Loading...")
-/// let { model, .. } = s.init()
+/// let { model, .. } = (s.init)()
 /// ```
 pub fn spinner(
   label? : String = "Loading...",
@@ -39,7 +33,13 @@ pub fn spinner(
   {
     init: fn() {
       @pippa.UpdateResult::new(
-        model={ frames: default_frames, current: 0, label },
+        model={
+          frames: [
+            "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏",
+          ],
+          current: 0,
+          label,
+        },
         cmd=@pippa.Cmd::none(),
       )
     },

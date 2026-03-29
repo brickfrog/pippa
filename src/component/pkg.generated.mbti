@@ -27,11 +27,13 @@ pub(all) struct ProgressBarModel {
   width : Int
   label : String
 }
+pub impl Show for ProgressBarModel
 
 pub(all) enum ProgressBarMsg {
   SetPercent(Double)
   SetLabel(String)
 }
+pub impl Show for ProgressBarMsg
 
 pub(all) struct SelectListModel {
   items : Array[String]
