@@ -67,7 +67,7 @@ pub fn select_list(
             model.cursor
           }
           @pippa.UpdateResult::new(
-            model={ ..model, selected },
+            model={ ..model, selected, },
             cmd=@pippa.Cmd::none(),
           )
         }
