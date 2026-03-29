@@ -201,7 +201,11 @@ pub fn Style::render(self : Style, content : String) -> String {
   let lines : Array[String] = []
   for line in content_lines {
     let prepared = if normalize {
-      align_line(truncate(line, content_width), content_width, effective_style.align)
+      align_line(
+        truncate(line, content_width),
+        content_width,
+        effective_style.align,
+      )
     } else {
       line
     }
