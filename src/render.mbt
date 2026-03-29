@@ -10,16 +10,15 @@ pub(all) struct PatchOp {
 /// Split a string on '\n', returning each line as an element.
 fn split_on_newline(s : String) -> Array[String] {
   let lines : Array[String] = []
-  let mut current = ""
-  for ch in s {
-    if ch == '\n' {
-      lines.push(current)
-      current = ""
-    } else {
-      current = current + ch.to_string()
+  let len = s.length()
+  let mut start = 0
+  for i = 0; i < len; i = i + 1 {
+    if s[i] == '\n' {
+      lines.push(s[start:i].to_string())
+      start = i + 1
     }
   }
-  lines.push(current)
+  lines.push(s[start:].to_string())
   lines
 }
 
@@ -57,9 +56,11 @@ pub fn render_patch(ops : Array[PatchOp]) -> String {
   if ops.is_empty() {
     return ""
   }
-  let mut result = ""
+  let parts : Array[String] = []
   for op in ops {
-    result = result + move_cursor(op.row, op.col) + clear_line() + op.text
+    parts.push(move_cursor(op.row, op.col))
+    parts.push(clear_line())
+    parts.push(op.text)
   }
-  result
+  parts.join("")
 }
