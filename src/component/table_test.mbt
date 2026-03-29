@@ -67,3 +67,24 @@ test "Table with data, cursor and select" {
 
   assert_eq(out, expected)
 }
+
+///|
+test "Table negative column width is clamped to zero" {
+  let columns : Array[Column] = [
+    { header: "Bad", width: -5 },
+    { header: "OK", width: 2 },
+  ]
+  let tbl = table(columns~)
+  let mut res = (tbl.init)()
+  res = (tbl.update)(res.model, SetRows([["x", "ab"]]))
+  let out = (tbl.view)(res.model)
+  let bold = @pippa.bold()
+  let reset = @pippa.reset()
+  let expected = " │ OK\n" +
+    "─────\n" +
+    bold +
+    " │ ab" +
+    reset +
+    "\n"
+  assert_eq(out, expected)
+}

@@ -79,8 +79,9 @@ pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg] {
       // Header row
       for i = 0; i < model.columns.length(); i = i + 1 {
         let col = model.columns[i]
-        let cell = @pippa.truncate(col.header, col.width)
-        buf.write_string(@pippa.pad_right(cell, col.width))
+        let w = if col.width < 0 { 0 } else { col.width }
+        let cell = @pippa.truncate(col.header, w)
+        buf.write_string(@pippa.pad_right(cell, w))
         if i < model.columns.length() - 1 {
           buf.write_string(" │ ")
         }
@@ -90,7 +91,9 @@ pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg] {
       // Separator
       let mut total_width = 0
       for i = 0; i < model.columns.length(); i = i + 1 {
-        total_width = total_width + model.columns[i].width
+        let cw = model.columns[i].width
+        let w = if cw < 0 { 0 } else { cw }
+        total_width = total_width + w
         if i < model.columns.length() - 1 {
           total_width = total_width + 3 // " │ "
         }
@@ -117,9 +120,10 @@ pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg] {
 
           for c = 0; c < model.columns.length(); c = c + 1 {
             let col = model.columns[c]
+            let w = if col.width < 0 { 0 } else { col.width }
             let cell_text = if c < row.length() { row[c] } else { "" }
-            let cell = @pippa.truncate(cell_text, col.width)
-            buf.write_string(@pippa.pad_right(cell, col.width))
+            let cell = @pippa.truncate(cell_text, w)
+            buf.write_string(@pippa.pad_right(cell, w))
             if c < model.columns.length() - 1 {
               buf.write_string(" │ ")
             }
