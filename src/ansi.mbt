@@ -68,7 +68,7 @@ pub fn enter_alt_screen() -> String {
 }
 
 ///|
-/// Enable X10 mouse reporting (button press/release events: CSI ?1000h).
+/// Enable normal (VT200/DECSET 1000) mouse reporting (button press/release events: CSI ?1000h).
 pub fn enable_mouse() -> String {
   "\{CSI}?1000h"
 }
@@ -86,9 +86,9 @@ pub fn exit_alt_screen() -> String {
 }
 
 ///|
-/// Disable all mouse reporting (CSI ?1000l).
+/// Disable all mouse reporting (CSI ?1000l and CSI ?1003l).
 pub fn disable_mouse() -> String {
-  "\{CSI}?1000l"
+  "\{CSI}?1000l\{CSI}?1003l"
 }
 
 ///|
