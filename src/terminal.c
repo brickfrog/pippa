@@ -1,5 +1,4 @@
 #include <signal.h>
-#include <stdatomic.h>
 #include <termios.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -11,23 +10,28 @@
 
 // Save and restore terminal state
 static struct termios orig_termios;
-static atomic_int pippa_resize_flag = 0;
+static volatile sig_atomic_t pippa_resize_flag = 0;
 
 static void sigwinch_handler(int sig) {
     (void)sig;
-    atomic_store(&pippa_resize_flag, 1);
+    pippa_resize_flag = 1;
 }
 
 void pippa_install_sigwinch(void) {
     struct sigaction sa = {0};
     sa.sa_handler = sigwinch_handler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART;
-    sigaction(SIGWINCH, &sa, NULL);
+    sa.sa_flags = 0;
+    if (sigaction(SIGWINCH, &sa, NULL) == -1) {
+        fprintf(stderr, "Warning: failed to install SIGWINCH handler: %s\n",
+                strerror(errno));
+    }
 }
 
 int pippa_check_resize(void) {
-    return atomic_exchange(&pippa_resize_flag, 0);
+    int resized = pippa_resize_flag;
+    pippa_resize_flag = 0;
+    return resized;
 }
 
 void pippa_enter_raw_mode(void) {
@@ -59,7 +63,7 @@ int pippa_poll_stdin(int timeout_ms) {
     while (1) {
         int result = poll(&pfd, 1, timeout_ms);
         if (result < 0 && errno == EINTR) {
-            if (atomic_load(&pippa_resize_flag) != 0) {
+            if (pippa_resize_flag != 0) {
                 return 2;
             }
             continue;
