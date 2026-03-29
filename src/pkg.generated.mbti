@@ -26,9 +26,13 @@ pub fn dim() -> String
 
 pub fn down_binding() -> Binding
 
+pub fn enter_alt_screen() -> String
+
 pub fn enter_binding() -> Binding
 
 pub fn escape_binding() -> Binding
+
+pub fn exit_alt_screen() -> String
 
 pub fn fg_color(Int) -> String
 
