@@ -6,6 +6,11 @@ import {
 }
 
 // Values
+pub fn progress_bar(width? : Int, label? : String) -> Component[ProgressBarModel, ProgressBarMsg]
+
+pub fn select_list(items? : Array[String]) -> Component[SelectListModel, SelectListMsg]
+
+pub fn spinner(label? : String) -> Component[SpinnerModel, SpinnerMsg]
 
 // Errors
 
@@ -16,6 +21,46 @@ pub(all) struct Component[Model, Msg] {
   view : (Model) -> String
 }
 pub impl[Model : Show, Msg : Show] Show for Component[Model, Msg]
+
+pub(all) struct ProgressBarModel {
+  percent : Double
+  width : Int
+  label : String
+}
+pub impl Show for ProgressBarModel
+
+pub(all) enum ProgressBarMsg {
+  SetPercent(Double)
+  SetLabel(String)
+}
+pub impl Show for ProgressBarMsg
+
+pub(all) struct SelectListModel {
+  items : Array[String]
+  cursor : Int
+  selected : Int
+}
+pub impl Show for SelectListModel
+
+pub(all) enum SelectListMsg {
+  CursorUp
+  CursorDown
+  Select
+  SetItems(Array[String])
+}
+pub impl Show for SelectListMsg
+
+pub(all) struct SpinnerModel {
+  frames : Array[String]
+  current : Int
+  label : String
+}
+pub impl Show for SpinnerModel
+
+pub(all) enum SpinnerMsg {
+  Tick
+}
+pub impl Show for SpinnerMsg
 
 // Type aliases
 
