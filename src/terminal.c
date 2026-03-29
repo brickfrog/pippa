@@ -1,6 +1,9 @@
 #include <termios.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <poll.h>
+#include <errno.h>
+#include <time.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -28,6 +31,23 @@ int pippa_read_byte(void) {
     int n = read(STDIN_FILENO, &c, 1);
     if (n <= 0) return -1;
     return (int)c;
+}
+
+int pippa_poll_stdin(int timeout_ms) {
+    struct pollfd pfd = { .fd = STDIN_FILENO, .events = POLLIN };
+    while (1) {
+        int result = poll(&pfd, 1, timeout_ms);
+        if (result < 0 && errno == EINTR) {
+            continue;
+        }
+        return result;
+    }
+}
+
+long long pippa_now_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
 void pippa_write_byte(int b) {

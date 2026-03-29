@@ -18,6 +18,8 @@ pub(all) struct Program[Model, Msg] {
   view : (Model) -> String
   /// Map input events to messages. Return None to ignore an event.
   sub : (InputEvent) -> Msg?
+  /// Produce a message when a periodic tick fires. Return None to ignore it.
+  on_tick : () -> Msg?
   /// Return true to exit the event loop after an update.
   should_quit : (Model) -> Bool
 }
@@ -29,9 +31,10 @@ pub fn[Model, Msg] Program::new(
   update~ : (Model, Msg) -> UpdateResult[Model, Msg],
   view~ : (Model) -> String,
   sub? : (InputEvent) -> Msg? = fn(_evt) { None },
+  on_tick? : () -> Msg? = fn() { None },
   should_quit? : (Model) -> Bool = fn(_model) { false },
 ) -> Program[Model, Msg] {
-  { init, update, view, sub, should_quit }
+  { init, update, view, sub, on_tick, should_quit }
 }
 
 ///|
@@ -57,6 +60,36 @@ fn write_bytes(bytes : Bytes) -> Unit {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn[Msg] next_tick_at(cmd : Cmd[Msg], base_ms : Int64) -> Int64? {
+  if cmd.interval_ms > 0 {
+    Some(base_ms + cmd.interval_ms.to_int64())
+  } else {
+    None
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn tick_timeout_ms(next_tick_ms : Int64?) -> Int {
+  match next_tick_ms {
+    Some(deadline) => Int64::max(0L, deadline - pippa_now_ms()).to_int()
+    None => -1
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] apply_msg(
+  program : Program[Model, Msg],
+  model : Model,
+  msg : Msg,
+) -> (Model, Bool, Cmd[Msg]) {
+  let res = (program.update)(model, msg)
+  (res.model, (program.should_quit)(res.model), res.cmd)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
   pippa_enter_raw_mode()
 
@@ -64,6 +97,8 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
 
   let init_res = (program.init)()
   let mut model = init_res.model
+  let mut tick_cmd = init_res.cmd
+  let mut next_tick_ms = next_tick_at(tick_cmd, pippa_now_ms())
 
   let mut current_view = (program.view)(model)
   write_bytes(current_view.to_bytes())
@@ -72,40 +107,70 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
   let mut quit = false
 
   while not(quit) {
-    let b = pippa_read_byte()
-    if b < 0 {
+    let poll_result = pippa_poll_stdin(tick_timeout_ms(next_tick_ms))
+    if poll_result < 0 {
       break
-    }
-
-    buf.push(b.to_byte())
-
-    let bytes = Bytes::from_array(buf)
-    let bv = bytes[:]
-    let (events, leftover) = parse_all(bv)
-
-    buf = []
-    for i = 0; i < leftover.length(); i = i + 1 {
-      buf.push(leftover[i])
     }
 
     let mut updated = false
 
-    for evt in events {
-      match evt {
-        Key(Modified("ctrl", "c")) => quit = true
-        _ => ()
-      }
-
-      match (program.sub)(evt) {
+    if poll_result == 0 {
+      let fired_at = pippa_now_ms()
+      next_tick_ms = next_tick_at(tick_cmd, fired_at)
+      match (program.on_tick)() {
         Some(msg) => {
-          let res = (program.update)(model, msg)
-          model = res.model
+          let (next_model, should_quit, next_cmd) = apply_msg(
+            program, model, msg,
+          )
+          model = next_model
+          tick_cmd = next_cmd
+          next_tick_ms = next_tick_at(tick_cmd, fired_at)
           updated = true
-          if (program.should_quit)(model) {
+          if should_quit {
             quit = true
           }
         }
         None => ()
+      }
+    } else {
+      let b = pippa_read_byte()
+      if b < 0 {
+        break
+      }
+
+      buf.push(b.to_byte())
+
+      let bytes = Bytes::from_array(buf)
+      let bv = bytes[:]
+      let (events, leftover) = parse_all(bv)
+
+      buf = []
+      for i = 0; i < leftover.length(); i = i + 1 {
+        buf.push(leftover[i])
+      }
+
+      for evt in events {
+        match evt {
+          Key(Modified("ctrl", "c")) => quit = true
+          _ => ()
+        }
+
+        match (program.sub)(evt) {
+          Some(msg) => {
+            let now_ms = pippa_now_ms()
+            let (next_model, should_quit, next_cmd) = apply_msg(
+              program, model, msg,
+            )
+            model = next_model
+            tick_cmd = next_cmd
+            next_tick_ms = next_tick_at(tick_cmd, now_ms)
+            updated = true
+            if should_quit {
+              quit = true
+            }
+          }
+          None => ()
+        }
       }
     }
 
