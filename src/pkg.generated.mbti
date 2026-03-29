@@ -24,13 +24,27 @@ pub fn diff_views(String, String) -> Array[PatchOp]
 
 pub fn dim() -> String
 
+pub fn down_binding() -> Binding
+
+pub fn enter_binding() -> Binding
+
+pub fn escape_binding() -> Binding
+
 pub fn fg_color(Int) -> String
 
 pub fn fg_rgb(Int, Int, Int) -> String
 
+pub fn help_binding() -> Binding
+
+pub fn help_view(HelpModel) -> String
+
 pub fn hide_cursor() -> String
 
+pub fn left_binding() -> Binding
+
 pub fn line_count(String) -> Int
+
+pub fn matches(Binding, KeyMsg) -> Bool
 
 pub fn max_line_width(String) -> Int
 
@@ -44,11 +58,15 @@ pub fn parse_all(BytesView) -> (Array[InputEvent], Bytes)
 
 pub fn parse_input(BytesView) -> ParseResult[InputEvent]
 
+pub fn quit_binding() -> Binding
+
 pub fn render_patch(Array[PatchOp]) -> String
 
 pub fn reset() -> String
 
 pub fn reverse() -> String
+
+pub fn right_binding() -> Binding
 
 pub fn show_cursor() -> String
 
@@ -60,16 +78,32 @@ pub fn truncate(String, Int) -> String
 
 pub fn underline() -> String
 
+pub fn up_binding() -> Binding
+
 pub fn visible_width(String) -> Int
 
 // Errors
 
 // Types and methods
+pub(all) struct Binding {
+  keys : Array[String]
+  help : String
+}
+pub impl Eq for Binding
+pub impl Show for Binding
+
 type Cmd[Msg]
 pub fn[Msg] Cmd::batch(Array[Self[Msg]]) -> Self[Msg]
 pub fn[A, B] Cmd::map((A) -> B, Self[A]) -> Self[B]
 pub fn[Msg] Cmd::none() -> Self[Msg]
 pub impl[Msg : Show] Show for Cmd[Msg]
+
+pub(all) struct HelpModel {
+  bindings : Array[Binding]
+  show_full : Bool
+}
+pub impl Eq for HelpModel
+pub impl Show for HelpModel
 
 pub(all) enum InputEvent {
   Key(KeyMsg)
