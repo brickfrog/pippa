@@ -1,0 +1,23 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/component"
+
+import {
+  "brickfrog/pippa",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub(all) struct Component[Model, Msg] {
+  init : () -> @pippa.UpdateResult[Model, Msg]
+  update : (Model, Msg) -> @pippa.UpdateResult[Model, Msg]
+  view : (Model) -> String
+}
+pub impl[Model : Show, Msg : Show] Show for Component[Model, Msg]
+
+// Type aliases
+
+// Traits
+

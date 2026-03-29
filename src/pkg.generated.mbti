@@ -1,0 +1,105 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa"
+
+// Values
+pub const CSI : String = "\x1b["
+
+pub const ESC : String = "\x1b"
+
+pub fn bg_color(Int) -> String
+
+pub fn bg_rgb(Int, Int, Int) -> String
+
+pub fn blink() -> String
+
+pub fn bold() -> String
+
+pub fn clear_line() -> String
+
+pub fn clear_screen() -> String
+
+pub fn dim() -> String
+
+pub fn fg_color(Int) -> String
+
+pub fn fg_rgb(Int, Int, Int) -> String
+
+pub fn hide_cursor() -> String
+
+pub fn move_cursor(Int, Int) -> String
+
+pub fn reset() -> String
+
+pub fn reverse() -> String
+
+pub fn show_cursor() -> String
+
+pub fn underline() -> String
+
+// Errors
+
+// Types and methods
+type Cmd[Msg]
+pub fn[Msg] Cmd::batch(Array[Self[Msg]]) -> Self[Msg]
+pub fn[A, B] Cmd::map((A) -> B, Self[A]) -> Self[B]
+pub fn[Msg] Cmd::none() -> Self[Msg]
+pub impl[Msg : Show] Show for Cmd[Msg]
+
+pub(all) enum InternalMsg {
+  KeyPress(Array[Byte])
+  WindowResize(WindowSize)
+  QuitRequested
+}
+pub impl Eq for InternalMsg
+pub impl Show for InternalMsg
+
+pub(all) enum KeyMsg {
+  Char(Char)
+  Special(String)
+  Modified(String, String)
+}
+pub impl Compare for KeyMsg
+pub impl Eq for KeyMsg
+pub impl Show for KeyMsg
+
+pub(all) enum MouseMsg {
+  Motion(Int, Int)
+  Press(Int, Int)
+  Release(Int, Int)
+}
+pub impl Compare for MouseMsg
+pub impl Eq for MouseMsg
+pub impl Show for MouseMsg
+
+pub(all) struct Nothing {
+}
+pub impl Eq for Nothing
+pub impl Show for Nothing
+
+pub(all) struct Program[Model, Msg] {
+  init : () -> UpdateResult[Model, Msg]
+  update : (Model, Msg) -> UpdateResult[Model, Msg]
+  view : (Model) -> String
+}
+pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::run(Self[Model, Msg]) -> Unit
+pub impl[Model : Show, Msg : Show] Show for Program[Model, Msg]
+
+pub(all) struct UpdateResult[Model, Msg] {
+  model : Model
+  cmd : Cmd[Msg]
+}
+pub fn[Model, Msg] UpdateResult::new(model~ : Model, cmd~ : Cmd[Msg]) -> Self[Model, Msg]
+pub impl[Model : Show, Msg : Show] Show for UpdateResult[Model, Msg]
+
+pub(all) struct WindowSize {
+  width : Int
+  height : Int
+}
+pub impl Eq for WindowSize
+pub impl Show for WindowSize
+
+// Type aliases
+
+// Traits
+
