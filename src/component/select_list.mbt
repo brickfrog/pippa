@@ -29,11 +29,6 @@ pub(all) enum SelectListMsg {
 
 ///|
 /// Construct a SelectList `Component`.
-///
-/// ```moonbit nocheck
-/// let sl = select_list(items=["apple", "banana", "cherry"])
-/// let { model, .. } = (sl.init)()
-/// ```
 pub fn select_list(
   items? : Array[String] = [],
 ) -> Component[SelectListModel, SelectListMsg] {
@@ -72,13 +67,13 @@ pub fn select_list(
             model.cursor
           }
           @pippa.UpdateResult::new(
-            model={ ..model, selected, },
+            model={ ..model, selected },
             cmd=@pippa.Cmd::none(),
           )
         }
         SetItems(new_items) =>
           @pippa.UpdateResult::new(
-            model={ ..model, items: new_items, cursor: 0, selected: -1 },
+            model={ items: new_items, cursor: 0, selected: -1 },
             cmd=@pippa.Cmd::none(),
           )
       }
@@ -88,9 +83,13 @@ pub fn select_list(
       for i = 0; i < model.items.length(); i = i + 1 {
         let is_cursor = i == model.cursor
         let is_selected = model.selected == i && model.selected == model.cursor
-        let prefix = if is_cursor { @pippa.bold() + "> " } else { "  " }
+        let prefix = if is_cursor {
+          @pippa.bold() + "> " + @pippa.reset()
+        } else {
+          "  "
+        }
         let decoration = if is_selected { @pippa.underline() } else { "" }
-        let suffix = if is_cursor || is_selected { @pippa.reset() } else { "" }
+        let suffix = if is_selected { @pippa.reset() } else { "" }
         lines.push(prefix + decoration + model.items[i] + suffix)
       }
       lines.join("\n")
