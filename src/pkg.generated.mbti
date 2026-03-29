@@ -131,10 +131,11 @@ pub(all) struct Program[Model, Msg] {
   init : () -> UpdateResult[Model, Msg]
   update : (Model, Msg) -> UpdateResult[Model, Msg]
   view : (Model) -> String
+  sub : (InputEvent) -> Msg?
+  should_quit : (Model) -> Bool
 }
-pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, should_quit? : (Model) -> Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::run(Self[Model, Msg]) -> Unit
-pub impl[Model : Show, Msg : Show] Show for Program[Model, Msg]
 
 pub(all) struct UpdateResult[Model, Msg] {
   model : Model

@@ -4,8 +4,7 @@
 /// A `Program[Model, Msg]` ties together the three core functions of the Elm
 /// Architecture (init, update, view) and drives the main event loop.
 ///
-/// Construct with `Program::new` and run with `Program::run` (not yet
-/// implemented).
+/// Construct with `Program::new` and run with `Program::run`.
 
 ///|
 /// Configuration for a Pippa application.
@@ -17,8 +16,10 @@ pub(all) struct Program[Model, Msg] {
   update : (Model, Msg) -> UpdateResult[Model, Msg]
   /// Pure view function: render the current model to a string.
   view : (Model) -> String
-  /// Map input events to messages.
+  /// Map input events to messages. Return None to ignore an event.
   sub : (InputEvent) -> Msg?
+  /// Return true to exit the event loop after an update.
+  should_quit : (Model) -> Bool
 }
 
 ///|
@@ -28,13 +29,16 @@ pub fn[Model, Msg] Program::new(
   update~ : (Model, Msg) -> UpdateResult[Model, Msg],
   view~ : (Model) -> String,
   sub? : (InputEvent) -> Msg? = fn(_evt) { None },
+  should_quit? : (Model) -> Bool = fn(_model) { false },
 ) -> Program[Model, Msg] {
-  { init, update, view, sub }
+  { init, update, view, sub, should_quit }
 }
 
 ///|
-/// Run the program (placeholder — will enter raw terminal mode and drive the
-/// event loop).
+/// Run the program.
+///
+/// On `native` and `llvm` targets this enters raw terminal mode and drives
+/// the main event loop. On other targets this is a no-op.
 pub fn[Model, Msg] Program::run(program : Program[Model, Msg]) -> Unit {
   run_internal(program)
 }
@@ -48,9 +52,7 @@ fn[Model, Msg] run_internal(_program : Program[Model, Msg]) -> Unit {
 ///|
 #cfg(any(target="native", target="llvm"))
 fn write_bytes(bytes : Bytes) -> Unit {
-  for i = 0; i < bytes.length(); i = i + 1 {
-    pippa_write_byte(bytes[i].to_int())
-  }
+  pippa_write_bytes(bytes, bytes.length())
 }
 
 ///|
@@ -58,10 +60,7 @@ fn write_bytes(bytes : Bytes) -> Unit {
 fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
   pippa_enter_raw_mode()
 
-  // Hide cursor and clear screen
-  let hide_cursor = "\u001b[?25l"
-  let clear_screen = "\u001b[2J\u001b[H"
-  write_bytes((hide_cursor + clear_screen).to_bytes())
+  write_bytes((hide_cursor() + clear_screen()).to_bytes())
 
   let init_res = (program.init)()
   let mut model = init_res.model
@@ -102,6 +101,9 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
           let res = (program.update)(model, msg)
           model = res.model
           updated = true
+          if (program.should_quit)(model) {
+            quit = true
+          }
         }
         None => ()
       }
@@ -118,8 +120,6 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
     }
   }
 
-  let show_cursor = "\u001b[?25h"
-  write_bytes(show_cursor.to_bytes())
-
+  write_bytes(show_cursor().to_bytes())
   pippa_exit_raw_mode()
 }
