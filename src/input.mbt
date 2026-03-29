@@ -82,12 +82,8 @@ fn parse_csi(bv : BytesView) -> ParseResult[InputEvent] {
     } else if b >= 0x20 && b <= 0x3F {
       i = i + 1
     } else {
-      // Invalid byte inside CSI parameter area; consume up to and including it.
-      let arr : Array[Byte] = []
-      for j in 0..<=i {
-        arr.push(bv[j])
-      }
-      return Ok(Unknown(Bytes::from_array(arr)), i + 1)
+      // Byte is not a valid parameter/intermediate/final byte — definitively malformed.
+      return Invalid("invalid byte \{b} in CSI sequence at position \{i}")
     }
   }
   // Reached end of buffer without finding the final byte.
@@ -98,8 +94,10 @@ fn parse_csi(bv : BytesView) -> ParseResult[InputEvent] {
 /// Parse one `InputEvent` from the front of `bv`.
 ///
 /// Returns `Ok(event, bytes_consumed)` on success, `Incomplete` when more
-/// bytes are needed to complete the current sequence, or `Invalid` for a
-/// definitively malformed sequence.
+/// bytes are needed to complete the current sequence, or `Invalid` when a CSI
+/// sequence contains a definitively malformed parameter byte. Unrecognised but
+/// structurally valid sequences are returned as `Ok(Unknown(...), n)` so callers
+/// can distinguish protocol errors from merely unknown sequences.
 pub fn parse_input(bv : BytesView) -> ParseResult[InputEvent] {
   if bv.length() == 0 {
     return Incomplete
