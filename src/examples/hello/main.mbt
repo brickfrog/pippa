@@ -4,10 +4,10 @@
 /// Run with: `moon run src/examples/hello`
 
 ///|
-/// The application model — just a counter and a greeting.
+/// The application model — a counter app.
 struct Model {
-  greeting : String
   count : Int
+  quitting : Bool
 } derive(Show)
 
 ///|
@@ -15,6 +15,7 @@ struct Model {
 enum Msg {
   Increment
   Decrement
+  Reset
   Quit
 } derive(Show)
 
@@ -22,37 +23,63 @@ enum Msg {
 /// Initialise the model.
 fn hello_init() -> @pippa.UpdateResult[Model, Msg] {
   @pippa.UpdateResult::new(
-    model={ greeting: "Hello from Pippa!", count: 0 },
+    model={ count: 0, quitting: false },
     cmd=@pippa.Cmd::none(),
   )
 }
 
 ///|
 /// Update the model in response to a message.
-fn hello_update(model : Model, _msg : Msg) -> @pippa.UpdateResult[Model, Msg] {
+fn hello_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] {
+  if model.quitting {
+    return @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
+  }
+  let mut next_count = model.count
+  let mut quitting = false
+  match msg {
+    Increment => next_count = model.count + 1
+    Decrement => next_count = model.count - 1
+    Reset => next_count = 0
+    Quit => quitting = true
+  }
   @pippa.UpdateResult::new(
-    model={ greeting: model.greeting, count: model.count + 1 },
+    model={ count: next_count, quitting },
     cmd=@pippa.Cmd::none(),
   )
 }
 
 ///|
+/// Map input events to messages.
+fn hello_sub(event : @pippa.InputEvent) -> Msg? {
+  match event {
+    @pippa.Key(Char('+')) | @pippa.Key(Special("up")) => Some(Increment)
+    @pippa.Key(Char('-')) | @pippa.Key(Special("down")) => Some(Decrement)
+    @pippa.Key(Char('r')) => Some(Reset)
+    @pippa.Key(Char('q')) | @pippa.Key(Modified("ctrl", "c")) => Some(Quit)
+    _ => None
+  }
+}
+
+///|
 /// Render the model to a string of ANSI-formatted output.
 fn hello_view(model : Model) -> String {
-  let counter_style = @pippa.bold()
+  if model.quitting {
+    return "\n  Goodbye!\n\n"
+  }
+  let bold = @pippa.bold()
+  let dim = @pippa.dim()
   let reset = @pippa.reset()
-  "\{counter_style}\{model.greeting}\{reset}\nCounter: \{model.count}\n"
+  "\n  Pippa Counter Demo\n\n  Count: \{bold}\{model.count}\{reset}\n\n  \{dim}+ increment  - decrement  r reset  q quit\{reset}\n"
 }
 
 ///|
 /// Entry point — create the program and run it.
 fn main {
-  let _program = @pippa.Program::new(
+  let program = @pippa.Program::new(
     init=hello_init,
     update=hello_update,
     view=hello_view,
+    sub=hello_sub,
   )
-  // Program::run is not yet implemented; print a demo view instead.
-  let model : Model = { greeting: "Hello from Pippa!", count: 0 }
-  println(hello_view(model))
+  @pippa.Program::run(program)
 }
