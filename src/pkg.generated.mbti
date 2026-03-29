@@ -14,6 +14,16 @@ pub fn blink() -> String
 
 pub fn bold() -> String
 
+pub fn border_ascii() -> Border
+
+pub fn border_double() -> Border
+
+pub fn border_normal() -> Border
+
+pub fn border_rounded() -> Border
+
+pub fn border_thick() -> Border
+
 pub fn center(String, Int) -> String
 
 pub fn clear_line() -> String
@@ -78,6 +88,8 @@ pub fn split_lines(String) -> Array[String]
 
 pub fn strip_ansi(String) -> String
 
+pub fn style() -> Style
+
 pub fn truncate(String, Int) -> String
 
 pub fn underline() -> String
@@ -89,12 +101,31 @@ pub fn visible_width(String) -> Int
 // Errors
 
 // Types and methods
+pub(all) enum Align {
+  Left
+  Center
+  Right
+}
+pub impl Eq for Align
+pub impl Show for Align
+
 pub(all) struct Binding {
   keys : Array[String]
   help : String
 }
 pub impl Eq for Binding
 pub impl Show for Binding
+
+pub(all) struct Border {
+  top_left : String
+  top_right : String
+  bottom_left : String
+  bottom_right : String
+  horizontal : String
+  vertical : String
+}
+pub impl Eq for Border
+pub impl Show for Border
 
 type Cmd[Msg]
 pub fn[Msg] Cmd::batch(Array[Self[Msg]]) -> Self[Msg]
@@ -174,6 +205,33 @@ pub(all) struct Program[Model, Msg] {
 }
 pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, should_quit? : (Model) -> Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::run(Self[Model, Msg]) -> Unit
+
+pub(all) struct Style {
+  fg : Int?
+  bg : Int?
+  bold : Bool
+  dim : Bool
+  underline : Bool
+  border : Border?
+  padding_top : Int
+  padding_bottom : Int
+  padding_left : Int
+  padding_right : Int
+  width : Int
+  align : Align
+}
+pub fn Style::align(Self, Align) -> Self
+pub fn Style::bg_color(Self, Int) -> Self
+pub fn Style::bold(Self) -> Self
+pub fn Style::border(Self, Border) -> Self
+pub fn Style::dim(Self) -> Self
+pub fn Style::fg_color(Self, Int) -> Self
+pub fn Style::padding(Self, Int, Int, Int, Int) -> Self
+pub fn Style::render(Self, String) -> String
+pub fn Style::underline(Self) -> Self
+pub fn Style::width(Self, Int) -> Self
+pub impl Eq for Style
+pub impl Show for Style
 
 pub(all) struct UpdateResult[Model, Msg] {
   model : Model
