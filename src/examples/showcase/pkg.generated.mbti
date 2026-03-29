@@ -1,0 +1,18 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/examples/showcase"
+
+// Values
+
+// Errors
+
+// Types and methods
+type Model
+pub impl Show for Model
+
+type Msg
+pub impl Show for Msg
+
+// Type aliases
+
+// Traits
+
