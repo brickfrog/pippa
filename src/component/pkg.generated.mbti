@@ -12,6 +12,8 @@ pub fn select_list(items? : Array[String]) -> Component[SelectListModel, SelectL
 
 pub fn spinner(label? : String) -> Component[SpinnerModel, SpinnerMsg]
 
+pub fn text_input(placeholder~ : String) -> Component[TextInputModel, TextInputMsg]
+
 // Errors
 
 // Types and methods
@@ -61,6 +63,29 @@ pub(all) enum SpinnerMsg {
   Tick
 }
 pub impl Show for SpinnerMsg
+
+pub(all) struct TextInputModel {
+  value : String
+  cursor : Int
+  placeholder : String
+  focused : Bool
+}
+pub impl Eq for TextInputModel
+pub impl Show for TextInputModel
+
+pub(all) enum TextInputMsg {
+  InsertChar(Char)
+  DeleteBefore
+  DeleteAfter
+  MoveCursorLeft
+  MoveCursorRight
+  MoveToStart
+  MoveToEnd
+  Focus
+  Blur
+}
+pub impl Eq for TextInputMsg
+pub impl Show for TextInputMsg
 
 // Type aliases
 
