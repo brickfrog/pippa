@@ -24,6 +24,30 @@ enum Msg {
 } derive(Show)
 
 ///|
+let spinner_comp : @component.Component[
+  @component.SpinnerModel,
+  @component.SpinnerMsg,
+] = @component.spinner()
+
+///|
+let progress_comp : @component.Component[
+  @component.ProgressBarModel,
+  @component.ProgressBarMsg,
+] = @component.progress_bar(width=30, label="Loading")
+
+///|
+let text_input_comp : @component.Component[
+  @component.TextInputModel,
+  @component.TextInputMsg,
+] = @component.text_input(placeholder="type something...")
+
+///|
+let viewport_comp : @component.Component[
+  @component.ViewportModel,
+  @component.ViewportMsg,
+] = @component.viewport(width=60, height=10)
+
+///|
 fn showcase_tick_cmd() -> @pippa.Cmd[Msg] {
   @pippa.Cmd::tick(150)
 }
@@ -62,21 +86,16 @@ fn showcase_sync_text_input_focus(
   model : @component.TextInputModel,
   tab : Int,
 ) -> @component.TextInputModel {
-  let comp = @component.text_input(placeholder="type something...")
   let focus_msg = if tab == 1 { @component.Focus } else { @component.Blur }
-  (comp.update)(model, focus_msg).model
+  (text_input_comp.update)(model, focus_msg).model
 }
 
 ///|
 fn showcase_set_tab(model : Model, tab : Int) -> Model {
-  if tab < 0 {
-    { ..model, tab, }
-  } else {
-    {
-      ..model,
-      tab,
-      text_input: showcase_sync_text_input_focus(model.text_input, tab),
-    }
+  {
+    ..model,
+    tab,
+    text_input: showcase_sync_text_input_focus(model.text_input, tab),
   }
 }
 
@@ -122,11 +141,6 @@ fn showcase_viewport_content() -> String {
 
 ///|
 fn showcase_init() -> @pippa.UpdateResult[Model, Msg] {
-  let spinner_comp = @component.spinner()
-  let progress_comp = @component.progress_bar(width=30, label="Loading")
-  let text_input_comp = @component.text_input(placeholder="type something...")
-  let viewport_comp = @component.viewport(width=60, height=10)
-
   let spinner = (spinner_comp.init)().model
   let progress = (progress_comp.init)().model
   let text_input = (text_input_comp.init)().model
@@ -175,22 +189,11 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
         cmd=showcase_tick_cmd(),
       )
     Tick => {
-      let spinner_model = match SpinnerMsg(@component.Tick) {
-        SpinnerMsg(spinner_msg) =>
-          (@component.spinner().update)(model.spinner, spinner_msg).model
-        _ => model.spinner
-      }
-      let progress_model = match
-        ProgressMsg(
+      let spinner_model = (spinner_comp.update)(model.spinner, @component.Tick).model
+      let progress_model = (progress_comp.update)(
+          model.progress,
           @component.SetPercent(showcase_progress_next(model.progress.percent)),
-        ) {
-        ProgressMsg(progress_msg) =>
-          (@component.progress_bar(width=30, label="Loading").update)(
-            model.progress,
-            progress_msg,
-          ).model
-        _ => model.progress
-      }
+        ).model
       @pippa.UpdateResult::new(
         model={
           ..model,
@@ -202,16 +205,14 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
       )
     }
     SpinnerMsg(spinner_msg) => {
-      let comp = @component.spinner()
-      let spinner = (comp.update)(model.spinner, spinner_msg).model
+      let spinner = (spinner_comp.update)(model.spinner, spinner_msg).model
       @pippa.UpdateResult::new(
         model={ ..model, spinner, },
         cmd=showcase_tick_cmd(),
       )
     }
     ProgressMsg(progress_msg) => {
-      let comp = @component.progress_bar(width=30, label="Loading")
-      let progress = (comp.update)(model.progress, progress_msg).model
+      let progress = (progress_comp.update)(model.progress, progress_msg).model
       @pippa.UpdateResult::new(
         model={ ..model, progress, },
         cmd=showcase_tick_cmd(),
@@ -221,8 +222,10 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
       if model.tab != 1 {
         return @pippa.UpdateResult::new(model~, cmd=showcase_tick_cmd())
       }
-      let comp = @component.text_input(placeholder="type something...")
-      let text_input = (comp.update)(model.text_input, text_input_msg).model
+      let text_input = (text_input_comp.update)(
+          model.text_input,
+          text_input_msg,
+        ).model
       @pippa.UpdateResult::new(
         model={ ..model, text_input, },
         cmd=showcase_tick_cmd(),
@@ -232,8 +235,7 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
       if model.tab != 2 {
         return @pippa.UpdateResult::new(model~, cmd=showcase_tick_cmd())
       }
-      let comp = @component.viewport(width=60, height=10)
-      let viewport = (comp.update)(model.viewport, viewport_msg).model
+      let viewport = (viewport_comp.update)(model.viewport, viewport_msg).model
       @pippa.UpdateResult::new(
         model={ ..model, viewport, },
         cmd=showcase_tick_cmd(),
@@ -308,8 +310,6 @@ fn showcase_panel(content : String) -> String {
 
 ///|
 fn showcase_activity_body(model : Model) -> String {
-  let spinner_comp = @component.spinner()
-  let progress_comp = @component.progress_bar(width=30, label="Loading")
   let buf = StringBuilder::new()
   buf.write_string("A single 150ms tick drives both live components.\n")
   buf.write_string("The spinner advances every tick while the progress bar\n")
@@ -337,12 +337,11 @@ fn showcase_input_value(model : Model) -> String {
 
 ///|
 fn showcase_input_body(model : Model) -> String {
-  let input_comp = @component.text_input(placeholder="type something...")
   let field = @pippa.style()
     .border(@pippa.border_ascii())
     .padding(0, 1, 0, 1)
     .width(58)
-    .render((input_comp.view)(model.text_input))
+    .render((text_input_comp.view)(model.text_input))
   let buf = StringBuilder::new()
   buf.write_string("Printable keys, backspace, and left/right arrows are\n")
   buf.write_string("forwarded to the TextInput component on this tab.\n")
@@ -373,7 +372,6 @@ fn showcase_viewport_status(model : Model) -> String {
 
 ///|
 fn showcase_viewport_body(model : Model) -> String {
-  let viewport_comp = @component.viewport(width=60, height=10)
   let framed_viewport = @pippa.style()
     .border(@pippa.border_ascii())
     .render((viewport_comp.view)(model.viewport))
