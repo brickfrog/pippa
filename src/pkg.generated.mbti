@@ -40,6 +40,10 @@ pub fn pad_left(String, Int) -> String
 
 pub fn pad_right(String, Int) -> String
 
+pub fn parse_all(BytesView) -> (Array[InputEvent], Bytes)
+
+pub fn parse_input(BytesView) -> ParseResult[InputEvent]
+
 pub fn render_patch(Array[PatchOp]) -> String
 
 pub fn reset() -> String
@@ -66,6 +70,15 @@ pub fn[Msg] Cmd::batch(Array[Self[Msg]]) -> Self[Msg]
 pub fn[A, B] Cmd::map((A) -> B, Self[A]) -> Self[B]
 pub fn[Msg] Cmd::none() -> Self[Msg]
 pub impl[Msg : Show] Show for Cmd[Msg]
+
+pub(all) enum InputEvent {
+  Key(KeyMsg)
+  Mouse(MouseMsg)
+  Unknown(Bytes)
+}
+pub impl Compare for InputEvent
+pub impl Eq for InputEvent
+pub impl Show for InputEvent
 
 pub(all) enum InternalMsg {
   KeyPress(Array[Byte])
@@ -97,6 +110,14 @@ pub(all) struct Nothing {
 }
 pub impl Eq for Nothing
 pub impl Show for Nothing
+
+pub(all) enum ParseResult[T] {
+  Ok(T, Int)
+  Incomplete
+  Invalid(String)
+}
+pub impl[T : Eq] Eq for ParseResult[T]
+pub impl[T : Show] Show for ParseResult[T]
 
 pub(all) struct PatchOp {
   row : Int
