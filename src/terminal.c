@@ -35,6 +35,24 @@ void pippa_write_byte(int b) {
     write(STDOUT_FILENO, &c, 1);
 }
 
+void pippa_write_string(int* bytes, int len) {
+    if (len <= 0) return;
+    char buffer[4096];
+    int buf_len = 0;
+    
+    for (int i = 0; i < len; i++) {
+        buffer[buf_len++] = (char)(bytes[i] & 0xFF);
+        if (buf_len == sizeof(buffer)) {
+            write(STDOUT_FILENO, buffer, buf_len);
+            buf_len = 0;
+        }
+    }
+    
+    if (buf_len > 0) {
+        write(STDOUT_FILENO, buffer, buf_len);
+    }
+}
+
 int pippa_get_rows(void) {
     struct winsize ws;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0) {

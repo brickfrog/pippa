@@ -33,8 +33,10 @@ pub fn[Model, Msg] Program::new(
 }
 
 ///|
-/// Run the program (placeholder — will enter raw terminal mode and drive the
-/// event loop).
+/// Run the program.
+///
+/// On `native` and `llvm` targets this enters raw terminal mode and drives
+/// the main event loop. On other targets this is a no-op.
 pub fn[Model, Msg] Program::run(program : Program[Model, Msg]) -> Unit {
   run_internal(program)
 }
@@ -59,9 +61,7 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
   pippa_enter_raw_mode()
 
   // Hide cursor and clear screen
-  let hide_cursor = "\u001b[?25l"
-  let clear_screen = "\u001b[2J\u001b[H"
-  write_bytes((hide_cursor + clear_screen).to_bytes())
+  write_bytes((hide_cursor() + clear_screen()).to_bytes())
 
   let init_res = (program.init)()
   let mut model = init_res.model
@@ -118,8 +118,7 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
     }
   }
 
-  let show_cursor = "\u001b[?25h"
-  write_bytes(show_cursor.to_bytes())
+  write_bytes(show_cursor().to_bytes())
 
   pippa_exit_raw_mode()
 }
