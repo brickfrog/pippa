@@ -50,9 +50,7 @@ fn[Model, Msg] run_internal(_program : Program[Model, Msg]) -> Unit {
 ///|
 #cfg(any(target="native", target="llvm"))
 fn write_bytes(bytes : Bytes) -> Unit {
-  for i = 0; i < bytes.length(); i = i + 1 {
-    pippa_write_byte(bytes[i].to_int())
-  }
+  pippa_write_bytes(bytes, bytes.length())
 }
 
 ///|

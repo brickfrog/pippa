@@ -12,6 +12,9 @@ extern "C" fn pippa_write_byte(b : Int) = "pippa_write_byte"
 
 ///|
 
+///|
+#borrow(bytes)
+extern "C" fn pippa_write_bytes(bytes : Bytes, len : Int) -> Unit = "pippa_write_string"
 
 ///|
 extern "C" fn pippa_get_rows() -> Int = "pippa_get_rows"

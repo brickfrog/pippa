@@ -1,14 +1,16 @@
 #include <termios.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include <stdio.h>
-#include <string.h>
 
 // Save and restore terminal state
 static struct termios orig_termios;
+static int has_orig_termios = 0;
 
 void pippa_enter_raw_mode(void) {
-    tcgetattr(STDIN_FILENO, &orig_termios);
+    if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) {
+        return;
+    }
+    has_orig_termios = 1;
     struct termios raw = orig_termios;
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     raw.c_oflag &= ~(OPOST);
@@ -20,7 +22,9 @@ void pippa_enter_raw_mode(void) {
 }
 
 void pippa_exit_raw_mode(void) {
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+    if (has_orig_termios == 1) {
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+    }
 }
 
 int pippa_read_byte(void) {
