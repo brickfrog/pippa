@@ -93,3 +93,19 @@ test "select_list/view empty items" {
   let v = (sl.view)(model)
   assert_eq(v, "")
 }
+
+///|
+test "select_list/cursor_down no-op on empty list" {
+  let sl = select_list(items=[])
+  let { model: m0, .. } = (sl.init)()
+  let { model: m1, .. } = (sl.update)(m0, CursorDown)
+  assert_eq(m1.cursor, 0)
+}
+
+///|
+test "select_list/select no-op on empty list" {
+  let sl = select_list(items=[])
+  let { model: m0, .. } = (sl.init)()
+  let { model: m1, .. } = (sl.update)(m0, Select)
+  assert_eq(m1.selected, -1)
+}
