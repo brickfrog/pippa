@@ -2,6 +2,12 @@
 extern "C" fn pippa_enter_raw_mode() = "pippa_enter_raw_mode"
 
 ///|
+extern "C" fn pippa_install_sigwinch() -> Unit = "pippa_install_sigwinch"
+
+///|
+extern "C" fn pippa_check_resize() -> Int = "pippa_check_resize"
+
+///|
 extern "C" fn pippa_exit_raw_mode() = "pippa_exit_raw_mode"
 
 ///|

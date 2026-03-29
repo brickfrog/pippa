@@ -22,6 +22,8 @@ pub(all) struct Program[Model, Msg] {
   on_tick : () -> Msg?
   /// Enable terminal mouse reporting while the program runs.
   mouse : Bool
+  /// Produce a message when the terminal size changes. Return None to ignore it.
+  on_resize : (Int, Int) -> Msg?
   /// Return true to exit the event loop after an update.
   should_quit : (Model) -> Bool
 }
@@ -35,9 +37,10 @@ pub fn[Model, Msg] Program::new(
   sub? : (InputEvent) -> Msg? = fn(_evt) { None },
   on_tick? : () -> Msg? = fn() { None },
   mouse? : Bool = false,
+  on_resize? : (Int, Int) -> Msg? = fn(_cols, _rows) { None },
   should_quit? : (Model) -> Bool = fn(_model) { false },
 ) -> Program[Model, Msg] {
-  { init, update, view, sub, on_tick, mouse, should_quit }
+  { init, update, view, sub, on_tick, mouse, on_resize, should_quit }
 }
 
 ///|
@@ -119,6 +122,7 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
     }
 
     let mut updated = false
+    let mut force_full_redraw = false
 
     if poll_result == 0 {
       let fired_at = pippa_now_ms()
@@ -138,7 +142,7 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
         }
         None => ()
       }
-    } else {
+    } else if poll_result == 1 {
       let b = pippa_read_byte()
       if b < 0 {
         break
@@ -180,13 +184,42 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
       }
     }
 
+    if pippa_check_resize() != 0 {
+      let cols = pippa_get_cols()
+      let rows = pippa_get_rows()
+      force_full_redraw = true
+      updated = true
+      match (program.on_resize)(cols, rows) {
+        Some(msg) => {
+          let now_ms = pippa_now_ms()
+          let (next_model, should_quit, next_cmd) = apply_msg(
+            program, model, msg,
+          )
+          model = next_model
+          tick_cmd = next_cmd
+          next_tick_ms = next_tick_at(tick_cmd, now_ms)
+          if should_quit {
+            quit = true
+          }
+        }
+        None => ()
+      }
+    }
+
     if updated {
       let new_view = (program.view)(model)
-      let patches = diff_views(current_view, new_view)
-      let patch_str = render_patch(patches)
-      if patch_str.length() > 0 {
-        write_bytes(patch_str.to_bytes())
+      if force_full_redraw {
+        write_bytes((clear_screen() + move_cursor(1, 1) + new_view).to_bytes())
         current_view = new_view
+      } else {
+        let patches = diff_views(current_view, new_view)
+        let patch_str = render_patch(patches)
+        if patch_str.length() > 0 {
+          write_bytes(patch_str.to_bytes())
+          current_view = new_view
+        } else {
+          current_view = new_view
+        }
       }
     }
   }
