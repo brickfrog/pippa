@@ -75,5 +75,5 @@ test "progress_bar negative width does not panic" {
   let comp = progress_bar(width=-5)
   let { model, .. } = (comp.init)()
   let view = (comp.view)(model)
-  assert_eq(view, "[] 0%")
+  assert_eq(view, "[\u001b[38;5;2m\u001b[0m] 0%")
 }
