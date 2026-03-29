@@ -1,6 +1,6 @@
 .DS_Store
 _build/
 .mooncakes/
-.moonagent/.choir/
+.choir/
 .claude/
 .moonagent/
