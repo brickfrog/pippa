@@ -99,9 +99,11 @@ fn[Model, Msg] apply_msg(
 fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
   pippa_enter_raw_mode()
 
-  write_bytes((enter_alt_screen() + hide_cursor() + clear_screen()) |> @utf8.encode())
+  write_bytes(
+    @utf8.encode(enter_alt_screen() + hide_cursor() + clear_screen() + move_cursor(1, 1)),
+  )
   if program.mouse {
-    write_bytes(enable_mouse() |> @utf8.encode())
+    write_bytes(@utf8.encode(enable_mouse()))
   }
 
   let init_res = (program.init)()
@@ -110,7 +112,7 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
   let mut next_tick_ms = next_tick_at(tick_cmd, pippa_now_ms())
 
   let mut current_view = (program.view)(model)
-  write_bytes(current_view |> @utf8.encode())
+  write_bytes(@utf8.encode(move_cursor(1, 1) + current_view))
 
   let mut buf : Array[Byte] = []
   let mut quit = false
@@ -208,25 +210,16 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
 
     if updated {
       let new_view = (program.view)(model)
-      if force_full_redraw {
-        write_bytes((clear_screen() + move_cursor(1, 1) + new_view) |> @utf8.encode())
+      if new_view != current_view || force_full_redraw {
+        write_bytes(@utf8.encode(move_cursor(1, 1) + new_view + clear_screen_below()))
         current_view = new_view
-      } else {
-        let patches = diff_views(current_view, new_view)
-        let patch_str = render_patch(patches)
-        if patch_str.length() > 0 {
-          write_bytes(patch_str |> @utf8.encode())
-          current_view = new_view
-        } else {
-          current_view = new_view
-        }
       }
     }
   }
 
   if program.mouse {
-    write_bytes(disable_mouse() |> @utf8.encode())
+    write_bytes(@utf8.encode(disable_mouse()))
   }
-  write_bytes((exit_alt_screen() + show_cursor()) |> @utf8.encode())
+  write_bytes(@utf8.encode(exit_alt_screen() + show_cursor()))
   pippa_exit_raw_mode()
 }

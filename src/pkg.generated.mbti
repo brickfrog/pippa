@@ -30,6 +30,8 @@ pub fn clear_line() -> String
 
 pub fn clear_screen() -> String
 
+pub fn clear_screen_below() -> String
+
 pub fn diff_views(String, String) -> Array[PatchOp]
 
 pub fn dim() -> String

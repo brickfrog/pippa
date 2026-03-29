@@ -104,6 +104,12 @@ pub fn clear_line() -> String {
 }
 
 ///|
+/// Clear from cursor to end of screen (CSI J).
+pub fn clear_screen_below() -> String {
+  "\{CSI}J"
+}
+
+///|
 /// Move cursor to (row, col), 1-based (CSI row ; col H).
 pub fn move_cursor(row : Int, col : Int) -> String {
   "\{CSI}\{row};\{col}H"
