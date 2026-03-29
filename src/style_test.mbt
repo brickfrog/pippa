@@ -49,3 +49,31 @@ test "style render combines ansi border padding width and alignment" {
     reset()
   assert_eq(actual, expected)
 }
+
+///|
+test "style render clamps negative direct field values" {
+  let unsafe_style : Style = {
+    ..style(),
+    padding_top: -1,
+    padding_bottom: -2,
+    padding_left: -3,
+    padding_right: -4,
+    width: -5,
+  }
+  assert_eq(unsafe_style.render("hi"), "hi")
+}
+
+///|
+test "style render normalizes invalid custom border pieces" {
+  let invalid_border : Border = {
+    top_left: "++",
+    top_right: "",
+    bottom_left: "--",
+    bottom_right: "ab",
+    horizontal: "==",
+    vertical: "",
+  }
+  let actual = style().border(invalid_border).render("hi")
+  let expected = "****\n*hi*\n****"
+  assert_eq(actual, expected)
+}

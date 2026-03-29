@@ -171,19 +171,27 @@ pub fn Style::align(self : Style, a : Align) -> Style {
 
 ///|
 pub fn Style::render(self : Style, content : String) -> String {
+  let effective_style = {
+    ..self,
+    padding_top: clamp_non_negative(self.padding_top),
+    padding_bottom: clamp_non_negative(self.padding_bottom),
+    padding_left: clamp_non_negative(self.padding_left),
+    padding_right: clamp_non_negative(self.padding_right),
+    width: clamp_non_negative(self.width),
+  }
   let content_lines = split_lines(content)
-  let normalize = self.width > 0 ||
-    self.padding_top > 0 ||
-    self.padding_bottom > 0 ||
-    self.padding_left > 0 ||
-    self.padding_right > 0 ||
-    (match self.border {
+  let normalize = effective_style.width > 0 ||
+    effective_style.padding_top > 0 ||
+    effective_style.padding_bottom > 0 ||
+    effective_style.padding_left > 0 ||
+    effective_style.padding_right > 0 ||
+    (match effective_style.border {
       Some(_) => true
       None => false
     })
 
-  let content_width = if self.width > 0 {
-    self.width
+  let content_width = if effective_style.width > 0 {
+    effective_style.width
   } else if normalize {
     max_visible_width(content_lines)
   } else {
@@ -193,14 +201,14 @@ pub fn Style::render(self : Style, content : String) -> String {
   let lines : Array[String] = []
   for line in content_lines {
     let prepared = if normalize {
-      align_line(truncate(line, content_width), content_width, self.align)
+      align_line(truncate(line, content_width), content_width, effective_style.align)
     } else {
       line
     }
     lines.push(
-      String::make(self.padding_left, ' ') +
+      String::make(effective_style.padding_left, ' ') +
       prepared +
-      String::make(self.padding_right, ' '),
+      String::make(effective_style.padding_right, ' '),
     )
   }
 
@@ -208,7 +216,7 @@ pub fn Style::render(self : Style, content : String) -> String {
   let padded_lines : Array[String] = []
   let empty_line = String::make(inner_width, ' ')
   let mut top_padding = 0
-  while top_padding < self.padding_top {
+  while top_padding < effective_style.padding_top {
     padded_lines.push(empty_line)
     top_padding = top_padding + 1
   }
@@ -222,17 +230,17 @@ pub fn Style::render(self : Style, content : String) -> String {
     )
   }
   let mut bottom_padding = 0
-  while bottom_padding < self.padding_bottom {
+  while bottom_padding < effective_style.padding_bottom {
     padded_lines.push(empty_line)
     bottom_padding = bottom_padding + 1
   }
 
-  let block = match self.border {
+  let block = match effective_style.border {
     Some(border) => render_border(border, padded_lines, inner_width)
     None => join_lines(padded_lines)
   }
 
-  let prefix = build_ansi_prefix(self)
+  let prefix = build_ansi_prefix(effective_style)
   if prefix.length() == 0 {
     block
   } else {
@@ -299,22 +307,37 @@ fn render_border(
   lines : Array[String],
   inner_width : Int,
 ) -> String {
+  let top_left = normalize_border_piece(border.top_left)
+  let top_right = normalize_border_piece(border.top_right)
+  let bottom_left = normalize_border_piece(border.bottom_left)
+  let bottom_right = normalize_border_piece(border.bottom_right)
+  let horizontal_piece = normalize_border_piece(border.horizontal)
+  let vertical_piece = normalize_border_piece(border.vertical)
   let buf = StringBuilder::new()
-  let horizontal = repeat_string(border.horizontal, inner_width)
-  buf.write_string(border.top_left)
+  let horizontal = repeat_string(horizontal_piece, inner_width)
+  buf.write_string(top_left)
   buf.write_string(horizontal)
-  buf.write_string(border.top_right)
+  buf.write_string(top_right)
   for line in lines {
     buf.write_string("\n")
-    buf.write_string(border.vertical)
+    buf.write_string(vertical_piece)
     buf.write_string(line)
-    buf.write_string(border.vertical)
+    buf.write_string(vertical_piece)
   }
   buf.write_string("\n")
-  buf.write_string(border.bottom_left)
+  buf.write_string(bottom_left)
   buf.write_string(horizontal)
-  buf.write_string(border.bottom_right)
+  buf.write_string(bottom_right)
   buf.to_string()
+}
+
+///|
+fn normalize_border_piece(piece : String) -> String {
+  if visible_width(piece) == 1 {
+    piece
+  } else {
+    "*"
+  }
 }
 
 ///|
