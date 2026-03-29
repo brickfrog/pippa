@@ -62,6 +62,18 @@ pub fn show_cursor() -> String {
 }
 
 ///|
+/// Enter the alternate screen buffer (CSI ? 1049 h).
+pub fn enter_alt_screen() -> String {
+  "\{CSI}?1049h"
+}
+
+///|
+/// Exit the alternate screen buffer and restore the primary screen (CSI ? 1049 l).
+pub fn exit_alt_screen() -> String {
+  "\{CSI}?1049l"
+}
+
+///|
 /// Clear the entire screen (CSI 2 J).
 pub fn clear_screen() -> String {
   "\{CSI}2J"

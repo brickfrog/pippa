@@ -22,3 +22,13 @@ test "pippa update result" {
   let result = UpdateResult::new(model=10, cmd=Cmd::none())
   assert_eq(result.model, 10)
 }
+
+///|
+test "pippa ansi enter alternate screen" {
+  inspect(enter_alt_screen(), content="\u001b[?1049h")
+}
+
+///|
+test "pippa ansi exit alternate screen" {
+  inspect(exit_alt_screen(), content="\u001b[?1049l")
+}

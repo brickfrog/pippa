@@ -60,7 +60,7 @@ fn write_bytes(bytes : Bytes) -> Unit {
 fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
   pippa_enter_raw_mode()
 
-  write_bytes((hide_cursor() + clear_screen()).to_bytes())
+  write_bytes((enter_alt_screen() + hide_cursor() + clear_screen()).to_bytes())
 
   let init_res = (program.init)()
   let mut model = init_res.model
@@ -120,6 +120,6 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
     }
   }
 
-  write_bytes(show_cursor().to_bytes())
+  write_bytes((exit_alt_screen() + show_cursor()).to_bytes())
   pippa_exit_raw_mode()
 }
