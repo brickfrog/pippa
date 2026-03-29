@@ -32,6 +32,21 @@ test "pippa ansi enter alternate screen" {
 }
 
 ///|
+test "pippa ansi enable mouse" {
+  inspect(enable_mouse(), content="\u001b[?1000h")
+}
+
+///|
+test "pippa ansi enable mouse motion" {
+  inspect(enable_mouse_motion(), content="\u001b[?1003h")
+}
+
+///|
+test "pippa ansi disable mouse" {
+  inspect(disable_mouse(), content="\u001b[?1000l")
+}
+
+///|
 test "pippa ansi exit alternate screen" {
   inspect(exit_alt_screen(), content="\u001b[?1049l")
 }

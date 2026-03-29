@@ -68,9 +68,27 @@ pub fn enter_alt_screen() -> String {
 }
 
 ///|
+/// Enable X10 mouse reporting (button press/release events: CSI ?1000h).
+pub fn enable_mouse() -> String {
+  "\{CSI}?1000h"
+}
+
+///|
+/// Enable mouse motion reporting (any mouse event: CSI ?1003h).
+pub fn enable_mouse_motion() -> String {
+  "\{CSI}?1003h"
+}
+
+///|
 /// Exit the alternate screen buffer and restore the primary screen (CSI ? 1049 l).
 pub fn exit_alt_screen() -> String {
   "\{CSI}?1049l"
+}
+
+///|
+/// Disable all mouse reporting (CSI ?1000l).
+pub fn disable_mouse() -> String {
+  "\{CSI}?1000l"
 }
 
 ///|
