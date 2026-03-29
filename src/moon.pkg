@@ -1,2 +1,7 @@
 import {
 }
+
+options(
+  link: { "native": { "c_sources": [ "terminal.c" ], "cc_flags": "-I." } },
+  targets: { "ffi_native.mbt": [ "native", "llvm" ] },
+)
