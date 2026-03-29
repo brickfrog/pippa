@@ -8,11 +8,13 @@
 /// - `width`: the visible width of the viewport
 /// - `height`: the visible height (number of lines) of the viewport
 /// - `offset`: the index of the first visible line (0-based)
+/// - `total_lines`: pre-calculated count of total lines in content
 pub(all) struct ViewportModel {
   content : String
   width : Int
   height : Int
   offset : Int
+  total_lines : Int
 } derive(Show)
 
 ///|
@@ -47,10 +49,24 @@ pub fn viewport(
   width~ : Int,
   height~ : Int,
 ) -> Component[ViewportModel, ViewportMsg] {
-  Component::{
+  {
     init: fn() {
       @pippa.UpdateResult::new(
-        model={ content: "", width, height, offset: 0 },
+        model={
+          content: "",
+          width: if width > 0 {
+            width
+          } else {
+            0
+          },
+          height: if height > 0 {
+            height
+          } else {
+            0
+          },
+          offset: 0,
+          total_lines: 1, // Empty string has one line ""
+        },
         cmd=@pippa.Cmd::none(),
       )
     },
@@ -59,20 +75,21 @@ pub fn viewport(
       let mut content = model.content
       let mut width = model.width
       let mut height = model.height
+      let mut total_lines = model.total_lines
 
       match msg {
         SetContent(c) => {
           content = c
+          total_lines = @pippa.line_count(content)
           offset = 0
         }
         Resize(w, h) => {
-          width = w
-          height = h
+          width = if w > 0 { w } else { 0 }
+          height = if h > 0 { h } else { 0 }
         }
         _ => ()
       }
 
-      let total_lines = @pippa.line_count(content)
       let max_offset = if total_lines > height {
         total_lines - height
       } else {
@@ -97,7 +114,7 @@ pub fn viewport(
       }
 
       @pippa.UpdateResult::new(
-        model={ content, width, height, offset },
+        model={ content, width, height, offset, total_lines },
         cmd=@pippa.Cmd::none(),
       )
     },
