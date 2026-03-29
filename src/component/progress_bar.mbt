@@ -54,8 +54,10 @@ pub fn progress_bar(
       @pippa.UpdateResult::new(model=next, cmd=@pippa.Cmd::none())
     },
     view: fn(model) {
-      let filled = (model.percent / 100.0 * model.width.to_double()).to_int()
-      let empty = model.width - filled
+      let w = if model.width < 0 { 0 } else { model.width }
+      let filled = (model.percent / 100.0 * w.to_double()).to_int()
+      let filled = if filled < 0 { 0 } else if filled > w { w } else { filled }
+      let empty = w - filled
       let prefix = if model.label != "" { model.label + " " } else { "" }
       prefix +
       "[" +
