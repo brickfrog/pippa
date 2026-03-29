@@ -150,6 +150,11 @@ pub fn truncate(s : String, max_width : Int) -> String {
   let mut i = 0
   let mut width = 0
   while i < n {
+    // Stop as soon as the visible budget is exhausted — including any trailing
+    // ANSI sequences that would otherwise leak styling into subsequent output.
+    if width >= max_width {
+      break
+    }
     let ch = chars[i]
     if ch == '\u001b' {
       // Copy the entire escape sequence without counting visible width.
@@ -172,9 +177,6 @@ pub fn truncate(s : String, max_width : Int) -> String {
         }
       }
     } else {
-      if width >= max_width {
-        break
-      }
       buf.write_char(ch)
       width = width + 1
       i = i + 1

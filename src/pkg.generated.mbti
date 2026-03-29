@@ -20,6 +20,8 @@ pub fn clear_line() -> String
 
 pub fn clear_screen() -> String
 
+pub fn diff_views(String, String) -> Array[PatchOp]
+
 pub fn dim() -> String
 
 pub fn fg_color(Int) -> String
@@ -37,6 +39,8 @@ pub fn move_cursor(Int, Int) -> String
 pub fn pad_left(String, Int) -> String
 
 pub fn pad_right(String, Int) -> String
+
+pub fn render_patch(Array[PatchOp]) -> String
 
 pub fn reset() -> String
 
@@ -93,6 +97,14 @@ pub(all) struct Nothing {
 }
 pub impl Eq for Nothing
 pub impl Show for Nothing
+
+pub(all) struct PatchOp {
+  row : Int
+  col : Int
+  text : String
+}
+pub impl Eq for PatchOp
+pub impl Show for PatchOp
 
 pub(all) struct Program[Model, Msg] {
   init : () -> UpdateResult[Model, Msg]

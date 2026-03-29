@@ -117,9 +117,11 @@ test "truncate zero" {
 
 ///|
 test "truncate preserves ANSI sequences before limit" {
-  // Bold prefix + "hi" + reset: visible width is 2, so truncate(s, 2) keeps all
+  // ESC prefix is before the visible chars — it is copied.
+  // The trailing reset comes after all visible chars (width already at max),
+  // so it is excluded to avoid leaking terminal state.
   let s = "\u001b[1mhi\u001b[0m"
-  assert_eq(truncate(s, 2), s)
+  assert_eq(truncate(s, 2), "\u001b[1mhi")
 }
 
 ///|
@@ -127,4 +129,16 @@ test "truncate ANSI-aware cut" {
   // "\u001b[1m" + "hello" — visible width 5; truncate to 3 should give prefix + "hel"
   let s = "\u001b[1mhello"
   assert_eq(truncate(s, 3), "\u001b[1mhel")
+}
+
+///|
+test "truncate does not copy ANSI sequences after truncation point" {
+  // "abc" has visible width 3; the CSI sequence that follows must not appear in output.
+  assert_eq(truncate("abc\u001b[31mdef", 3), "abc")
+}
+
+///|
+test "truncate escape at exact boundary excluded" {
+  // Visible budget exhausted after "ab"; the ESC right after must not leak.
+  assert_eq(truncate("ab\u001b[0mc", 2), "ab")
 }
