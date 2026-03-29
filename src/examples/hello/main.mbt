@@ -1,5 +1,9 @@
 ///|
-/// Minimal "hello world" example demonstrating the Pippa TUI framework.
+/// Interactive counter demo demonstrating the Pippa TUI framework.
+///
+/// This example showcases a counter with keybinds for incrementing, decrementing,
+/// and resetting the count. It also demonstrates how to use the `Program::run`
+/// entry point and input subscriptions.
 ///
 /// Run with: `moon run src/examples/hello`
 
@@ -52,10 +56,10 @@ fn hello_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] {
 /// Map input events to messages.
 fn hello_sub(event : @pippa.InputEvent) -> Msg? {
   match event {
-    @pippa.Key(Char('+')) | @pippa.Key(Special("up")) => Some(Increment)
-    @pippa.Key(Char('-')) | @pippa.Key(Special("down")) => Some(Decrement)
-    @pippa.Key(Char('r')) => Some(Reset)
-    @pippa.Key(Char('q')) | @pippa.Key(Modified("ctrl", "c")) => Some(Quit)
+    @pippa.Key(@pippa.Char('+')) | @pippa.Key(@pippa.Special("up")) => Some(Increment)
+    @pippa.Key(@pippa.Char('-')) | @pippa.Key(@pippa.Special("down")) => Some(Decrement)
+    @pippa.Key(@pippa.Char('r')) => Some(Reset)
+    @pippa.Key(@pippa.Char('q')) | @pippa.Key(@pippa.Modified("ctrl", "c")) => Some(Quit)
     _ => None
   }
 }
@@ -80,6 +84,7 @@ fn main {
     update=hello_update,
     view=hello_view,
     sub=hello_sub,
+    should_quit=fn(model) { model.quitting },
   )
   @pippa.Program::run(program)
 }
