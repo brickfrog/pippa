@@ -10,7 +10,7 @@ test "pippa ansi bold" {
 
 ///|
 test "pippa create program" {
-  let _program = Program::new(
+  let _program : Program[Int, Unit] = Program::new(
     init=fn() { UpdateResult::new(model=42, cmd=Cmd::none()) },
     update=fn(model : Int, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
     view=fn(model : Int) { "Count: \{model}" },
@@ -19,7 +19,10 @@ test "pippa create program" {
 
 ///|
 test "pippa update result" {
-  let result = UpdateResult::new(model=10, cmd=Cmd::none())
+  let result : UpdateResult[Int, Unit] = UpdateResult::new(
+    model=10,
+    cmd=Cmd::none(),
+  )
   assert_eq(result.model, 10)
 }
 

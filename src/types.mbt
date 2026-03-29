@@ -15,6 +15,7 @@
 /// ```moonbit
 /// let _batch : Cmd[Nothing] = Cmd::batch([])
 /// let _none : Cmd[Nothing] = Cmd::none()
+/// let _tick : Cmd[Nothing] = Cmd::tick(100)
 /// ```
 
 ///|
@@ -31,6 +32,8 @@ pub(all) struct Nothing {} derive(Show, Eq)
 struct Cmd[Msg] {
   // Phantom field — carries no data, ensures the type parameter is consumed.
   _phantom : Array[Msg]
+  // Periodic tick interval in milliseconds. `0` disables ticking.
+  interval_ms : Int
 } derive(Show)
 
 ///|

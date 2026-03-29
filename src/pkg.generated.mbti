@@ -131,6 +131,7 @@ type Cmd[Msg]
 pub fn[Msg] Cmd::batch(Array[Self[Msg]]) -> Self[Msg]
 pub fn[A, B] Cmd::map((A) -> B, Self[A]) -> Self[B]
 pub fn[Msg] Cmd::none() -> Self[Msg]
+pub fn[Msg] Cmd::tick(Int) -> Self[Msg]
 pub impl[Msg : Show] Show for Cmd[Msg]
 
 pub(all) struct HelpModel {
@@ -201,9 +202,10 @@ pub(all) struct Program[Model, Msg] {
   update : (Model, Msg) -> UpdateResult[Model, Msg]
   view : (Model) -> String
   sub : (InputEvent) -> Msg?
+  on_tick : () -> Msg?
   should_quit : (Model) -> Bool
 }
-pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, should_quit? : (Model) -> Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, should_quit? : (Model) -> Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::run(Self[Model, Msg]) -> Unit
 
 pub(all) struct Style {
