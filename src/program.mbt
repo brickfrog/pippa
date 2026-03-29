@@ -112,7 +112,8 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
   let mut next_tick_ms = next_tick_at(tick_cmd, pippa_now_ms())
 
   let mut current_view = (program.view)(model)
-  write_bytes(@utf8.encode(move_cursor(1, 1) + current_view))
+  write_bytes(@utf8.encode(render_full(current_view, 0)))
+  let mut prev_line_count = line_count(current_view)
 
   let mut buf : Array[Byte] = []
   let mut quit = false
@@ -124,7 +125,6 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
     }
 
     let mut updated = false
-    let mut force_full_redraw = false
 
     if poll_result == 0 {
       let fired_at = pippa_now_ms()
@@ -189,7 +189,6 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
     if pippa_check_resize() != 0 {
       let cols = pippa_get_cols()
       let rows = pippa_get_rows()
-      force_full_redraw = true
       updated = true
       match (program.on_resize)(cols, rows) {
         Some(msg) => {
@@ -210,9 +209,10 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
 
     if updated {
       let new_view = (program.view)(model)
-      if new_view != current_view || force_full_redraw {
-        write_bytes(@utf8.encode(move_cursor(1, 1) + new_view + clear_screen_below()))
+      if new_view != current_view {
+        write_bytes(@utf8.encode(render_full(new_view, prev_line_count)))
         current_view = new_view
+        prev_line_count = line_count(new_view)
       }
     }
   }
