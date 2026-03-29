@@ -120,6 +120,6 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
     }
   }
 
-  write_bytes((show_cursor() + exit_alt_screen()).to_bytes())
+  write_bytes((exit_alt_screen() + show_cursor()).to_bytes())
   pippa_exit_raw_mode()
 }
