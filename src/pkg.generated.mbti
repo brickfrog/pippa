@@ -34,7 +34,13 @@ pub fn diff_views(String, String) -> Array[PatchOp]
 
 pub fn dim() -> String
 
+pub fn disable_mouse() -> String
+
 pub fn down_binding() -> Binding
+
+pub fn enable_mouse() -> String
+
+pub fn enable_mouse_motion() -> String
 
 pub fn enter_alt_screen() -> String
 
@@ -203,9 +209,10 @@ pub(all) struct Program[Model, Msg] {
   view : (Model) -> String
   sub : (InputEvent) -> Msg?
   on_tick : () -> Msg?
+  mouse : Bool
   should_quit : (Model) -> Bool
 }
-pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, should_quit? : (Model) -> Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, should_quit? : (Model) -> Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::run(Self[Model, Msg]) -> Unit
 
 pub(all) struct Style {

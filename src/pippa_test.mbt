@@ -10,11 +10,13 @@ test "pippa ansi bold" {
 
 ///|
 test "pippa create program" {
-  let _program : Program[Int, Unit] = Program::new(
+  let program : Program[Int, Unit] = Program::new(
     init=fn() { UpdateResult::new(model=42, cmd=Cmd::none()) },
     update=fn(model : Int, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
     view=fn(model : Int) { "Count: \{model}" },
+    mouse=true,
   )
+  assert_eq(program.mouse, true)
 }
 
 ///|
@@ -29,6 +31,21 @@ test "pippa update result" {
 ///|
 test "pippa ansi enter alternate screen" {
   inspect(enter_alt_screen(), content="\u001b[?1049h")
+}
+
+///|
+test "pippa ansi enable mouse" {
+  inspect(enable_mouse(), content="\u001b[?1000h")
+}
+
+///|
+test "pippa ansi enable mouse motion" {
+  inspect(enable_mouse_motion(), content="\u001b[?1003h")
+}
+
+///|
+test "pippa ansi disable mouse" {
+  inspect(disable_mouse(), content="\u001b[?1000l\u001b[?1003l")
 }
 
 ///|

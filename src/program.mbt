@@ -20,6 +20,8 @@ pub(all) struct Program[Model, Msg] {
   sub : (InputEvent) -> Msg?
   /// Produce a message when a periodic tick fires. Return None to ignore it.
   on_tick : () -> Msg?
+  /// Enable terminal mouse reporting while the program runs.
+  mouse : Bool
   /// Return true to exit the event loop after an update.
   should_quit : (Model) -> Bool
 }
@@ -32,9 +34,10 @@ pub fn[Model, Msg] Program::new(
   view~ : (Model) -> String,
   sub? : (InputEvent) -> Msg? = fn(_evt) { None },
   on_tick? : () -> Msg? = fn() { None },
+  mouse? : Bool = false,
   should_quit? : (Model) -> Bool = fn(_model) { false },
 ) -> Program[Model, Msg] {
-  { init, update, view, sub, on_tick, should_quit }
+  { init, update, view, sub, on_tick, mouse, should_quit }
 }
 
 ///|
@@ -94,6 +97,9 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
   pippa_enter_raw_mode()
 
   write_bytes((enter_alt_screen() + hide_cursor() + clear_screen()).to_bytes())
+  if program.mouse {
+    write_bytes(enable_mouse().to_bytes())
+  }
 
   let init_res = (program.init)()
   let mut model = init_res.model
@@ -185,6 +191,9 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
     }
   }
 
+  if program.mouse {
+    write_bytes(disable_mouse().to_bytes())
+  }
   write_bytes((exit_alt_screen() + show_cursor()).to_bytes())
   pippa_exit_raw_mode()
 }
