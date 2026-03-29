@@ -23,6 +23,10 @@ extern "C" fn pippa_now_ms() -> Int64 = "pippa_now_ms"
 extern "C" fn pippa_write_byte(b : Int) = "pippa_write_byte"
 
 ///|
+#borrow(buf)
+extern "C" fn pippa_write_bytes(buf : Bytes, len : Int) -> Unit = "pippa_write_bytes"
+
+///|
 extern "C" fn pippa_get_rows() -> Int = "pippa_get_rows"
 
 ///|

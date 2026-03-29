@@ -83,6 +83,10 @@ void pippa_write_byte(int b) {
     write(STDOUT_FILENO, &c, 1);
 }
 
+void pippa_write_bytes(const unsigned char* buf, int len) {
+    write(STDOUT_FILENO, buf, (size_t)len);
+}
+
 int pippa_get_rows(void) {
     struct winsize ws;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0) {
