@@ -399,8 +399,8 @@ fn showcase_header(model : Model) -> String {
 
 ///|
 fn showcase_panel(content : String) -> String {
-  @pippa.style()
-  .border(@pippa.border_normal())
+  @styling.style()
+  .border(@styling.border_normal())
   .padding(1, 2, 1, 2)
   .width(62)
   .render(content)
@@ -434,8 +434,8 @@ fn showcase_input_value(model : Model) -> String {
 
 ///|
 fn showcase_input_body(model : Model) -> String {
-  let field = @pippa.style()
-    .border(@pippa.border_ascii())
+  let field = @styling.style()
+    .border(@styling.border_ascii())
     .padding(0, 1, 0, 1)
     .width(58)
     .render((text_input_comp.view)(model.text_input))
@@ -469,8 +469,8 @@ fn showcase_viewport_status(model : Model) -> String {
 
 ///|
 fn showcase_viewport_body(model : Model) -> String {
-  let framed_viewport = @pippa.style()
-    .border(@pippa.border_ascii())
+  let framed_viewport = @styling.style()
+    .border(@styling.border_ascii())
     .render((viewport_comp.view)(model.viewport))
   let buf = StringBuilder::new()
   buf.write_string(
@@ -520,8 +520,8 @@ fn showcase_view(model : Model) -> String {
     "\n\n" +
     showcase_footer(model)
 
-  @pippa.style()
-  .border(@pippa.border_rounded())
+  @styling.style()
+  .border(@styling.border_rounded())
   .padding(1, 2, 1, 2)
   .width(70)
   .render(content)

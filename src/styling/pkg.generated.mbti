@@ -1,0 +1,115 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/styling"
+
+import {
+  "brickfrog/pippa",
+}
+
+// Values
+pub fn border_ascii() -> @pippa.Border
+
+pub fn border_double() -> @pippa.Border
+
+pub fn border_normal() -> @pippa.Border
+
+pub fn border_rounded() -> @pippa.Border
+
+pub fn border_thick() -> @pippa.Border
+
+pub fn color_ansi(Int) -> Color
+
+pub fn color_hex(String) -> Color
+
+pub fn color_rgb(Int, Int, Int) -> Color
+
+pub fn join_horizontal(Array[String], valign? : VerticalAlign) -> String
+
+pub fn join_vertical(Array[String], align? : Align) -> String
+
+pub fn place(Int, Int, String, align? : Align, valign? : VerticalAlign) -> String
+
+pub fn style() -> Style
+
+// Errors
+
+// Types and methods
+pub(all) enum Align {
+  Left
+  Center
+  Right
+}
+pub impl Eq for Align
+pub impl Show for Align
+
+pub(all) enum Color {
+  Ansi(Int)
+  RGB(Int, Int, Int)
+  Hex(String)
+}
+pub impl Eq for Color
+pub impl Show for Color
+
+pub(all) struct Style {
+  fg : Color?
+  bg : Color?
+  bold : Bool
+  dim : Bool
+  italic : Bool
+  underline : Bool
+  blink : Bool
+  reverse : Bool
+  border : @pippa.Border?
+  padding_top : Int
+  padding_bottom : Int
+  padding_left : Int
+  padding_right : Int
+  margin_top : Int
+  margin_bottom : Int
+  margin_left : Int
+  margin_right : Int
+  width : Int?
+  height : Int?
+  min_width : Int
+  min_height : Int
+  max_width : Int?
+  max_height : Int?
+  align : Align
+}
+pub fn Style::align(Self, Align) -> Self
+pub fn Style::background(Self, Color) -> Self
+pub fn Style::background_hex(Self, String) -> Self
+pub fn Style::background_rgb(Self, Int, Int, Int) -> Self
+pub fn Style::blink(Self) -> Self
+pub fn Style::bold(Self) -> Self
+pub fn Style::border(Self, @pippa.Border) -> Self
+pub fn Style::dim(Self) -> Self
+pub fn Style::foreground(Self, Color) -> Self
+pub fn Style::foreground_hex(Self, String) -> Self
+pub fn Style::foreground_rgb(Self, Int, Int, Int) -> Self
+pub fn Style::height(Self, Int) -> Self
+pub fn Style::italic(Self) -> Self
+pub fn Style::margin(Self, Int, Int, Int, Int) -> Self
+pub fn Style::max_height(Self, Int) -> Self
+pub fn Style::max_width(Self, Int) -> Self
+pub fn Style::min_height(Self, Int) -> Self
+pub fn Style::min_width(Self, Int) -> Self
+pub fn Style::padding(Self, Int, Int, Int, Int) -> Self
+pub fn Style::render(Self, String) -> String
+pub fn Style::reverse(Self) -> Self
+pub fn Style::underline(Self) -> Self
+pub fn Style::width(Self, Int) -> Self
+pub impl Eq for Style
+pub impl Show for Style
+
+pub(all) enum VerticalAlign {
+  Top
+  Middle
+  Bottom
+}
+pub impl Eq for VerticalAlign
+pub impl Show for VerticalAlign
+
+// Type aliases
+
+// Traits
+
