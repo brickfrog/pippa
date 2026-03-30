@@ -39,7 +39,7 @@ let spinner_comp : @component.Component[
 let progress_comp : @component.Component[
   @component.ProgressBarModel,
   @component.ProgressBarMsg,
-] = @component.progress_bar(width=30, spring_frequency=5.0, spring_damping=0.5)
+] = @component.progress_bar(width=30, spring_frequency=2.0, spring_damping=1.0)
 
 ///|
 let text_input_comp : @component.Component[
