@@ -24,7 +24,12 @@ test "SetPercent returns a tick cmd" {
   let comp = progress_bar()
   let { model, .. } = (comp.init)()
   let { cmd, .. } = (comp.update)(model, SetPercent(0.5))
-  inspect(cmd, content="{_phantom: [], interval_ms: 16}")
+  inspect(
+    cmd,
+    content=(
+      #|{_phantom: [], actions: [(16, Some(Tick))]}
+    ),
+  )
 }
 
 ///|
@@ -59,7 +64,12 @@ test "Tick returns no-op cmd when already settled" {
   let { model, .. } = (comp.init)()
   // Both at 0.0, velocity 0 — already settled
   let { cmd, .. } = (comp.update)(model, Tick)
-  inspect(cmd, content="{_phantom: [], interval_ms: 0}")
+  inspect(
+    cmd,
+    content=(
+      #|{_phantom: [], actions: []}
+    ),
+  )
 }
 
 ///|
@@ -68,7 +78,12 @@ test "Tick returns tick cmd when animating" {
   let { model, .. } = (comp.init)()
   let { model: m1, .. } = (comp.update)(model, SetPercent(1.0))
   let { cmd, .. } = (comp.update)(m1, Tick)
-  inspect(cmd, content="{_phantom: [], interval_ms: 16}")
+  inspect(
+    cmd,
+    content=(
+      #|{_phantom: [], actions: [(16, Some(Tick))]}
+    ),
+  )
 }
 
 ///|

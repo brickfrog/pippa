@@ -65,20 +65,43 @@ fn write_bytes(bytes : Bytes) -> Unit {
 }
 
 ///|
+/// Convert a Cmd's actions into runtime timers: (deadline_ms, interval_ms, msg).
 #cfg(any(target="native", target="llvm"))
-fn[Msg] next_tick_at(cmd : Cmd[Msg], base_ms : Int64) -> Int64? {
-  if cmd.interval_ms > 0 {
-    Some(base_ms + cmd.interval_ms.to_int64())
-  } else {
-    None
+fn[Msg] schedule_timers(
+  cmd : Cmd[Msg],
+  now : Int64,
+) -> Array[(Int64, Int, Msg?)] {
+  let timers : Array[(Int64, Int, Msg?)] = []
+  for action in cmd.actions {
+    let ms = action.0
+    if ms > 0 {
+      timers.push((now + ms.to_int64(), ms, action.1))
+    }
   }
+  timers
 }
 
 ///|
+/// Compute the poll timeout from the earliest timer deadline. Returns -1 if
+/// no timers are active (block indefinitely).
 #cfg(any(target="native", target="llvm"))
-fn tick_timeout_ms(next_tick_ms : Int64?) -> Int {
-  match next_tick_ms {
-    Some(deadline) => Int64::max(0L, deadline - pippa_now_ms()).to_int()
+fn[Msg] timers_timeout(timers : Array[(Int64, Int, Msg?)]) -> Int {
+  let mut min_deadline : Int64? = None
+  for timer in timers {
+    match min_deadline {
+      None => min_deadline = Some(timer.0)
+      Some(m) => if timer.0 < m { min_deadline = Some(timer.0) }
+    }
+  }
+  match min_deadline {
+    Some(deadline) => {
+      let remaining = deadline - pippa_now_ms()
+      if remaining < 0L {
+        0
+      } else {
+        remaining.to_int()
+      }
+    }
     None => -1
   }
 }
@@ -110,8 +133,7 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
 
   let init_res = (program.init)()
   let mut model = init_res.model
-  let mut tick_cmd = init_res.cmd
-  let mut next_tick_ms = next_tick_at(tick_cmd, pippa_now_ms())
+  let mut timers = schedule_timers(init_res.cmd, pippa_now_ms())
 
   let mut current_view = (program.view)(model)
   write_bytes(@utf8.encode(render_full(current_view, 0)))
@@ -121,7 +143,7 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
   let mut quit = false
 
   while not(quit) {
-    let poll_result = pippa_poll_stdin(tick_timeout_ms(next_tick_ms))
+    let poll_result = pippa_poll_stdin(timers_timeout(timers))
     if poll_result < 0 {
       break
     }
@@ -129,22 +151,59 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
     let mut updated = false
 
     if poll_result == 0 {
-      let fired_at = pippa_now_ms()
-      next_tick_ms = next_tick_at(tick_cmd, fired_at)
-      match (program.on_tick)() {
-        Some(msg) => {
-          let (next_model, should_quit, next_cmd) = apply_msg(
-            program, model, msg,
-          )
-          model = next_model
-          tick_cmd = next_cmd
-          next_tick_ms = next_tick_at(tick_cmd, fired_at)
-          updated = true
-          if should_quit {
-            quit = true
-          }
+      // Timer(s) expired — fire all whose deadline has passed.
+      let now = pippa_now_ms()
+      let expired : Array[(Int64, Int, Msg?)] = []
+      let remaining : Array[(Int64, Int, Msg?)] = []
+      for timer in timers {
+        if timer.0 <= now {
+          expired.push(timer)
+        } else {
+          remaining.push(timer)
         }
-        None => ()
+      }
+
+      // Process each expired timer sequentially. The last update's Cmd
+      // becomes the new timer set (consistent with Elm architecture: each
+      // update declares the full desired command state).
+      let mut last_cmd : Cmd[Msg]? = None
+      for timer in expired {
+        let maybe_msg : Msg? = match timer.2 {
+          Some(m) => Some(m)
+          None => (program.on_tick)()
+        }
+        match maybe_msg {
+          Some(msg) => {
+            let (next_model, should_quit, cmd) = apply_msg(program, model, msg)
+            model = next_model
+            last_cmd = Some(cmd)
+            updated = true
+            if should_quit {
+              quit = true
+            }
+          }
+          None => ()
+        }
+      }
+
+      match last_cmd {
+        Some(cmd) =>
+          // An update happened — replace all timers from the last Cmd.
+          timers = schedule_timers(cmd, now)
+        None => {
+          // No messages delivered. Reschedule expired tick timers (msg=None);
+          // drop one-shot timers that didn't fire. Keep non-expired timers.
+          let new_timers : Array[(Int64, Int, Msg?)] = []
+          for timer in remaining {
+            new_timers.push(timer)
+          }
+          for timer in expired {
+            if timer.2 is None {
+              new_timers.push((now + timer.1.to_int64(), timer.1, None))
+            }
+          }
+          timers = new_timers
+        }
       }
     } else if poll_result == 1 {
       let b = pippa_read_byte()
@@ -176,8 +235,7 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
               program, model, msg,
             )
             model = next_model
-            tick_cmd = next_cmd
-            next_tick_ms = next_tick_at(tick_cmd, now_ms)
+            timers = schedule_timers(next_cmd, now_ms)
             updated = true
             if should_quit {
               quit = true
@@ -199,8 +257,7 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
             program, model, msg,
           )
           model = next_model
-          tick_cmd = next_cmd
-          next_tick_ms = next_tick_at(tick_cmd, now_ms)
+          timers = schedule_timers(next_cmd, now_ms)
           if should_quit {
             quit = true
           }

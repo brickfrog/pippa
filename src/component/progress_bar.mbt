@@ -143,7 +143,7 @@ pub fn progress_bar(
           let clamped = if p < 0.0 { 0.0 } else if p > 1.0 { 1.0 } else { p }
           @pippa.UpdateResult::new(
             model={ ..model, target_percent: clamped },
-            cmd=@pippa.Cmd::tick(16),
+            cmd=@pippa.Cmd::after(16, fn() { ProgressBarMsg::Tick }),
           )
         }
         Tick => {
@@ -157,7 +157,7 @@ pub fn progress_bar(
           )
           let next = { ..model, displayed_percent: new_pos, velocity: new_vel }
           let cmd = if is_animating(next) {
-            @pippa.Cmd::tick(16)
+            @pippa.Cmd::after(16, fn() { ProgressBarMsg::Tick })
           } else {
             @pippa.Cmd::none()
           }

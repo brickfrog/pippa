@@ -138,7 +138,9 @@ pub impl Eq for Border
 pub impl Show for Border
 
 type Cmd[Msg]
+pub fn[Msg] Cmd::after(Int, () -> Msg) -> Self[Msg]
 pub fn[Msg] Cmd::batch(Array[Self[Msg]]) -> Self[Msg]
+pub fn[Msg] Cmd::is_none(Self[Msg]) -> Bool
 pub fn[A, B] Cmd::map((A) -> B, Self[A]) -> Self[B]
 pub fn[Msg] Cmd::none() -> Self[Msg]
 pub fn[Msg] Cmd::tick(Int) -> Self[Msg]

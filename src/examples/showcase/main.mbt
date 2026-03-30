@@ -8,7 +8,15 @@ struct Model {
   progress : @component.ProgressBarModel
   text_input : @component.TextInputModel
   viewport : @component.ViewportModel
-  frame_count : Int // counts 16ms spring frames; used to drive slow events
+  // Progress animation phase:
+  //   0 = animating to 1.0
+  //   1 = bouncing down toward 0.75
+  //   2 = rebounding back toward 1.0
+  //   3 = bouncing down toward 0.90 after the rebound to 1.0
+  //   4 = settling back at 1.0 before the loop restarts
+  progress_phase : Int
+  progress_pause_ticks : Int
+  spinner_ticks : Int
 } derive(Show)
 
 ///|
@@ -31,7 +39,7 @@ let spinner_comp : @component.Component[
 let progress_comp : @component.Component[
   @component.ProgressBarModel,
   @component.ProgressBarMsg,
-] = @component.progress_bar(width=30, spring_frequency=2.0)
+] = @component.progress_bar(width=30, spring_frequency=10.0, spring_damping=0.6)
 
 ///|
 let text_input_comp : @component.Component[
@@ -47,7 +55,7 @@ let viewport_comp : @component.Component[
 
 ///|
 fn showcase_tick_cmd() -> @pippa.Cmd[Msg] {
-  @pippa.Cmd::tick(150)
+  @pippa.Cmd::tick(16)
 }
 
 ///|
@@ -140,7 +148,9 @@ fn showcase_viewport_content() -> String {
 ///|
 fn showcase_init() -> @pippa.UpdateResult[Model, Msg] {
   let spinner = (spinner_comp.init)().model
-  let progress = (progress_comp.init)().model
+  let progress0 = (progress_comp.init)().model
+  // Kick off the activity demo with a smooth fill toward 100%.
+  let progress = (progress_comp.update)(progress0, @component.SetPercent(1.0)).model
   let text_input = (text_input_comp.init)().model
   let viewport0 = (viewport_comp.init)().model
   let viewport = (viewport_comp.update)(
@@ -149,9 +159,38 @@ fn showcase_init() -> @pippa.UpdateResult[Model, Msg] {
     ).model
 
   @pippa.UpdateResult::new(
-    model={ tab: 0, spinner, progress, text_input, viewport, frame_count: 0 },
-    cmd=@pippa.Cmd::tick(16),
+    model={
+      tab: 0,
+      spinner,
+      progress,
+      text_input,
+      viewport,
+      progress_phase: 0,
+      progress_pause_ticks: 0,
+      spinner_ticks: 0,
+    },
+    cmd=showcase_tick_cmd(),
   )
+}
+
+///|
+fn progress_settled(m : @component.ProgressBarModel) -> Bool {
+  (m.displayed_percent - m.target_percent).abs() < 0.001 &&
+  m.velocity.abs() < 0.01
+}
+
+///|
+fn showcase_restart_progress(
+  progress : @component.ProgressBarModel,
+) -> (@component.ProgressBarModel, @pippa.Cmd[Msg]) {
+  let reset = {
+    ..progress,
+    target_percent: 0.0,
+    displayed_percent: 0.0,
+    velocity: 0.0,
+  }
+  let sr = (progress_comp.update)(reset, @component.SetPercent(1.0))
+  (sr.model, @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, sr.cmd))
 }
 
 ///|
@@ -177,49 +216,104 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
         cmd=showcase_tick_cmd(),
       )
     ProgressMsg(progress_msg) => {
-      let new_frame = model.frame_count + 1
       // Step the spring.
       let tick_result = (progress_comp.update)(model.progress, progress_msg)
       let ticked = tick_result.model
-      // Tick spinner every 8 frames (~128ms).
-      let new_spinner = if new_frame % 8 == 0 {
+      // Tick the spinner every 8 spring frames (~128ms).
+      let new_spinner_ticks = model.spinner_ticks + 1
+      let new_spinner = if new_spinner_ticks % 8 == 0 {
         (spinner_comp.update)(model.spinner, @component.SpinnerMsg::Tick).model
       } else {
         model.spinner
       }
-      // Every 60 frames (~1 second) advance target by 0.25, wrapping at 1.0.
-      // This mirrors the bubbletea progress-animated demo exactly.
-      let (final_progress, incr_cmd) = if new_frame % 60 == 0 {
-        let base = if ticked.target_percent >= 1.0 {
-          // Snap back to zero so the bar restarts from the left.
-          {
-            ..ticked,
-            target_percent: 0.0,
-            displayed_percent: 0.0,
-            velocity: 0.0,
+
+      let (final_progress, final_progress_cmd, new_phase, new_pause_ticks) = match
+        model.progress_phase {
+        0 =>
+          if ticked.displayed_percent >= 0.99 && ticked.velocity > 0.0 {
+            let sr = (progress_comp.update)(ticked, @component.SetPercent(0.75))
+            (sr.model, @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, sr.cmd), 1, 0)
+          } else {
+            (
+              ticked,
+              @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, tick_result.cmd),
+              0,
+              0,
+            )
           }
-        } else {
-          ticked
-        }
-        let next = base.target_percent + 0.25
-        let sr = (progress_comp.update)(base, @component.SetPercent(next))
-        (sr.model, sr.cmd)
-      } else {
-        (ticked, @pippa.Cmd::none())
+        1 =>
+          if ticked.displayed_percent <= 0.76 && ticked.velocity < 0.0 {
+            let sr = (progress_comp.update)(ticked, @component.SetPercent(1.0))
+            (sr.model, @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, sr.cmd), 2, 0)
+          } else {
+            (
+              ticked,
+              @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, tick_result.cmd),
+              1,
+              0,
+            )
+          }
+        2 =>
+          if ticked.displayed_percent >= 0.99 && ticked.velocity > 0.0 {
+            let sr = (progress_comp.update)(ticked, @component.SetPercent(0.90))
+            (sr.model, @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, sr.cmd), 3, 0)
+          } else {
+            (
+              ticked,
+              @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, tick_result.cmd),
+              2,
+              0,
+            )
+          }
+        3 =>
+          if ticked.displayed_percent <= 0.905 && ticked.velocity < 0.0 {
+            let sr = (progress_comp.update)(ticked, @component.SetPercent(1.0))
+            (sr.model, @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, sr.cmd), 4, 0)
+          } else {
+            (
+              ticked,
+              @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, tick_result.cmd),
+              3,
+              0,
+            )
+          }
+        _ =>
+          if progress_settled(ticked) {
+            let paused = model.progress_pause_ticks + 1
+            if paused >= 24 {
+              let (restarted, restart_cmd) = showcase_restart_progress(ticked)
+              (restarted, restart_cmd, 0, 0)
+            } else {
+              (ticked, @pippa.Cmd::none(), 4, paused)
+            }
+          } else {
+            (
+              ticked,
+              @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, tick_result.cmd),
+              4,
+              0,
+            )
+          }
       }
-      let merged = @pippa.Cmd::batch([
-        @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, incr_cmd),
-        @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, tick_result.cmd),
-        @pippa.Cmd::tick(16),
-      ])
+
+      // When the progress bar is actively animating it schedules its own 16ms
+      // follow-up tick. Once settled, fall back to the app tick so the loop can
+      // restart after a short hold at 100%.
+      let cmd = if final_progress_cmd.is_none() {
+        showcase_tick_cmd()
+      } else {
+        final_progress_cmd
+      }
       @pippa.UpdateResult::new(
         model={
           ..model,
           progress: final_progress,
           spinner: new_spinner,
-          frame_count: new_frame,
+          progress_phase: new_phase,
+          progress_pause_ticks: new_pause_ticks,
+          spinner_ticks: new_spinner_ticks,
         },
-        cmd=merged,
+        cmd~,
       )
     }
     TextInputMsg(text_input_msg) => {
@@ -316,7 +410,7 @@ fn showcase_panel(content : String) -> String {
 fn showcase_activity_body(model : Model) -> String {
   let buf = StringBuilder::new()
   buf.write_string("Spring-physics progress bar animates at ~60fps;\n")
-  buf.write_string("target advances every ~150ms and wraps back to 0.\n")
+  buf.write_string("rushes to 100%, rebounds to 75%, then 90%, then settles.\n")
   buf.write_string("\n")
   buf.write_string("Spinner\n")
   buf.write_string((spinner_comp.view)(model.spinner))
@@ -324,8 +418,8 @@ fn showcase_activity_body(model : Model) -> String {
   buf.write_string("Progress\n")
   buf.write_string((progress_comp.view)(model.progress))
   buf.write_string("\n\n")
-  buf.write_string("Spring frames: ")
-  buf.write_string(model.frame_count.to_string())
+  buf.write_string("Animation ticks: ")
+  buf.write_string(model.spinner_ticks.to_string())
   showcase_panel(buf.to_string())
 }
 

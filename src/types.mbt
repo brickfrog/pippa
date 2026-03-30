@@ -29,11 +29,15 @@ pub(all) struct Nothing {} derive(Show, Eq)
 /// completed, will produce a message of type `Msg` and feed it back into the
 /// update loop. Use `Cmd::none()` for no-ops and `Cmd::batch` to combine
 /// multiple commands.
+///
+/// Each action is an `(interval_ms, msg?)` pair. When `msg` is `Some(m)`, the
+/// runtime delivers `m` directly; when `None`, it falls back to `on_tick`.
+/// Multiple actions run as independent concurrent timers.
 struct Cmd[Msg] {
   // Phantom field — carries no data, ensures the type parameter is consumed.
   _phantom : Array[Msg]
-  // Periodic tick interval in milliseconds. `0` disables ticking.
-  interval_ms : Int
+  // Independent timer actions: (interval_ms, pre-computed msg).
+  actions : Array[(Int, Msg?)]
 } derive(Show)
 
 ///|
