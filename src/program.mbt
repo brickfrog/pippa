@@ -212,7 +212,13 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
     if updated {
       let new_view = (program.view)(model)
       if new_view != current_view {
-        write_bytes(@utf8.encode(render_full(new_view, prev_line_count)))
+        let ops = diff_views(current_view, new_view)
+        let output = if ops.is_empty() {
+          render_full(new_view, prev_line_count)
+        } else {
+          render_patch(ops)
+        }
+        write_bytes(@utf8.encode(output))
         current_view = new_view
         prev_line_count = line_count(new_view)
       }
