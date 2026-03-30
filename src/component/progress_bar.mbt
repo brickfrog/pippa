@@ -201,7 +201,7 @@ pub fn progress_bar(
         buf.write_string(@pippa.reset())
       }
       if model.show_percentage {
-        let pct_int = (pct * 100.0).to_int()
+        let pct_int = (pct * 100.0 + 0.5).to_int()
         buf.write_string(" \{pct_int}%")
       }
       buf.to_string()
