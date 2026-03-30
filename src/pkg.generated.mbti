@@ -82,6 +82,8 @@ pub fn parse_input(BytesView) -> ParseResult[InputEvent]
 
 pub fn quit_binding() -> Binding
 
+pub fn render_full(String, Int) -> String
+
 pub fn render_patch(Array[PatchOp]) -> String
 
 pub fn reset() -> String

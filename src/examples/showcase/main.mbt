@@ -15,8 +15,6 @@ struct Model {
 enum Msg {
   TabNext
   TabPrev
-  Tick
-  SpinnerMsg(@component.SpinnerMsg)
   ProgressMsg(@component.ProgressBarMsg)
   TextInputMsg(@component.TextInputMsg)
   ViewportMsg(@component.ViewportMsg)
@@ -33,7 +31,7 @@ let spinner_comp : @component.Component[
 let progress_comp : @component.Component[
   @component.ProgressBarModel,
   @component.ProgressBarMsg,
-] = @component.progress_bar(width=30, label="Loading")
+] = @component.progress_bar(width=30)
 
 ///|
 let text_input_comp : @component.Component[
@@ -158,8 +156,8 @@ fn showcase_init() -> @pippa.UpdateResult[Model, Msg] {
 
 ///|
 fn showcase_progress_next(percent : Double) -> Double {
-  let next = percent + 2.0
-  if next > 100.0 {
+  let next = percent + 0.02
+  if next > 1.0 {
     0.0
   } else {
     next
@@ -188,34 +186,36 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
         model=showcase_set_tab(model, showcase_tab_prev(model.tab)),
         cmd=showcase_tick_cmd(),
       )
-    Tick => {
-      let spinner_model = (spinner_comp.update)(model.spinner, @component.Tick).model
-      let progress_model = (progress_comp.update)(
+    ProgressMsg(progress_msg) => {
+      // Advance target and tick spinner every ~9 frames (≈150ms at 16ms ticks)
+      let (progress_base, spinner) = if model.tick_count % 9 == 0 {
+        let new_target = showcase_progress_next(model.progress.target_percent)
+        let set_result = (progress_comp.update)(
           model.progress,
-          @component.SetPercent(showcase_progress_next(model.progress.percent)),
-        ).model
+          @component.SetPercent(new_target),
+        )
+        let sp = (spinner_comp.update)(
+            model.spinner,
+            @component.SpinnerMsg::Tick,
+          ).model
+        (set_result.model, sp)
+      } else {
+        (model.progress, model.spinner)
+      }
+      // Drive the spring step
+      let result = (progress_comp.update)(progress_base, progress_msg)
+      let merged = @pippa.Cmd::batch([
+        @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, result.cmd),
+        showcase_tick_cmd(),
+      ])
       @pippa.UpdateResult::new(
         model={
           ..model,
-          spinner: spinner_model,
-          progress: progress_model,
+          progress: result.model,
+          spinner,
           tick_count: model.tick_count + 1,
         },
-        cmd=showcase_tick_cmd(),
-      )
-    }
-    SpinnerMsg(spinner_msg) => {
-      let spinner = (spinner_comp.update)(model.spinner, spinner_msg).model
-      @pippa.UpdateResult::new(
-        model={ ..model, spinner, },
-        cmd=showcase_tick_cmd(),
-      )
-    }
-    ProgressMsg(progress_msg) => {
-      let progress = (progress_comp.update)(model.progress, progress_msg).model
-      @pippa.UpdateResult::new(
-        model={ ..model, progress, },
-        cmd=showcase_tick_cmd(),
+        cmd=merged,
       )
     }
     TextInputMsg(text_input_msg) => {
@@ -311,9 +311,8 @@ fn showcase_panel(content : String) -> String {
 ///|
 fn showcase_activity_body(model : Model) -> String {
   let buf = StringBuilder::new()
-  buf.write_string("A single 150ms tick drives both live components.\n")
-  buf.write_string("The spinner advances every tick while the progress bar\n")
-  buf.write_string("moves forward by 2% and wraps back to 0.\n")
+  buf.write_string("Spring-physics progress bar animates at ~60fps;\n")
+  buf.write_string("target advances every ~150ms and wraps back to 0.\n")
   buf.write_string("\n")
   buf.write_string("Spinner\n")
   buf.write_string((spinner_comp.view)(model.spinner))
@@ -400,7 +399,7 @@ fn showcase_body(model : Model) -> String {
 ///|
 fn showcase_footer(model : Model) -> String {
   let detail = match model.tab {
-    0 => "tick animates spinner and progress automatically"
+    0 => "spring physics drives the progress bar"
     1 => "type, backspace, and left/right edit the input"
     2 => "up/down and page keys scroll the viewport"
     _ => "q quit"
@@ -437,7 +436,7 @@ fn main {
     update=showcase_update,
     view=showcase_view,
     sub=showcase_sub,
-    on_tick=fn() { Some(Tick) },
+    on_tick=fn() { Some(ProgressMsg(@component.ProgressBarMsg::Tick)) },
     should_quit=fn(model) { model.tab < 0 },
   )
   @pippa.Program::run(program)

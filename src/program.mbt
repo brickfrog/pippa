@@ -100,7 +100,9 @@ fn[Model, Msg] run_internal(program : Program[Model, Msg]) -> Unit {
   pippa_enter_raw_mode()
 
   write_bytes(
-    @utf8.encode(enter_alt_screen() + hide_cursor() + clear_screen() + move_cursor(1, 1)),
+    @utf8.encode(
+      enter_alt_screen() + hide_cursor() + clear_screen() + move_cursor(1, 1),
+    ),
   )
   if program.mouse {
     write_bytes(@utf8.encode(enable_mouse()))
