@@ -4,7 +4,7 @@ A terminal UI framework for [MoonBit](https://www.moonbitlang.com/), inspired by
 [bubbletea](https://github.com/charmbracelet/bubbletea) (Go) and the
 [Elm Architecture](https://guide.elm-lang.org/architecture/).
 
-![Pippa showcase](../pippa.png)
+![Pippa showcase](pippa.png)
 
 ## Overview
 
