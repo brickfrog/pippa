@@ -233,18 +233,20 @@ pub(all) struct Program[Model, Msg] {
   hide_cursor : Bool
   rendering : Bool
   read_stdin : Bool
+  input : (() -> Array[InputEvent])?
   output : (String) -> Unit
   on_resize : (Int, Int) -> Msg?
   should_quit : (Model) -> Bool
 }
 pub fn[Model, Msg] Program::headless(Self[Model, Msg]) -> Self[Model, Msg]
-pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, alt_screen? : Bool, focus_reporting? : Bool, bracketed_paste? : Bool, hide_cursor? : Bool, rendering? : Bool, read_stdin? : Bool, output? : (String) -> Unit, on_resize? : (Int, Int) -> Msg?, should_quit? : (Model) -> Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, alt_screen? : Bool, focus_reporting? : Bool, bracketed_paste? : Bool, hide_cursor? : Bool, rendering? : Bool, read_stdin? : Bool, input? : (() -> Array[InputEvent])?, output? : (String) -> Unit, on_resize? : (Int, Int) -> Msg?, should_quit? : (Model) -> Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::run(Self[Model, Msg]) -> Unit
 pub fn[Model, Msg] Program::run_with_handle(Self[Model, Msg], (ProgramHandle[Msg]) -> Unit) -> Unit
 pub fn[Model, Msg] Program::with_alt_screen(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_bracketed_paste(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_focus_reporting(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_hide_cursor(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_input(Self[Model, Msg], () -> Array[InputEvent]) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_output(Self[Model, Msg], (String) -> Unit) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_rendering(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_stdin(Self[Model, Msg], Bool) -> Self[Model, Msg]

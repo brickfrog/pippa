@@ -36,6 +36,9 @@ pub(all) struct Program[Model, Msg] {
   rendering : Bool
   /// Read input events from stdin and enable terminal input modes.
   read_stdin : Bool
+  /// Optional non-blocking input source polled by the runtime before waiting
+  /// on stdin/timers. Return currently available events and never block.
+  input : (() -> Array[InputEvent])?
   /// Write rendered output and terminal control sequences.
   output : (String) -> Unit
   /// Produce a message when the terminal size changes. Return None to ignore it.
@@ -97,6 +100,7 @@ pub fn[Model, Msg] Program::new(
   hide_cursor? : Bool = true,
   rendering? : Bool = true,
   read_stdin? : Bool = true,
+  input? : (() -> Array[InputEvent])? = None,
   output? : (String) -> Unit = default_output,
   on_resize? : (Int, Int) -> Msg? = fn(_cols, _rows) { None },
   should_quit? : (Model) -> Bool = fn(_model) { false },
@@ -114,6 +118,7 @@ pub fn[Model, Msg] Program::new(
     hide_cursor,
     rendering,
     read_stdin,
+    input,
     output,
     on_resize,
     should_quit,
@@ -166,6 +171,14 @@ pub fn[Model, Msg] Program::with_stdin(
   enabled : Bool,
 ) -> Program[Model, Msg] {
   { ..self, read_stdin: enabled }
+}
+
+///|
+pub fn[Model, Msg] Program::with_input(
+  self : Program[Model, Msg],
+  input : () -> Array[InputEvent],
+) -> Program[Model, Msg] {
+  { ..self, input: Some(input), read_stdin: false }
 }
 
 ///|
@@ -373,6 +386,30 @@ fn[Msg] timers_timeout(timers : Array[RuntimeTimer[Msg]]) -> Int {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn[Model, Msg] runtime_timeout_ms(
+  program : Program[Model, Msg],
+  timers : Array[RuntimeTimer[Msg]],
+) -> Int {
+  let timeout = timers_timeout(timers)
+  match program.input {
+    Some(_) => if timeout < 0 || timeout > 16 { 16 } else { timeout }
+    None => timeout
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] poll_input_events(
+  program : Program[Model, Msg],
+) -> Array[InputEvent] {
+  match program.input {
+    Some(input) => input()
+    None => []
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 fn[Model, Msg] apply_msg(
   program : Program[Model, Msg],
   model : Model,
@@ -380,6 +417,45 @@ fn[Model, Msg] apply_msg(
 ) -> (Model, Bool, Cmd[Msg]) {
   let res = (program.update)(model, msg)
   (res.model, (program.should_quit)(res.model), res.cmd)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] apply_input_events(
+  program : Program[Model, Msg],
+  model : Model,
+  events : Array[InputEvent],
+  pending : @queue.Queue[() -> Msg?],
+  timers : Array[RuntimeTimer[Msg]],
+  sequences : @deque.Deque[Array[Cmd[Msg]]],
+) -> (Model, Bool, Bool) {
+  let mut current_model = model
+  let mut quit = false
+  let mut updated = false
+  for evt in events {
+    match evt {
+      Key(Modified("ctrl", "c")) => quit = true
+      _ => ()
+    }
+    match (program.sub)(evt) {
+      Some(msg) => {
+        let (next_model, should_quit, cmd) = apply_msg(
+          program, current_model, msg,
+        )
+        current_model = next_model
+        queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+        updated = true
+        if should_quit {
+          quit = true
+        }
+      }
+      None => ()
+    }
+    if quit {
+      break
+    }
+  }
+  (current_model, quit, updated)
 }
 
 ///|
@@ -531,69 +607,79 @@ fn[Model, Msg] run_internal(
     }
 
     let mut updated = false
-    let poll_result = pippa_poll_events(
-      timers_timeout(timers),
-      if program.read_stdin {
-        1
-      } else {
-        0
-      },
+    let (input_model, input_quit, input_updated) = apply_input_events(
+      program,
+      model,
+      poll_input_events(program),
+      pending,
+      timers,
+      sequences,
     )
-    if poll_result < 0 {
+    model = input_model
+    if input_quit {
+      quit = true
+    }
+    if input_updated {
+      updated = true
+    }
+    if quit {
       break
     }
 
-    if poll_result == 0 {
-      let now = pippa_now_ms()
-      let remaining : Array[RuntimeTimer[Msg]] = []
-      for timer in timers {
-        if timer_deadline(timer) <= now {
-          match timer {
-            TickAt(_) => pending.push(program.on_tick)
-            AfterAt(_, task) => pending.push(task)
-          }
+    if not(updated) {
+      let poll_result = pippa_poll_events(
+        runtime_timeout_ms(program, timers),
+        if program.read_stdin {
+          1
         } else {
-          remaining.push(timer)
-        }
+          0
+        },
+      )
+      if poll_result < 0 {
+        break
       }
-      timers = remaining
-    } else {
-      if (poll_result & 4) != 0 {
-        pippa_drain_wakeup()
-      }
-      if (poll_result & 1) != 0 {
-        let b = pippa_read_byte()
-        if b < 0 {
-          break
+
+      if poll_result == 0 {
+        let now = pippa_now_ms()
+        let remaining : Array[RuntimeTimer[Msg]] = []
+        for timer in timers {
+          if timer_deadline(timer) <= now {
+            match timer {
+              TickAt(_) => pending.push(program.on_tick)
+              AfterAt(_, task) => pending.push(task)
+            }
+          } else {
+            remaining.push(timer)
+          }
         }
-
-        buf.push(b.to_byte())
-
-        let bytes = Bytes::from_array(buf)
-        let bv = bytes[:]
-        let (events, leftover) = parse_all(bv)
-
-        buf = leftover.to_array()
-
-        for evt in events {
-          match evt {
-            Key(Modified("ctrl", "c")) => quit = true
-            _ => ()
+        timers = remaining
+      } else {
+        if (poll_result & 4) != 0 {
+          pippa_drain_wakeup()
+        }
+        if (poll_result & 1) != 0 {
+          let b = pippa_read_byte()
+          if b < 0 {
+            break
           }
 
-          match (program.sub)(evt) {
-            Some(msg) => {
-              let (next_model, should_quit, cmd) = apply_msg(
-                program, model, msg,
-              )
-              model = next_model
-              queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
-              updated = true
-              if should_quit {
-                quit = true
-              }
-            }
-            None => ()
+          buf.push(b.to_byte())
+
+          let bytes = Bytes::from_array(buf)
+          let bv = bytes[:]
+          let (events, leftover) = parse_all(bv)
+
+          buf = leftover.to_array()
+
+          let (next_model, should_quit, input_updated) = apply_input_events(
+            program, model, events, pending, timers, sequences,
+          )
+          model = next_model
+          if should_quit {
+            quit = true
+          }
+          if input_updated {
+            updated = true
           }
         }
       }

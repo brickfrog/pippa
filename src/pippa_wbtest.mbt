@@ -226,6 +226,17 @@ test "pippa headless builder disables terminal IO features" {
 }
 
 ///|
+test "pippa with_input disables stdin and installs custom input source" {
+  let program : Program[Int, Int] = Program::new(
+    init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+    update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+    view=fn(_model) { "" },
+  ).with_input(fn() { [] })
+  assert_false(program.read_stdin)
+  assert_true(program.input is Some(_))
+}
+
+///|
 #cfg(any(target="native", target="llvm"))
 test "pippa custom output captures rendered views" {
   let captured = Ref::new("")
@@ -244,6 +255,76 @@ test "pippa custom output captures rendered views" {
   assert_true(sent.val)
   assert_true(captured.val.contains("zero"))
   assert_true(captured.val.contains("one"))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa custom input drives sub in headless mode" {
+  let polled = Ref::new(false)
+  let seen : Ref[Array[Int]] = Ref::new([])
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(_model, msg) {
+        seen.val = [..seen.val, msg]
+        UpdateResult::new(model=msg, cmd=Cmd::none())
+      },
+      view=fn(_model) { "" },
+      sub=fn(evt) {
+        match evt {
+          Key(Char('a')) => Some(1)
+          Key(Char('b')) => Some(2)
+          _ => None
+        }
+      },
+      should_quit=fn(model) { model == 2 },
+    )
+    .headless()
+    .with_input(fn() {
+      if polled.val {
+        []
+      } else {
+        polled.val = true
+        [Key(Char('a')), Key(Char('b'))]
+      }
+    })
+  program.run()
+  assert_eq(seen.val, [1, 2])
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa custom input can render updates without stdin" {
+  let polled = Ref::new(false)
+  let captured = Ref::new("")
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(_model, msg) {
+        let cmd = if msg == 1 { Cmd::msg(99) } else { Cmd::none() }
+        UpdateResult::new(model=msg, cmd~)
+      },
+      view=fn(model) { if model == 0 { "idle" } else { "typed" } },
+      sub=fn(evt) {
+        match evt {
+          Key(Char('x')) => Some(1)
+          _ => None
+        }
+      },
+      should_quit=fn(model) { model == 99 },
+    )
+    .with_input(fn() {
+      if polled.val {
+        []
+      } else {
+        polled.val = true
+        [Key(Char('x'))]
+      }
+    })
+    .with_alt_screen(false)
+    .with_hide_cursor(false)
+    .with_output(fn(output) { captured.val = captured.val + output })
+  program.run()
+  assert_true(captured.val.contains("idle"))
+  assert_true(captured.val.contains("typed"))
 }
 
 ///|
