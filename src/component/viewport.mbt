@@ -121,7 +121,7 @@ pub fn viewport(
     view: fn(model : ViewportModel) {
       let lines = @pippa.split_lines(model.content)
       let buf = StringBuilder::new()
-      for i = 0; i < model.height; i = i + 1 {
+      for i in 0..<model.height {
         let line_idx = model.offset + i
         let raw_line = if line_idx < lines.length() {
           lines[line_idx]

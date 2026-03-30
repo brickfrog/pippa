@@ -1,0 +1,24 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/internal"
+
+// Values
+pub fn clamp_non_negative(Int) -> Int
+
+pub fn join_lines(Array[String]) -> String
+
+pub fn max_visible_width(Array[String], (String) -> Int) -> Int
+
+pub fn normalize_border_piece(String, (String) -> Int) -> String
+
+pub fn render_border(String, String, String, String, String, String, Array[String], Int, (String) -> Int, Bool, Bool, Bool, Bool) -> String
+
+pub fn repeat_string(String, Int) -> String
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
+

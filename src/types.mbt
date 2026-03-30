@@ -25,20 +25,68 @@ pub(all) struct Nothing {} derive(Show, Eq)
 ///|
 /// A batch of I/O commands to be performed by the runtime.
 ///
-/// `Cmd[Msg]` represents side-effects (timers, async I/O, etc.) that, when
-/// completed, will produce a message of type `Msg` and feed it back into the
-/// update loop. Use `Cmd::none()` for no-ops and `Cmd::batch` to combine
-/// multiple commands.
+/// `Cmd[Msg]` represents one-shot runtime effects that may later produce a
+/// message of type `Msg` and feed it back into the update loop.
 ///
-/// Each action is an `(interval_ms, msg?)` pair. When `msg` is `Some(m)`, the
-/// runtime delivers `m` directly; when `None`, it falls back to `on_tick`.
-/// Multiple actions run as independent concurrent timers.
+/// Commands are additive: when several updates happen in one runtime turn, the
+/// resulting commands are all enqueued rather than the "last" one replacing the
+/// others. Use `Cmd::none()` for no-ops and `Cmd::batch` to combine several
+/// commands.
+/// A batch of one-shot runtime effects.
 struct Cmd[Msg] {
   // Phantom field — carries no data, ensures the type parameter is consumed.
   _phantom : Array[Msg]
-  // Independent timer actions: (interval_ms, pre-computed msg).
-  actions : Array[(Int, Msg?)]
-} derive(Show)
+  // Runtime-managed one-shot actions.
+  actions : Array[CmdAction[Msg]]
+}
+
+///|
+priv enum CmdAction[Msg] {
+  // Execute a runtime effect immediately after the current update cycle.
+  Perform(() -> Msg?)
+  // Schedule a one-shot `on_tick` callback after `interval_ms`.
+  Tick(Int)
+  // Schedule a one-shot runtime effect after `interval_ms`.
+  After(Int, () -> Msg)
+  // Run commands in order, waiting for immediate effects from each step to settle
+  // before starting the next one.
+  Sequence(Array[Cmd[Msg]])
+}
+
+///|
+pub impl[Msg] Show for Cmd[Msg] with output(self, logger) {
+  let mut perform_count = 0
+  let mut tick_count = 0
+  let mut after_count = 0
+  let mut sequence_count = 0
+  for action in self.actions {
+    match action {
+      Perform(_) => perform_count = perform_count + 1
+      Tick(_) => tick_count = tick_count + 1
+      After(_, _) => after_count = after_count + 1
+      Sequence(_) => sequence_count = sequence_count + 1
+    }
+  }
+  logger.write_string("Cmd(actions=")
+  logger.write_string(self.actions.length().to_string())
+  if perform_count > 0 {
+    logger.write_string(", perform=")
+    logger.write_string(perform_count.to_string())
+  }
+  if tick_count > 0 {
+    logger.write_string(", tick=")
+    logger.write_string(tick_count.to_string())
+  }
+  if after_count > 0 {
+    logger.write_string(", after=")
+    logger.write_string(after_count.to_string())
+  }
+  if sequence_count > 0 {
+    logger.write_string(", sequence=")
+    logger.write_string(sequence_count.to_string())
+  }
+  logger.write_string(")")
+}
 
 ///|
 /// The result of an `update` call: the new model and an optional command.

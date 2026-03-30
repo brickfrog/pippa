@@ -13,7 +13,7 @@ pub(all) enum KeyMsg {
   Special(String)
   /// A key with modifiers (Ctrl+key, Alt+key, etc.).
   Modified(String, String)
-} derive(Show, Eq, Compare)
+} derive(Show, Eq)
 
 ///|
 /// Represents a mouse event.
@@ -24,4 +24,4 @@ pub(all) enum MouseMsg {
   Press(Int, Int)
   /// Mouse button released at (col, row).
   Release(Int, Int)
-} derive(Show, Eq, Compare)
+} derive(Show, Eq)

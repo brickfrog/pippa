@@ -34,7 +34,7 @@ pub(all) struct ProgressBarModel {
 pub(all) enum ProgressBarMsg {
   /// Set a new target percentage (0.0–1.0); kicks off spring animation.
   SetPercent(Double)
-  /// Drive one spring physics step (~16 ms dt); issued by the app's on_tick.
+  /// Drive one spring physics step (~16 ms dt); typically scheduled via `Cmd::after`.
   Tick
 } derive(Show)
 
@@ -111,6 +111,18 @@ fn is_animating(model : ProgressBarModel) -> Bool {
 }
 
 ///|
+fn rounded_filled_cells(percent : Double, width : Int) -> Int {
+  let filled = (percent * width.to_double() + 0.5).to_int()
+  if filled < 0 {
+    0
+  } else if filled > width {
+    width
+  } else {
+    filled
+  }
+}
+
+///|
 /// Create an animated gradient progress bar component with spring physics.
 pub fn progress_bar(
   width? : Int = 40,
@@ -156,12 +168,18 @@ pub fn progress_bar(
             16.0 / 1000.0,
           )
           let next = { ..model, displayed_percent: new_pos, velocity: new_vel }
-          let cmd = if is_animating(next) {
+          let animating = is_animating(next)
+          let settled = if animating {
+            next
+          } else {
+            { ..next, displayed_percent: model.target_percent, velocity: 0.0 }
+          }
+          let cmd = if animating {
             @pippa.Cmd::after(16, fn() { ProgressBarMsg::Tick })
           } else {
             @pippa.Cmd::none()
           }
-          @pippa.UpdateResult::new(model=next, cmd~)
+          @pippa.UpdateResult::new(model=settled, cmd~)
         }
       }
     },
@@ -174,8 +192,7 @@ pub fn progress_bar(
       } else {
         model.displayed_percent
       }
-      let filled = (pct * w.to_double()).to_int()
-      let filled = if filled < 0 { 0 } else if filled > w { w } else { filled }
+      let filled = rounded_filled_cells(pct, w)
       let empty = w - filled
       let total_width = w.to_double()
       let buf = StringBuilder::new()

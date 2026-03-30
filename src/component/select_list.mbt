@@ -80,7 +80,7 @@ pub fn select_list(
     },
     view: fn(model) {
       let lines : Array[String] = []
-      for i = 0; i < model.items.length(); i = i + 1 {
+      for i, item in model.items {
         let is_cursor = i == model.cursor
         let is_selected = model.selected == i && model.selected == model.cursor
         let prefix = if is_cursor {
@@ -90,7 +90,7 @@ pub fn select_list(
         }
         let decoration = if is_selected { @pippa.underline() } else { "" }
         let suffix = if is_selected { @pippa.reset() } else { "" }
-        lines.push(prefix + decoration + model.items[i] + suffix)
+        lines.push(prefix + decoration + item + suffix)
       }
       lines.join("\n")
     },

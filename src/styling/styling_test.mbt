@@ -53,3 +53,40 @@ test "styling join_vertical aligns blocks to a common width" {
   let expected = " A\nZZ"
   assert_eq(actual, expected)
 }
+
+///|
+test "styling border_sides can suppress vertical edges" {
+  let actual = style()
+    .border(border_ascii())
+    .border_sides(true, false, true, false)
+    .render("hi")
+  let expected = "--\nhi\n--"
+  assert_eq(actual, expected)
+}
+
+///|
+test "styling border colors render separately from content colors" {
+  let actual = style()
+    .foreground(color_ansi(2))
+    .border(border_ascii())
+    .border_foreground(color_ansi(1))
+    .render("hi")
+  let expected = @pippa.fg_color(1) +
+    "+--+" +
+    @pippa.reset() +
+    "\n" +
+    @pippa.fg_color(1) +
+    "|" +
+    @pippa.reset() +
+    @pippa.fg_color(2) +
+    "hi" +
+    @pippa.reset() +
+    @pippa.fg_color(1) +
+    "|" +
+    @pippa.reset() +
+    "\n" +
+    @pippa.fg_color(1) +
+    "+--+" +
+    @pippa.reset()
+  assert_eq(actual, expected)
+}

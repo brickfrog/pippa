@@ -152,16 +152,16 @@ pub fn Style::padding(
 ) -> Style {
   {
     ..self,
-    padding_top: clamp_non_negative(top),
-    padding_right: clamp_non_negative(right),
-    padding_bottom: clamp_non_negative(bottom),
-    padding_left: clamp_non_negative(left),
+    padding_top: @internal.clamp_non_negative(top),
+    padding_right: @internal.clamp_non_negative(right),
+    padding_bottom: @internal.clamp_non_negative(bottom),
+    padding_left: @internal.clamp_non_negative(left),
   }
 }
 
 ///|
 pub fn Style::width(self : Style, w : Int) -> Style {
-  { ..self, width: clamp_non_negative(w) }
+  { ..self, width: @internal.clamp_non_negative(w) }
 }
 
 ///|
@@ -173,11 +173,11 @@ pub fn Style::align(self : Style, a : Align) -> Style {
 pub fn Style::render(self : Style, content : String) -> String {
   let effective_style = {
     ..self,
-    padding_top: clamp_non_negative(self.padding_top),
-    padding_bottom: clamp_non_negative(self.padding_bottom),
-    padding_left: clamp_non_negative(self.padding_left),
-    padding_right: clamp_non_negative(self.padding_right),
-    width: clamp_non_negative(self.width),
+    padding_top: @internal.clamp_non_negative(self.padding_top),
+    padding_bottom: @internal.clamp_non_negative(self.padding_bottom),
+    padding_left: @internal.clamp_non_negative(self.padding_left),
+    padding_right: @internal.clamp_non_negative(self.padding_right),
+    width: @internal.clamp_non_negative(self.width),
   }
   let content_lines = split_lines(content)
   let normalize = effective_style.width > 0 ||
@@ -193,7 +193,7 @@ pub fn Style::render(self : Style, content : String) -> String {
   let content_width = if effective_style.width > 0 {
     effective_style.width
   } else if normalize {
-    max_visible_width(content_lines)
+    @internal.max_visible_width(content_lines, visible_width)
   } else {
     0
   }
@@ -216,13 +216,11 @@ pub fn Style::render(self : Style, content : String) -> String {
     )
   }
 
-  let inner_width = max_visible_width(lines)
+  let inner_width = @internal.max_visible_width(lines, visible_width)
   let padded_lines : Array[String] = []
   let empty_line = String::make(inner_width, ' ')
-  let mut top_padding = 0
-  while top_padding < effective_style.padding_top {
+  for _ in 0..<effective_style.padding_top {
     padded_lines.push(empty_line)
-    top_padding = top_padding + 1
   }
   for line in lines {
     padded_lines.push(
@@ -233,15 +231,13 @@ pub fn Style::render(self : Style, content : String) -> String {
       },
     )
   }
-  let mut bottom_padding = 0
-  while bottom_padding < effective_style.padding_bottom {
+  for _ in 0..<effective_style.padding_bottom {
     padded_lines.push(empty_line)
-    bottom_padding = bottom_padding + 1
   }
 
   let block = match effective_style.border {
     Some(border) => render_border(border, padded_lines, inner_width)
-    None => join_lines(padded_lines)
+    None => @internal.join_lines(padded_lines)
   }
 
   let prefix = build_ansi_prefix(effective_style)
@@ -250,27 +246,6 @@ pub fn Style::render(self : Style, content : String) -> String {
   } else {
     prefix + block + reset()
   }
-}
-
-///|
-fn clamp_non_negative(n : Int) -> Int {
-  if n < 0 {
-    0
-  } else {
-    n
-  }
-}
-
-///|
-fn max_visible_width(lines : Array[String]) -> Int {
-  let mut max_width = 0
-  for line in lines {
-    let width = visible_width(line)
-    if width > max_width {
-      max_width = width
-    }
-  }
-  max_width
 }
 
 ///|
@@ -283,78 +258,33 @@ fn align_line(line : String, width : Int, align : Align) -> String {
 }
 
 ///|
-fn join_lines(lines : Array[String]) -> String {
-  let buf = StringBuilder::new()
-  for i, line in lines {
-    if i > 0 {
-      buf.write_string("\n")
-    }
-    buf.write_string(line)
-  }
-  buf.to_string()
-}
-
-///|
-fn repeat_string(s : String, count : Int) -> String {
-  let buf = StringBuilder::new()
-  let mut i = 0
-  while i < count {
-    buf.write_string(s)
-    i = i + 1
-  }
-  buf.to_string()
-}
-
-///|
 fn render_border(
   border : Border,
   lines : Array[String],
   inner_width : Int,
 ) -> String {
-  let top_left = normalize_border_piece(border.top_left)
-  let top_right = normalize_border_piece(border.top_right)
-  let bottom_left = normalize_border_piece(border.bottom_left)
-  let bottom_right = normalize_border_piece(border.bottom_right)
-  let horizontal_piece = normalize_border_piece(border.horizontal)
-  let vertical_piece = normalize_border_piece(border.vertical)
-  let buf = StringBuilder::new()
-  let horizontal = repeat_string(horizontal_piece, inner_width)
-  buf.write_string(top_left)
-  buf.write_string(horizontal)
-  buf.write_string(top_right)
-  for line in lines {
-    buf.write_string("\n")
-    buf.write_string(vertical_piece)
-    buf.write_string(line)
-    buf.write_string(vertical_piece)
-  }
-  buf.write_string("\n")
-  buf.write_string(bottom_left)
-  buf.write_string(horizontal)
-  buf.write_string(bottom_right)
-  buf.to_string()
-}
-
-///|
-fn normalize_border_piece(piece : String) -> String {
-  if visible_width(piece) == 1 {
-    piece
-  } else {
-    "*"
-  }
+  @internal.render_border(
+    border.top_left,
+    border.top_right,
+    border.bottom_left,
+    border.bottom_right,
+    border.horizontal,
+    border.vertical,
+    lines,
+    inner_width,
+    visible_width,
+    true,
+    true,
+    true,
+    true,
+  )
 }
 
 ///|
 fn build_ansi_prefix(style : Style) -> String {
   let buf = StringBuilder::new()
-  match style.fg {
-    Some(n) => buf.write_string(fg_color(n))
-    None => ()
-  }
-  match style.bg {
-    Some(n) => buf.write_string(bg_color(n))
-    None => ()
-  }
+  style.fg.iter().each(fn(n) { buf.write_string(fg_color(n)) })
+  style.bg.iter().each(fn(n) { buf.write_string(bg_color(n)) })
   if style.bold {
     buf.write_string(bold())
   }

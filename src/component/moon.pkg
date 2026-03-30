@@ -1,4 +1,11 @@
 import {
   "brickfrog/pippa",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/env",
   "moonbitlang/core/math",
 }
+
+options(
+  "native-stub": [ "filepicker_native.c" ],
+  targets: { "filepicker_ffi_native.mbt": [ "native", "llvm" ] },
+)

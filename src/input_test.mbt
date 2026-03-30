@@ -84,6 +84,33 @@ test "parse_input: arrow keys" {
 }
 
 ///|
+test "parse_input: page keys and shift-tab" {
+  let page_up = Bytes::from_array([b'\x1b', b'[', b'5', b'~'])
+  let page_down = Bytes::from_array([b'\x1b', b'[', b'6', b'~'])
+  let shift_tab = Bytes::from_array([b'\x1b', b'[', b'Z'])
+  assert_eq(parse_input(page_up[:]), Ok(Key(Special("pageup")), 4))
+  assert_eq(parse_input(page_down[:]), Ok(Key(Special("pagedown")), 4))
+  assert_eq(parse_input(shift_tab[:]), Ok(Key(Modified("shift", "tab")), 3))
+}
+
+///|
+test "parse_input: focus and blur events" {
+  let focus = Bytes::from_array([b'\x1b', b'[', b'I'])
+  let blur = Bytes::from_array([b'\x1b', b'[', b'O'])
+  assert_eq(parse_input(focus[:]), Ok(Focus, 3))
+  assert_eq(parse_input(blur[:]), Ok(Blur, 3))
+}
+
+///|
+test "parse_input: bracketed paste" {
+  let pasted = Bytes::from_array([
+    b'\x1b', b'[', b'2', b'0', b'0', b'~', b'h', b'i', b'\n', b'\x1b', b'[', b'2',
+    b'0', b'1', b'~',
+  ])
+  assert_eq(parse_input(pasted[:]), Ok(Paste("hi\n"), 15))
+}
+
+///|
 test "parse_input: incomplete CSI" {
   let bytes = Bytes::from_array([b'\x1b', b'['])
   let bv = bytes[0:bytes.length()]

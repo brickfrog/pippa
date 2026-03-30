@@ -14,9 +14,15 @@ pub(all) enum InputEvent {
   Key(KeyMsg)
   /// A mouse event.
   Mouse(MouseMsg)
+  /// The terminal window gained focus.
+  Focus
+  /// The terminal window lost focus.
+  Blur
+  /// Bracketed paste payload.
+  Paste(String)
   /// Bytes that could not be mapped to a known event.
   Unknown(Bytes)
-} derive(Show, Eq, Compare)
+} derive(Show, Eq)
 
 ///|
 /// Result of attempting to parse one event from a byte buffer.
@@ -28,6 +34,33 @@ pub(all) enum ParseResult[T] {
   /// The byte sequence is definitively malformed.
   Invalid(String)
 } derive(Show, Eq)
+
+///|
+fn unknown_event(bv : BytesView, consumed : Int) -> InputEvent {
+  Unknown(Bytes::from_array(bv[0:consumed].to_array()))
+}
+
+///|
+fn parse_bracketed_paste(
+  bv : BytesView,
+  payload_start : Int,
+) -> ParseResult[InputEvent] {
+  let total = bv.length()
+  let mut i = payload_start
+  while i + 5 < total {
+    if bv[i].to_int() == 0x1B &&
+      bv[i + 1].to_int() == 0x5B &&
+      bv[i + 2].to_int() == 0x32 &&
+      bv[i + 3].to_int() == 0x30 &&
+      bv[i + 4].to_int() == 0x31 &&
+      bv[i + 5].to_int() == 0x7E {
+      let pasted = Bytes::from_array(bv[payload_start:i].to_array())
+      return Ok(Paste(@utf8.decode_lossy(pasted)), i + 6)
+    }
+    i = i + 1
+  }
+  Incomplete
+}
 
 ///|
 /// Parse an ANSI CSI sequence starting at `bv[0]` (which must be ESC).
@@ -63,20 +96,23 @@ fn parse_csi(bv : BytesView) -> ParseResult[InputEvent] {
     let b = bv[i].to_int()
     if b >= 0x40 && b <= 0x7E {
       let consumed = i + 1
-      let evt : InputEvent = match b {
-        0x41 => Key(Special("up"))
-        0x42 => Key(Special("down"))
-        0x43 => Key(Special("right"))
-        0x44 => Key(Special("left"))
-        0x48 => Key(Special("home"))
-        0x46 => Key(Special("end"))
-        _ => {
-          let arr : Array[Byte] = []
-          for j in 0..<consumed {
-            arr.push(bv[j])
-          }
-          Unknown(Bytes::from_array(arr))
-        }
+      let params = @utf8.decode_lossy(Bytes::from_array(bv[2:i].to_array()))
+      let evt : InputEvent = match (b, params) {
+        (0x41, "") => Key(Special("up"))
+        (0x42, "") => Key(Special("down"))
+        (0x43, "") => Key(Special("right"))
+        (0x44, "") => Key(Special("left"))
+        (0x46, "") => Key(Special("end"))
+        (0x48, "") => Key(Special("home"))
+        (0x49, "") => Focus
+        (0x4F, "") => Blur
+        (0x5A, "") => Key(Modified("shift", "tab"))
+        (0x7E, "2") => Key(Special("insert"))
+        (0x7E, "3") => Key(Special("delete"))
+        (0x7E, "5") => Key(Special("pageup"))
+        (0x7E, "6") => Key(Special("pagedown"))
+        (0x7E, "200") => return parse_bracketed_paste(bv, consumed)
+        _ => unknown_event(bv, consumed)
       }
       return Ok(evt, consumed)
     } else if b >= 0x20 && b <= 0x3F {
@@ -174,9 +210,5 @@ pub fn parse_all(bv : BytesView) -> (Array[InputEvent], Bytes) {
         offset = offset + 1
     }
   }
-  let leftover : Array[Byte] = []
-  for i in offset..<total {
-    leftover.push(bv[i])
-  }
-  (events, Bytes::from_array(leftover))
+  (events, Bytes::from_array(bv[offset:total].to_array()))
 }

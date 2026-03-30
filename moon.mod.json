@@ -1,7 +1,7 @@
 {
   "name": "brickfrog/pippa",
   "version": "0.1.0",
-  "source": "src",
+  "deps": {},
   "readme": "README.mbt.md",
   "repository": "https://github.com/brickfrog/pippa",
   "license": "Apache-2.0",
@@ -13,5 +13,6 @@
     "bubbletea",
     "ansi"
   ],
-  "description": "A terminal UI framework for MoonBit, inspired by bubbletea (Go) and Elm architecture. Provides a Model-Update-View pattern with typed messages, ANSI rendering, and composable components."
+  "description": "A terminal UI framework for MoonBit, inspired by bubbletea (Go) and Elm architecture. Provides a Model-Update-View pattern with typed messages, ANSI rendering, and composable components.",
+  "source": "src"
 }

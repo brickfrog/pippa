@@ -26,6 +26,8 @@ pub(all) enum VerticalAlign {
 pub(all) struct Style {
   fg : Color?
   bg : Color?
+  border_fg : Color?
+  border_bg : Color?
   bold : Bool
   dim : Bool
   italic : Bool
@@ -33,6 +35,10 @@ pub(all) struct Style {
   blink : Bool
   reverse : Bool
   border : @pippa.Border?
+  border_top : Bool
+  border_right : Bool
+  border_bottom : Bool
+  border_left : Bool
   padding_top : Int
   padding_bottom : Int
   padding_left : Int
@@ -95,6 +101,8 @@ pub fn style() -> Style {
   {
     fg: None,
     bg: None,
+    border_fg: None,
+    border_bg: None,
     bold: false,
     dim: false,
     italic: false,
@@ -102,6 +110,10 @@ pub fn style() -> Style {
     blink: false,
     reverse: false,
     border: None,
+    border_top: true,
+    border_right: true,
+    border_bottom: true,
+    border_left: true,
     padding_top: 0,
     padding_bottom: 0,
     padding_left: 0,
@@ -128,6 +140,16 @@ pub fn Style::foreground(self : Style, color : Color) -> Style {
 ///|
 pub fn Style::background(self : Style, color : Color) -> Style {
   { ..self, bg: Some(color) }
+}
+
+///|
+pub fn Style::border_foreground(self : Style, color : Color) -> Style {
+  { ..self, border_fg: Some(color) }
+}
+
+///|
+pub fn Style::border_background(self : Style, color : Color) -> Style {
+  { ..self, border_bg: Some(color) }
 }
 
 ///|
@@ -186,6 +208,23 @@ pub fn Style::border(self : Style, border : @pippa.Border) -> Style {
 }
 
 ///|
+pub fn Style::border_sides(
+  self : Style,
+  top : Bool,
+  right : Bool,
+  bottom : Bool,
+  left : Bool,
+) -> Style {
+  {
+    ..self,
+    border_top: top,
+    border_right: right,
+    border_bottom: bottom,
+    border_left: left,
+  }
+}
+
+///|
 pub fn Style::padding(
   self : Style,
   top : Int,
@@ -195,10 +234,10 @@ pub fn Style::padding(
 ) -> Style {
   {
     ..self,
-    padding_top: clamp_non_negative(top),
-    padding_right: clamp_non_negative(right),
-    padding_bottom: clamp_non_negative(bottom),
-    padding_left: clamp_non_negative(left),
+    padding_top: @internal.clamp_non_negative(top),
+    padding_right: @internal.clamp_non_negative(right),
+    padding_bottom: @internal.clamp_non_negative(bottom),
+    padding_left: @internal.clamp_non_negative(left),
   }
 }
 
@@ -212,41 +251,41 @@ pub fn Style::margin(
 ) -> Style {
   {
     ..self,
-    margin_top: clamp_non_negative(top),
-    margin_right: clamp_non_negative(right),
-    margin_bottom: clamp_non_negative(bottom),
-    margin_left: clamp_non_negative(left),
+    margin_top: @internal.clamp_non_negative(top),
+    margin_right: @internal.clamp_non_negative(right),
+    margin_bottom: @internal.clamp_non_negative(bottom),
+    margin_left: @internal.clamp_non_negative(left),
   }
 }
 
 ///|
 pub fn Style::width(self : Style, width : Int) -> Style {
-  { ..self, width: Some(clamp_non_negative(width)) }
+  { ..self, width: Some(@internal.clamp_non_negative(width)) }
 }
 
 ///|
 pub fn Style::height(self : Style, height : Int) -> Style {
-  { ..self, height: Some(clamp_non_negative(height)) }
+  { ..self, height: Some(@internal.clamp_non_negative(height)) }
 }
 
 ///|
 pub fn Style::min_width(self : Style, width : Int) -> Style {
-  { ..self, min_width: clamp_non_negative(width) }
+  { ..self, min_width: @internal.clamp_non_negative(width) }
 }
 
 ///|
 pub fn Style::min_height(self : Style, height : Int) -> Style {
-  { ..self, min_height: clamp_non_negative(height) }
+  { ..self, min_height: @internal.clamp_non_negative(height) }
 }
 
 ///|
 pub fn Style::max_width(self : Style, width : Int) -> Style {
-  { ..self, max_width: Some(clamp_non_negative(width)) }
+  { ..self, max_width: Some(@internal.clamp_non_negative(width)) }
 }
 
 ///|
 pub fn Style::max_height(self : Style, height : Int) -> Style {
-  { ..self, max_height: Some(clamp_non_negative(height)) }
+  { ..self, max_height: Some(@internal.clamp_non_negative(height)) }
 }
 
 ///|
@@ -263,8 +302,14 @@ pub fn Style::render(self : Style, content : String) -> String {
   let height_fitted = fit_height(base_lines, target_width, target_height)
   let padded = apply_padding(height_fitted, self)
   let bordered = match self.border {
-    Some(border) => render_border(border, padded, max_visible_width(padded))
-    None => join_lines(padded)
+    Some(border) =>
+      render_border_block(
+        border,
+        padded,
+        @internal.max_visible_width(padded, @pippa.visible_width),
+        self,
+      )
+    None => @internal.join_lines(padded)
   }
   let margined = apply_margin(
     bordered,
@@ -273,12 +318,7 @@ pub fn Style::render(self : Style, content : String) -> String {
     self.margin_bottom,
     self.margin_left,
   )
-  let prefix = build_ansi_prefix(self)
-  if prefix == "" {
-    margined
-  } else {
-    prefix + margined + @pippa.reset()
-  }
+  apply_style_prefix(self, margined)
 }
 
 ///|
@@ -295,7 +335,7 @@ pub fn join_horizontal(
   let mut max_height = 0
   for block in blocks {
     let lines = @pippa.split_lines(block)
-    let width = max_visible_width(lines)
+    let width = @internal.max_visible_width(lines, @pippa.visible_width)
     split_blocks.push(lines)
     widths.push(width)
     heights.push(lines.length())
@@ -318,7 +358,7 @@ pub fn join_horizontal(
     }
     rows.push(buf.to_string())
   }
-  join_lines(rows)
+  @internal.join_lines(rows)
 }
 
 ///|
@@ -330,7 +370,7 @@ pub fn join_vertical(blocks : Array[String], align? : Align = Left) -> String {
   let mut max_width = 0
   for block in blocks {
     let lines = @pippa.split_lines(block)
-    let width = max_visible_width(lines)
+    let width = @internal.max_visible_width(lines, @pippa.visible_width)
     if width > max_width {
       max_width = width
     }
@@ -342,7 +382,7 @@ pub fn join_vertical(blocks : Array[String], align? : Align = Left) -> String {
       rows.push(fit_line_width(line, max_width, align))
     }
   }
-  join_lines(rows)
+  @internal.join_lines(rows)
 }
 
 ///|
@@ -353,11 +393,11 @@ pub fn place(
   align? : Align = Left,
   valign? : VerticalAlign = Top,
 ) -> String {
-  let safe_width = clamp_non_negative(width)
-  let safe_height = clamp_non_negative(height)
+  let safe_width = @internal.clamp_non_negative(width)
+  let safe_height = @internal.clamp_non_negative(height)
   let lines = @pippa.split_lines(content)
   let trimmed : Array[String] = []
-  for i in 0..<min_int(lines.length(), safe_height) {
+  for i in 0..<lines.length().min(safe_height) {
     trimmed.push(fit_line_width(lines[i], safe_width, align))
   }
   let top_pad = vertical_offset(safe_height, trimmed.length(), valign)
@@ -369,19 +409,10 @@ pub fn place(
   for line in trimmed {
     rows.push(line)
   }
-  while rows.length() < safe_height {
+  for _ in rows.length()..<safe_height {
     rows.push(blank)
   }
-  join_lines(rows)
-}
-
-///|
-fn clamp_non_negative(n : Int) -> Int {
-  if n < 0 {
-    0
-  } else {
-    n
-  }
+  @internal.join_lines(rows)
 }
 
 ///|
@@ -396,33 +427,15 @@ fn clamp_channel(n : Int) -> Int {
 }
 
 ///|
-fn min_int(a : Int, b : Int) -> Int {
-  if a < b {
-    a
-  } else {
-    b
-  }
-}
-
-///|
-fn max_int(a : Int, b : Int) -> Int {
-  if a > b {
-    a
-  } else {
-    b
-  }
-}
-
-///|
 fn resolve_width(style : Style, lines : Array[String]) -> Int {
-  let natural = max_visible_width(lines)
+  let natural = @internal.max_visible_width(lines, @pippa.visible_width)
   let from_width = match style.width {
     Some(width) => width
     None => natural
   }
-  let with_min = max_int(from_width, style.min_width)
+  let with_min = from_width.max(style.min_width)
   match style.max_width {
-    Some(max_width) => min_int(with_min, max_width)
+    Some(max_width) => with_min.min(max_width)
     None => with_min
   }
 }
@@ -433,9 +446,9 @@ fn resolve_height(style : Style, line_count : Int) -> Int {
     Some(height) => height
     None => line_count
   }
-  let with_min = max_int(from_height, style.min_height)
+  let with_min = from_height.max(style.min_height)
   match style.max_height {
-    Some(max_height) => min_int(with_min, max_height)
+    Some(max_height) => with_min.min(max_height)
     None => with_min
   }
 }
@@ -475,11 +488,11 @@ fn fit_height(
   target_height : Int,
 ) -> Array[String] {
   let fitted : Array[String] = []
-  for i in 0..<min_int(lines.length(), target_height) {
+  for i in 0..<lines.length().min(target_height) {
     fitted.push(lines[i])
   }
   let blank = String::make(target_width, ' ')
-  while fitted.length() < target_height {
+  for _ in fitted.length()..<target_height {
     fitted.push(blank)
   }
   fitted
@@ -488,7 +501,7 @@ fn fit_height(
 ///|
 fn apply_padding(lines : Array[String], self : Style) -> Array[String] {
   let padded : Array[String] = []
-  let inner_width = max_visible_width(lines)
+  let inner_width = @internal.max_visible_width(lines, @pippa.visible_width)
   let row_width = inner_width + self.padding_left + self.padding_right
   let blank = String::make(row_width, ' ')
   for _ in 0..<self.padding_top {
@@ -524,7 +537,7 @@ fn apply_margin(
     return block
   }
   let lines = @pippa.split_lines(block)
-  let inner_width = max_visible_width(lines)
+  let inner_width = @internal.max_visible_width(lines, @pippa.visible_width)
   let full_width = inner_width + left + right
   let blank = String::make(full_width, ' ')
   let rows : Array[String] = []
@@ -542,92 +555,155 @@ fn apply_margin(
   for _ in 0..<bottom {
     rows.push(blank)
   }
-  join_lines(rows)
+  @internal.join_lines(rows)
 }
 
 ///|
-fn max_visible_width(lines : Array[String]) -> Int {
-  let mut max_width = 0
-  for line in lines {
-    let width = @pippa.visible_width(line)
-    if width > max_width {
-      max_width = width
-    }
-  }
-  max_width
-}
-
-///|
-fn join_lines(lines : Array[String]) -> String {
-  let buf = StringBuilder::new()
-  for i, line in lines {
-    if i > 0 {
-      buf.write_string("\n")
-    }
-    buf.write_string(line)
-  }
-  buf.to_string()
-}
-
-///|
-fn repeat_string(s : String, count : Int) -> String {
-  let buf = StringBuilder::new()
-  for _ in 0..<count {
-    buf.write_string(s)
-  }
-  buf.to_string()
-}
-
-///|
-fn render_border(
+fn render_border_block(
   border : @pippa.Border,
   lines : Array[String],
   inner_width : Int,
+  style : Style,
 ) -> String {
-  let top_left = normalize_border_piece(border.top_left)
-  let top_right = normalize_border_piece(border.top_right)
-  let bottom_left = normalize_border_piece(border.bottom_left)
-  let bottom_right = normalize_border_piece(border.bottom_right)
-  let horizontal_piece = normalize_border_piece(border.horizontal)
-  let vertical_piece = normalize_border_piece(border.vertical)
-  let horizontal = repeat_string(horizontal_piece, inner_width)
-  let buf = StringBuilder::new()
-  buf.write_string(top_left)
-  buf.write_string(horizontal)
-  buf.write_string(top_right)
-  for line in lines {
-    buf.write_string("\n")
-    buf.write_string(vertical_piece)
-    buf.write_string(line)
-    buf.write_string(vertical_piece)
+  if style.border_fg is None && style.border_bg is None {
+    return @internal.render_border(
+      border.top_left,
+      border.top_right,
+      border.bottom_left,
+      border.bottom_right,
+      border.horizontal,
+      border.vertical,
+      lines,
+      inner_width,
+      @pippa.visible_width,
+      style.border_top,
+      style.border_right,
+      style.border_bottom,
+      style.border_left,
+    )
   }
-  buf.write_string("\n")
-  buf.write_string(bottom_left)
-  buf.write_string(horizontal)
-  buf.write_string(bottom_right)
-  buf.to_string()
+  let top_left = @internal.normalize_border_piece(
+    border.top_left,
+    @pippa.visible_width,
+  )
+  let top_right = @internal.normalize_border_piece(
+    border.top_right,
+    @pippa.visible_width,
+  )
+  let bottom_left = @internal.normalize_border_piece(
+    border.bottom_left,
+    @pippa.visible_width,
+  )
+  let bottom_right = @internal.normalize_border_piece(
+    border.bottom_right,
+    @pippa.visible_width,
+  )
+  let horizontal_piece = @internal.normalize_border_piece(
+    border.horizontal,
+    @pippa.visible_width,
+  )
+  let vertical_piece = @internal.normalize_border_piece(
+    border.vertical,
+    @pippa.visible_width,
+  )
+  let horizontal = @internal.repeat_string(horizontal_piece, inner_width)
+  let rows : Array[String] = []
+  let border_prefix = build_border_ansi_prefix(style)
+  let content_prefix = build_ansi_prefix(style)
+  if style.border_top {
+    rows.push(
+      decorate_segment(
+        border_prefix,
+        (if style.border_left { top_left } else { "" }) +
+        horizontal +
+        (if style.border_right { top_right } else { "" }),
+      ),
+    )
+  }
+  for line in lines {
+    rows.push(
+      decorate_segment(
+        border_prefix,
+        if style.border_left {
+          vertical_piece
+        } else {
+          ""
+        },
+      ) +
+      decorate_segment(content_prefix, line) +
+      decorate_segment(
+        border_prefix,
+        if style.border_right {
+          vertical_piece
+        } else {
+          ""
+        },
+      ),
+    )
+  }
+  if style.border_bottom {
+    rows.push(
+      decorate_segment(
+        border_prefix,
+        (if style.border_left { bottom_left } else { "" }) +
+        horizontal +
+        (if style.border_right { bottom_right } else { "" }),
+      ),
+    )
+  }
+  @internal.join_lines(rows)
 }
 
 ///|
-fn normalize_border_piece(piece : String) -> String {
-  if @pippa.visible_width(piece) == 1 {
-    piece
+fn decorate_segment(prefix : String, segment : String) -> String {
+  if prefix == "" || segment == "" {
+    segment
   } else {
-    "*"
+    prefix + segment + @pippa.reset()
+  }
+}
+
+///|
+fn build_border_ansi_prefix(style : Style) -> String {
+  let border_style = {
+    ..style,
+    fg: match style.border_fg {
+      Some(color) => Some(color)
+      None => style.fg
+    },
+    bg: match style.border_bg {
+      Some(color) => Some(color)
+      None => style.bg
+    },
+    border_fg: None,
+    border_bg: None,
+  }
+  build_ansi_prefix(border_style)
+}
+
+///|
+fn apply_style_prefix(style : Style, block : String) -> String {
+  if style.border is Some(_) &&
+    (style.border_fg is Some(_) || style.border_bg is Some(_)) {
+    return block
+  }
+  let prefix = build_ansi_prefix(style)
+  if prefix == "" {
+    block
+  } else {
+    prefix + block + @pippa.reset()
   }
 }
 
 ///|
 fn build_ansi_prefix(style : Style) -> String {
   let buf = StringBuilder::new()
-  match style.fg {
-    Some(color) => buf.write_string(foreground_sequence(color))
-    None => ()
-  }
-  match style.bg {
-    Some(color) => buf.write_string(background_sequence(color))
-    None => ()
-  }
+  style.fg
+  .iter()
+  .each(fn(color) { buf.write_string(foreground_sequence(color)) })
+  style.bg
+  .iter()
+  .each(fn(color) { buf.write_string(background_sequence(color)) })
   if style.bold {
     buf.write_string(@pippa.bold())
   }
@@ -652,7 +728,7 @@ fn build_ansi_prefix(style : Style) -> String {
 ///|
 fn foreground_sequence(color : Color) -> String {
   match color {
-    Ansi(n) => @pippa.fg_color(clamp_non_negative(n))
+    Ansi(n) => @pippa.fg_color(@internal.clamp_non_negative(n))
     RGB(r, g, b) =>
       @pippa.fg_rgb(clamp_channel(r), clamp_channel(g), clamp_channel(b))
     Hex(hex) =>
@@ -666,7 +742,7 @@ fn foreground_sequence(color : Color) -> String {
 ///|
 fn background_sequence(color : Color) -> String {
   match color {
-    Ansi(n) => @pippa.bg_color(clamp_non_negative(n))
+    Ansi(n) => @pippa.bg_color(@internal.clamp_non_negative(n))
     RGB(r, g, b) =>
       @pippa.bg_rgb(clamp_channel(r), clamp_channel(g), clamp_channel(b))
     Hex(hex) =>

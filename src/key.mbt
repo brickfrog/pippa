@@ -13,12 +13,7 @@ pub fn matches(binding : Binding, key : KeyMsg) -> Bool {
     Special(s) => s
     Modified(mod, k) => mod + "+" + k
   }
-  for k in binding.keys {
-    if k == key_str {
-      return true
-    }
-  }
-  false
+  binding.keys.contains(key_str)
 }
 
 ///|

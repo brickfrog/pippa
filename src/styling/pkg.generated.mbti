@@ -52,6 +52,8 @@ pub impl Show for Color
 pub(all) struct Style {
   fg : Color?
   bg : Color?
+  border_fg : Color?
+  border_bg : Color?
   bold : Bool
   dim : Bool
   italic : Bool
@@ -59,6 +61,10 @@ pub(all) struct Style {
   blink : Bool
   reverse : Bool
   border : @pippa.Border?
+  border_top : Bool
+  border_right : Bool
+  border_bottom : Bool
+  border_left : Bool
   padding_top : Int
   padding_bottom : Int
   padding_left : Int
@@ -82,6 +88,9 @@ pub fn Style::background_rgb(Self, Int, Int, Int) -> Self
 pub fn Style::blink(Self) -> Self
 pub fn Style::bold(Self) -> Self
 pub fn Style::border(Self, @pippa.Border) -> Self
+pub fn Style::border_background(Self, Color) -> Self
+pub fn Style::border_foreground(Self, Color) -> Self
+pub fn Style::border_sides(Self, Bool, Bool, Bool, Bool) -> Self
 pub fn Style::dim(Self) -> Self
 pub fn Style::foreground(Self, Color) -> Self
 pub fn Style::foreground_hex(Self, String) -> Self

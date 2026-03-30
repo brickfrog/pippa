@@ -53,7 +53,28 @@ pub fn strip_ansi(s : String) -> String {
 /// stripping ANSI sequences).  No wide-character handling is performed yet;
 /// every character counts as 1.
 pub fn visible_width(s : String) -> Int {
-  strip_ansi(s).length()
+  let mut width = 0
+  let mut escaped = false
+  let mut csi = false
+  for ch in s {
+    if escaped {
+      if csi {
+        if is_csi_terminator(ch) {
+          escaped = false
+          csi = false
+        }
+      } else if ch == '[' {
+        csi = true
+      } else {
+        escaped = false
+      }
+    } else if ch == '\u001b' {
+      escaped = true
+    } else {
+      width = width + 1
+    }
+  }
+  width
 }
 
 ///|
@@ -81,7 +102,13 @@ pub fn split_lines(s : String) -> Array[String] {
 ///|
 /// Return the number of lines in `s` (equivalent to `split_lines(s).length()`).
 pub fn line_count(s : String) -> Int {
-  split_lines(s).length()
+  let mut count = 1
+  for ch in s {
+    if ch == '\n' {
+      count = count + 1
+    }
+  }
+  count
 }
 
 ///|

@@ -7,22 +7,6 @@ pub(all) struct PatchOp {
 } derive(Show, Eq)
 
 ///|
-/// Split a string on '\n', returning each line as an element.
-fn split_on_newline(s : String) -> Array[String] {
-  let lines : Array[String] = []
-  let len = s.length()
-  let mut start = 0
-  for i = 0; i < len; i = i + 1 {
-    if s[i] == '\n' {
-      lines.push(s[start:i].to_string())
-      start = i + 1
-    }
-  }
-  lines.push(s[start:].to_string())
-  lines
-}
-
-///|
 /// Compare two view strings line-by-line and return the minimal set of
 /// `PatchOp`s needed to transform the old view into the new view.
 ///
@@ -30,13 +14,13 @@ fn split_on_newline(s : String) -> Array[String] {
 /// - Lines present in `old_view` but absent in `new_view` → emit a `PatchOp`
 ///   with `text = ""` to clear the stale line.
 pub fn diff_views(old_view : String, new_view : String) -> Array[PatchOp] {
-  let old_lines = split_on_newline(old_view)
-  let new_lines = split_on_newline(new_view)
+  let old_lines = split_lines(old_view)
+  let new_lines = split_lines(new_view)
   let ops : Array[PatchOp] = []
   let old_len = old_lines.length()
   let new_len = new_lines.length()
   let max_len = if old_len > new_len { old_len } else { new_len }
-  for i = 0; i < max_len; i = i + 1 {
+  for i in 0..<max_len {
     let old_line = if i < old_len { old_lines[i] } else { "" }
     let new_line = if i < new_len { new_lines[i] } else { "" }
     if old_line != new_line {
@@ -72,15 +56,15 @@ pub fn render_patch(ops : Array[PatchOp]) -> String {
 /// every line, then clears any remaining lines below down to `prev_lines`.
 /// This avoids writing raw `\n` bytes in raw terminal mode.
 pub fn render_full(view : String, prev_lines : Int) -> String {
-  let lines = split_on_newline(view)
+  let lines = split_lines(view)
   let parts : Array[String] = []
-  for i = 0; i < lines.length(); i = i + 1 {
+  for i in 0..<lines.length() {
     parts.push(move_cursor(i + 1, 1))
     parts.push(clear_line())
     parts.push(lines[i])
   }
   // Clear stale lines below the new view
-  for i = lines.length(); i < prev_lines; i = i + 1 {
+  for i in lines.length()..<prev_lines {
     parts.push(move_cursor(i + 1, 1))
     parts.push(clear_line())
   }

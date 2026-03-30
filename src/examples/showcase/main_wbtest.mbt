@@ -76,3 +76,25 @@ test "showcase progress no longer waits for full settle before rebounding" {
   assert_true(dipped.progress.velocity > 0.0)
   assert_true(not(progress_settled(dipped.progress)))
 }
+
+///|
+test "showcase non-progress UI events do not schedule extra progress ticks" {
+  let { model, .. } = showcase_init()
+
+  let tabbed = showcase_update(model, TabNext)
+  assert_true(tabbed.cmd.is_none())
+
+  let input_model = { ..model, tab: 1 }
+  let edited = showcase_update(
+    input_model,
+    TextInputMsg(@component.InsertChar('x')),
+  )
+  assert_true(edited.cmd.is_none())
+
+  let viewport_model = { ..model, tab: 2 }
+  let scrolled = showcase_update(
+    viewport_model,
+    ViewportMsg(@component.ScrollDown),
+  )
+  assert_true(scrolled.cmd.is_none())
+}

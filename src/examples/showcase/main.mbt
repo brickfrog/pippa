@@ -33,13 +33,20 @@ enum Msg {
 let spinner_comp : @component.Component[
   @component.SpinnerModel,
   @component.SpinnerMsg,
-] = @component.spinner()
+] = @component.spinner(label="reconciling model")
 
 ///|
 let progress_comp : @component.Component[
   @component.ProgressBarModel,
   @component.ProgressBarMsg,
-] = @component.progress_bar(width=30, spring_frequency=10.0, spring_damping=0.6)
+] = @component.progress_bar(
+  width=30,
+  blend_start=(199, 38, 138),
+  blend_end=(255, 178, 56),
+  empty_color=(96, 77, 112),
+  spring_frequency=10.0,
+  spring_damping=0.6,
+)
 
 ///|
 let text_input_comp : @component.Component[
@@ -55,22 +62,7 @@ let viewport_comp : @component.Component[
 
 ///|
 fn showcase_tick_cmd() -> @pippa.Cmd[Msg] {
-  @pippa.Cmd::tick(16)
-}
-
-///|
-fn showcase_shift_tab_bytes() -> Bytes {
-  Bytes::from_array([b'\x1b', b'[', b'Z'])
-}
-
-///|
-fn showcase_page_up_bytes() -> Bytes {
-  Bytes::from_array([b'\x1b', b'[', b'5', b'~'])
-}
-
-///|
-fn showcase_page_down_bytes() -> Bytes {
-  Bytes::from_array([b'\x1b', b'[', b'6', b'~'])
+  @pippa.Cmd::after(16, fn() { ProgressMsg(@component.ProgressBarMsg::Tick) })
 }
 
 ///|
@@ -88,11 +80,115 @@ fn showcase_tab_prev(tab : Int) -> Int {
 }
 
 ///|
+let showcase_moon_hex = "#C7268A"
+
+///|
+let showcase_moon_hot_hex = "#F553B2"
+
+///|
+let showcase_sun_hex = "#FFB238"
+
+///|
+let showcase_tide_hex = "#2CC7BE"
+
+///|
+let showcase_mist_hex = "#9F8BAF"
+
+///|
+let showcase_paper_hex = "#FFF7FB"
+
+///|
+let showcase_shell_hex = "#120D18"
+
+///|
+let showcase_panel_hex = "#16101F"
+
+///|
+let showcase_chip_hex = "#1C1423"
+
+///|
+fn showcase_accent_hex(tab : Int) -> String {
+  match tab {
+    0 => showcase_moon_hex
+    1 => showcase_sun_hex
+    2 => showcase_tide_hex
+    _ => showcase_moon_hex
+  }
+}
+
+///|
+fn showcase_tint(content : String, hex : String) -> String {
+  @styling.style().foreground_hex(hex).render(content)
+}
+
+///|
+fn showcase_loud(content : String, hex : String) -> String {
+  @styling.style().foreground_hex(hex).bold().render(content)
+}
+
+///|
+fn showcase_whisper(content : String) -> String {
+  @styling.style().foreground_hex(showcase_mist_hex).render(content)
+}
+
+///|
+fn showcase_badge(content : String, bg_hex : String) -> String {
+  @styling.style()
+  .foreground_hex(showcase_paper_hex)
+  .background_hex(bg_hex)
+  .bold()
+  .padding(0, 1, 0, 1)
+  .render(content)
+}
+
+///|
+fn showcase_outline_badge(content : String, accent_hex : String) -> String {
+  @styling.style()
+  .foreground_hex(accent_hex)
+  .background_hex(showcase_chip_hex)
+  .bold()
+  .padding(0, 1, 0, 1)
+  .render(content)
+}
+
+///|
+fn showcase_tab_chip(
+  content : String,
+  active : Bool,
+  accent_hex : String,
+) -> String {
+  if active {
+    showcase_badge(content, accent_hex)
+  } else {
+    showcase_outline_badge(content, accent_hex)
+  }
+}
+
+///|
+fn showcase_stat_card(
+  label : String,
+  value : String,
+  accent_hex : String,
+) -> String {
+  let card = showcase_whisper(label) + "\n" + showcase_loud(value, accent_hex)
+  @styling.style()
+  .border(@styling.border_ascii())
+  .border_foreground(@styling.color_hex(accent_hex))
+  .padding(0, 1, 0, 1)
+  .width(14)
+  .render(card)
+}
+
+///|
 fn showcase_sync_text_input_focus(
   model : @component.TextInputModel,
   tab : Int,
 ) -> @component.TextInputModel {
-  let focus_msg = if tab == 1 { @component.Focus } else { @component.Blur }
+  let focus_msg = if tab == 1 {
+    @component.TextInputMsg::Focus
+  } else {
+    @component.TextInputMsg::Blur
+  }
   (text_input_comp.update)(model, focus_msg).model
 }
 
@@ -208,12 +304,12 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
     TabNext =>
       @pippa.UpdateResult::new(
         model=showcase_set_tab(model, showcase_tab_next(model.tab)),
-        cmd=showcase_tick_cmd(),
+        cmd=@pippa.Cmd::none(),
       )
     TabPrev =>
       @pippa.UpdateResult::new(
         model=showcase_set_tab(model, showcase_tab_prev(model.tab)),
-        cmd=showcase_tick_cmd(),
+        cmd=@pippa.Cmd::none(),
       )
     ProgressMsg(progress_msg) => {
       // Step the spring.
@@ -318,7 +414,7 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
     }
     TextInputMsg(text_input_msg) => {
       if model.tab != 1 {
-        return @pippa.UpdateResult::new(model~, cmd=showcase_tick_cmd())
+        return @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
       }
       let text_input = (text_input_comp.update)(
           model.text_input,
@@ -326,17 +422,17 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
         ).model
       @pippa.UpdateResult::new(
         model={ ..model, text_input, },
-        cmd=showcase_tick_cmd(),
+        cmd=@pippa.Cmd::none(),
       )
     }
     ViewportMsg(viewport_msg) => {
       if model.tab != 2 {
-        return @pippa.UpdateResult::new(model~, cmd=showcase_tick_cmd())
+        return @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
       }
       let viewport = (viewport_comp.update)(model.viewport, viewport_msg).model
       @pippa.UpdateResult::new(
         model={ ..model, viewport, },
-        cmd=showcase_tick_cmd(),
+        cmd=@pippa.Cmd::none(),
       )
     }
   }
@@ -346,6 +442,7 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
 fn showcase_sub(event : @pippa.InputEvent) -> Msg? {
   match event {
     @pippa.Key(@pippa.Special("tab")) => Some(TabNext)
+    @pippa.Key(@pippa.Modified("shift", "tab")) => Some(TabPrev)
     @pippa.Key(@pippa.Char('q')) | @pippa.Key(@pippa.Modified("ctrl", "c")) =>
       Some(Quit)
     @pippa.Key(@pippa.Special("backspace")) =>
@@ -357,102 +454,171 @@ fn showcase_sub(event : @pippa.InputEvent) -> Msg? {
     @pippa.Key(@pippa.Special("up")) => Some(ViewportMsg(@component.ScrollUp))
     @pippa.Key(@pippa.Special("down")) =>
       Some(ViewportMsg(@component.ScrollDown))
+    @pippa.Key(@pippa.Special("pageup")) => Some(ViewportMsg(@component.PageUp))
+    @pippa.Key(@pippa.Special("pagedown")) =>
+      Some(ViewportMsg(@component.PageDown))
     @pippa.Key(@pippa.Char(ch)) => Some(TextInputMsg(@component.InsertChar(ch)))
-    @pippa.Unknown(bytes) =>
-      if bytes == showcase_shift_tab_bytes() {
-        Some(TabPrev)
-      } else if bytes == showcase_page_up_bytes() {
-        Some(ViewportMsg(@component.PageUp))
-      } else if bytes == showcase_page_down_bytes() {
-        Some(ViewportMsg(@component.PageDown))
-      } else {
-        None
-      }
     _ => None
   }
 }
 
 ///|
-fn showcase_tab_label(name : String, active : Bool) -> String {
-  if active {
-    @pippa.bold() + @pippa.underline() + name + @pippa.reset()
-  } else {
-    name
+fn showcase_progress_phase_label(phase : Int) -> String {
+  match phase {
+    0 => "launch"
+    1 => "kickback"
+    2 => "rebound"
+    3 => "aftershock"
+    4 => "settling"
+    _ => "idle"
   }
 }
 
 ///|
 fn showcase_header(model : Model) -> String {
   let buf = StringBuilder::new()
-  buf.write_string(@pippa.bold())
-  buf.write_string("Pippa Showcase")
-  buf.write_string(@pippa.reset())
+  buf.write_string(showcase_outline_badge("MOONBIT TUI", showcase_sun_hex))
   buf.write_string("\n")
-  buf.write_string("Tabs: ")
-  buf.write_string(showcase_tab_label("1 Activity", model.tab == 0))
+  buf.write_string(showcase_loud("Pippa Showcase", showcase_moon_hex))
+  buf.write_string("\n")
+  buf.write_string(showcase_whisper("Typed updates, composable components,"))
+  buf.write_string("\n")
+  buf.write_string(showcase_whisper("and a warmer MoonBit-flavored palette."))
+  buf.write_string("\n")
+  buf.write_string("\n")
+  buf.write_string(
+    showcase_tab_chip("1 ACTIVITY", model.tab == 0, showcase_moon_hex),
+  )
   buf.write_string("  ")
-  buf.write_string(showcase_tab_label("2 Input", model.tab == 1))
+  buf.write_string(
+    showcase_tab_chip("2 INPUT", model.tab == 1, showcase_sun_hex),
+  )
   buf.write_string("  ")
-  buf.write_string(showcase_tab_label("3 Viewport", model.tab == 2))
+  buf.write_string(
+    showcase_tab_chip("3 VIEWPORT", model.tab == 2, showcase_tide_hex),
+  )
   buf.to_string()
 }
 
 ///|
-fn showcase_panel(content : String) -> String {
+fn showcase_panel(
+  title : String,
+  accent_hex : String,
+  content : String,
+) -> String {
+  let header = showcase_badge(title, accent_hex)
   @styling.style()
-  .border(@styling.border_normal())
+  .background_hex(showcase_panel_hex)
+  .border(@styling.border_rounded())
+  .border_foreground(@styling.color_hex(accent_hex))
   .padding(1, 2, 1, 2)
-  .width(62)
-  .render(content)
+  .width(66)
+  .render(header + "\n\n" + content)
 }
 
 ///|
 fn showcase_activity_body(model : Model) -> String {
+  let stats = @styling.join_horizontal([
+    showcase_stat_card(
+      "PHASE",
+      showcase_progress_phase_label(model.progress_phase),
+      showcase_moon_hex,
+    ),
+    "  ",
+    showcase_stat_card(
+      "TICKS",
+      model.spinner_ticks.to_string(),
+      showcase_sun_hex,
+    ),
+    "  ",
+    showcase_stat_card("TARGET", "100%", showcase_tide_hex),
+  ])
+  let spinner_line = showcase_tint(
+    (spinner_comp.view)(model.spinner),
+    showcase_moon_hot_hex,
+  )
   let buf = StringBuilder::new()
-  buf.write_string("Spring-physics progress bar animates at ~60fps;\n")
-  buf.write_string("rushes to 100%, rebounds to 75%, then 90%, then settles.\n")
-  buf.write_string("\n")
-  buf.write_string("Spinner\n")
-  buf.write_string((spinner_comp.view)(model.spinner))
+  buf.write_string(
+    showcase_whisper(
+      "A springy fill with deliberate recoil, not stepped progress.",
+    ),
+  )
   buf.write_string("\n\n")
-  buf.write_string("Progress\n")
+  buf.write_string(stats)
+  buf.write_string("\n\n")
+  buf.write_string(showcase_loud("Spinner", showcase_moon_hex))
+  buf.write_string("\n")
+  buf.write_string(spinner_line)
+  buf.write_string("\n\n")
+  buf.write_string(showcase_loud("Progress", showcase_sun_hex))
+  buf.write_string("\n")
   buf.write_string((progress_comp.view)(model.progress))
   buf.write_string("\n\n")
-  buf.write_string("Animation ticks: ")
-  buf.write_string(model.spinner_ticks.to_string())
-  showcase_panel(buf.to_string())
+  buf.write_string(
+    showcase_whisper(
+      "Rush to 100%, bounce to 75%, rebound, then soften into a final settle.",
+    ),
+  )
+  showcase_panel("ACTIVITY", showcase_moon_hex, buf.to_string())
 }
 
 ///|
 fn showcase_input_value(model : Model) -> String {
   if model.text_input.value == "" {
-    @pippa.dim() + "(empty)" + @pippa.reset()
+    showcase_whisper("(empty)")
   } else {
-    model.text_input.value
+    showcase_tint(model.text_input.value, showcase_moon_hot_hex)
   }
 }
 
 ///|
 fn showcase_input_body(model : Model) -> String {
   let field = @styling.style()
-    .border(@styling.border_ascii())
+    .background_hex(showcase_chip_hex)
+    .border(@styling.border_rounded())
+    .border_foreground(@styling.color_hex(showcase_sun_hex))
     .padding(0, 1, 0, 1)
-    .width(58)
+    .width(60)
     .render((text_input_comp.view)(model.text_input))
+  let stats = @styling.join_horizontal([
+    showcase_stat_card(
+      "CURSOR",
+      model.text_input.cursor.to_string(),
+      showcase_sun_hex,
+    ),
+    "  ",
+    showcase_stat_card(
+      "FOCUS",
+      if model.text_input.focused {
+        "on"
+      } else {
+        "off"
+      },
+      showcase_moon_hex,
+    ),
+    "  ",
+    showcase_stat_card(
+      "CHARS",
+      @pippa.visible_width(model.text_input.value).to_string(),
+      showcase_tide_hex,
+    ),
+  ])
   let buf = StringBuilder::new()
-  buf.write_string("Printable keys, backspace, and left/right arrows are\n")
-  buf.write_string("forwarded to the TextInput component on this tab.\n")
+  buf.write_string(
+    showcase_whisper(
+      "Printable keys, backspace, and left/right stay routed into TextInput here.",
+    ),
+  )
+  buf.write_string("\n")
   buf.write_string("\n")
   buf.write_string(field)
   buf.write_string("\n\n")
-  buf.write_string("Value: ")
+  buf.write_string(stats)
+  buf.write_string("\n\n")
+  buf.write_string(showcase_loud("Value", showcase_sun_hex))
+  buf.write_string(": ")
   buf.write_string(showcase_input_value(model))
-  buf.write_string("\n")
-  buf.write_string("Cursor: ")
-  buf.write_string(model.text_input.cursor.to_string())
-  buf.write_string("   Focused: ")
-  buf.write_string(model.text_input.focused.to_string())
-  showcase_panel(buf.to_string())
+  showcase_panel("INPUT", showcase_sun_hex, buf.to_string())
 }
 
 ///|
@@ -470,18 +636,27 @@ fn showcase_viewport_status(model : Model) -> String {
 ///|
 fn showcase_viewport_body(model : Model) -> String {
   let framed_viewport = @styling.style()
-    .border(@styling.border_ascii())
+    .background_hex(showcase_chip_hex)
+    .border(@styling.border_rounded())
+    .border_foreground(@styling.color_hex(showcase_tide_hex))
+    .padding(0, 1, 0, 1)
     .render((viewport_comp.view)(model.viewport))
+  let status = showcase_outline_badge(
+    showcase_viewport_status(model),
+    showcase_tide_hex,
+  )
   let buf = StringBuilder::new()
   buf.write_string(
-    "The viewport renders a fixed-size window into longer text.\n",
+    showcase_whisper(
+      "A fixed-size window over longer copy, with keyboard scrolling and stable diffing.",
+    ),
   )
-  buf.write_string("Use Up / Down or PageUp / PageDown to move around.\n")
+  buf.write_string("\n")
   buf.write_string("\n")
   buf.write_string(framed_viewport)
   buf.write_string("\n\n")
-  buf.write_string(showcase_viewport_status(model))
-  showcase_panel(buf.to_string())
+  buf.write_string(status)
+  showcase_panel("VIEWPORT", showcase_tide_hex, buf.to_string())
 }
 
 ///|
@@ -502,16 +677,25 @@ fn showcase_footer(model : Model) -> String {
     2 => "up/down and page keys scroll the viewport"
     _ => "q quit"
   }
-  @pippa.dim() +
-  "tab next  shift+tab prev  q quit  |  " +
-  detail +
-  @pippa.reset()
+  showcase_outline_badge("tab", showcase_accent_hex(model.tab)) +
+  " " +
+  showcase_whisper("next") +
+  "  " +
+  showcase_outline_badge("shift+tab", showcase_moon_hot_hex) +
+  " " +
+  showcase_whisper("prev") +
+  "  " +
+  showcase_outline_badge("q", showcase_sun_hex) +
+  " " +
+  showcase_whisper("quit") +
+  "\n" +
+  showcase_whisper(detail)
 }
 
 ///|
 fn showcase_view(model : Model) -> String {
   if model.tab < 0 {
-    return "Closing Pippa showcase..."
+    return showcase_tint("Closing Pippa showcase...", showcase_moon_hex)
   }
 
   let content = showcase_header(model) +
@@ -521,9 +705,11 @@ fn showcase_view(model : Model) -> String {
     showcase_footer(model)
 
   @styling.style()
+  .background_hex(showcase_shell_hex)
   .border(@styling.border_rounded())
+  .border_foreground(@styling.color_hex(showcase_moon_hex))
   .padding(1, 2, 1, 2)
-  .width(70)
+  .width(74)
   .render(content)
 }
 
@@ -534,7 +720,6 @@ fn main {
     update=showcase_update,
     view=showcase_view,
     sub=showcase_sub,
-    on_tick=fn() { Some(ProgressMsg(@component.ProgressBarMsg::Tick)) },
     should_quit=fn(model) { model.tab < 0 },
   )
   @pippa.Program::run(program)

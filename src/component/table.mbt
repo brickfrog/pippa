@@ -77,8 +77,7 @@ pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg] {
       let buf = StringBuilder::new()
 
       // Header row
-      for i = 0; i < model.columns.length(); i = i + 1 {
-        let col = model.columns[i]
+      for i, col in model.columns {
         let w = if col.width < 0 { 0 } else { col.width }
         let cell = @pippa.truncate(col.header, w)
         buf.write_string(@pippa.pad_right(cell, w))
@@ -90,8 +89,8 @@ pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg] {
 
       // Separator
       let mut total_width = 0
-      for i = 0; i < model.columns.length(); i = i + 1 {
-        let cw = model.columns[i].width
+      for i, col in model.columns {
+        let cw = col.width
         let w = if cw < 0 { 0 } else { cw }
         total_width = total_width + w
         if i < model.columns.length() - 1 {
@@ -105,9 +104,7 @@ pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg] {
       if model.rows.length() == 0 {
         buf.write_string("(no data)\n")
       } else {
-        for r = 0; r < model.rows.length(); r = r + 1 {
-          let row = model.rows[r]
-
+        for r, row in model.rows {
           let is_cursor = r == model.cursor
           let is_selected = r == model.selected
 
@@ -118,8 +115,7 @@ pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg] {
             buf.write_string(@pippa.underline())
           }
 
-          for c = 0; c < model.columns.length(); c = c + 1 {
-            let col = model.columns[c]
+          for c, col in model.columns {
             let w = if col.width < 0 { 0 } else { col.width }
             let cell_text = if c < row.length() { row[c] } else { "" }
             let cell = @pippa.truncate(cell_text, w)

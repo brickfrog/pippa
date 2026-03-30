@@ -4,6 +4,7 @@
 #include <sys/ioctl.h>
 #include <poll.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
@@ -11,6 +12,26 @@
 // Save and restore terminal state
 static struct termios orig_termios;
 static volatile sig_atomic_t pippa_resize_flag = 0;
+static int pippa_wakeup_pipe[2] = { -1, -1 };
+
+static void pippa_close_wakeup_pipe(void) {
+    if (pippa_wakeup_pipe[0] >= 0) {
+        close(pippa_wakeup_pipe[0]);
+        pippa_wakeup_pipe[0] = -1;
+    }
+    if (pippa_wakeup_pipe[1] >= 0) {
+        close(pippa_wakeup_pipe[1]);
+        pippa_wakeup_pipe[1] = -1;
+    }
+}
+
+static int pippa_make_nonblocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) {
+        return -1;
+    }
+    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
 
 static void sigwinch_handler(int sig) {
     (void)sig;
@@ -32,6 +53,59 @@ int pippa_check_resize(void) {
     int resized = pippa_resize_flag;
     pippa_resize_flag = 0;
     return resized;
+}
+
+void pippa_init_wakeup(void) {
+    pippa_close_wakeup_pipe();
+    if (pipe(pippa_wakeup_pipe) != 0) {
+        fprintf(stderr, "Warning: failed to create wakeup pipe: %s\n",
+                strerror(errno));
+        pippa_wakeup_pipe[0] = -1;
+        pippa_wakeup_pipe[1] = -1;
+        return;
+    }
+    if (pippa_make_nonblocking(pippa_wakeup_pipe[0]) != 0 ||
+        pippa_make_nonblocking(pippa_wakeup_pipe[1]) != 0) {
+        fprintf(stderr, "Warning: failed to configure wakeup pipe: %s\n",
+                strerror(errno));
+        pippa_close_wakeup_pipe();
+    }
+}
+
+void pippa_close_wakeup(void) {
+    pippa_close_wakeup_pipe();
+}
+
+void pippa_signal_wakeup(void) {
+    if (pippa_wakeup_pipe[1] < 0) {
+        return;
+    }
+    unsigned char byte = 1;
+    ssize_t written = write(pippa_wakeup_pipe[1], &byte, 1);
+    if (written < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+        fprintf(stderr, "Warning: failed to signal wakeup pipe: %s\n",
+                strerror(errno));
+    }
+}
+
+void pippa_drain_wakeup(void) {
+    if (pippa_wakeup_pipe[0] < 0) {
+        return;
+    }
+    unsigned char buf[64];
+    while (1) {
+        ssize_t n = read(pippa_wakeup_pipe[0], buf, sizeof(buf));
+        if (n > 0) {
+            continue;
+        }
+        if (n < 0 && errno == EINTR) {
+            continue;
+        }
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            return;
+        }
+        return;
+    }
 }
 
 void pippa_enter_raw_mode(void) {
@@ -58,17 +132,47 @@ int pippa_read_byte(void) {
     return (int)c;
 }
 
-int pippa_poll_stdin(int timeout_ms) {
-    struct pollfd pfd = { .fd = STDIN_FILENO, .events = POLLIN };
+int pippa_poll_events(int timeout_ms, int include_stdin) {
+    struct pollfd pfds[2];
+    int nfds = 0;
+    if (include_stdin) {
+        pfds[nfds].fd = STDIN_FILENO;
+        pfds[nfds].events = POLLIN;
+        pfds[nfds].revents = 0;
+        nfds += 1;
+    }
+    if (pippa_wakeup_pipe[0] >= 0) {
+        pfds[nfds].fd = pippa_wakeup_pipe[0];
+        pfds[nfds].events = POLLIN;
+        pfds[nfds].revents = 0;
+        nfds += 1;
+    }
     while (1) {
-        int result = poll(&pfd, 1, timeout_ms);
+        int result = poll(pfds, nfds, timeout_ms);
         if (result < 0 && errno == EINTR) {
             if (pippa_resize_flag != 0) {
                 return 2;
             }
             continue;
         }
-        return result;
+        if (result <= 0) {
+            return result;
+        }
+        int events = 0;
+        int stdin_index = include_stdin ? 0 : -1;
+        int wakeup_index = include_stdin ? 1 : 0;
+        if (stdin_index >= 0 && (pfds[stdin_index].revents & (POLLIN | POLLHUP | POLLERR))) {
+            events |= 1;
+        }
+        if (pippa_wakeup_pipe[0] >= 0 &&
+            wakeup_index < nfds &&
+            (pfds[wakeup_index].revents & (POLLIN | POLLHUP | POLLERR))) {
+            events |= 4;
+        }
+        if (pippa_resize_flag != 0) {
+            events |= 2;
+        }
+        return events;
     }
 }
 

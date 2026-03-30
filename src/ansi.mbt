@@ -80,9 +80,33 @@ pub fn enable_mouse_motion() -> String {
 }
 
 ///|
+/// Enable focus reporting (CSI ?1004h).
+pub fn enable_focus_reporting() -> String {
+  "\{CSI}?1004h"
+}
+
+///|
+/// Enable bracketed paste mode (CSI ?2004h).
+pub fn enable_bracketed_paste() -> String {
+  "\{CSI}?2004h"
+}
+
+///|
 /// Exit the alternate screen buffer and restore the primary screen (CSI ? 1049 l).
 pub fn exit_alt_screen() -> String {
   "\{CSI}?1049l"
+}
+
+///|
+/// Disable focus reporting (CSI ?1004l).
+pub fn disable_focus_reporting() -> String {
+  "\{CSI}?1004l"
+}
+
+///|
+/// Disable bracketed paste mode (CSI ?2004l).
+pub fn disable_bracketed_paste() -> String {
+  "\{CSI}?2004l"
 }
 
 ///|

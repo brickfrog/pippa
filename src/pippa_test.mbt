@@ -54,8 +54,28 @@ test "pippa ansi enable mouse motion" {
 }
 
 ///|
+test "pippa ansi enable focus reporting" {
+  inspect(enable_focus_reporting(), content="\u001b[?1004h")
+}
+
+///|
+test "pippa ansi enable bracketed paste" {
+  inspect(enable_bracketed_paste(), content="\u001b[?2004h")
+}
+
+///|
 test "pippa ansi disable mouse" {
   inspect(disable_mouse(), content="\u001b[?1000l\u001b[?1003l")
+}
+
+///|
+test "pippa ansi disable focus reporting" {
+  inspect(disable_focus_reporting(), content="\u001b[?1004l")
+}
+
+///|
+test "pippa ansi disable bracketed paste" {
+  inspect(disable_bracketed_paste(), content="\u001b[?2004l")
 }
 
 ///|

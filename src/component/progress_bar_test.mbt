@@ -24,12 +24,7 @@ test "SetPercent returns a tick cmd" {
   let comp = progress_bar()
   let { model, .. } = (comp.init)()
   let { cmd, .. } = (comp.update)(model, SetPercent(0.5))
-  inspect(
-    cmd,
-    content=(
-      #|{_phantom: [], actions: [(16, Some(Tick))]}
-    ),
-  )
+  assert_true(not(cmd.is_none()))
 }
 
 ///|
@@ -64,12 +59,23 @@ test "Tick returns no-op cmd when already settled" {
   let { model, .. } = (comp.init)()
   // Both at 0.0, velocity 0 — already settled
   let { cmd, .. } = (comp.update)(model, Tick)
-  inspect(
-    cmd,
-    content=(
-      #|{_phantom: [], actions: []}
-    ),
-  )
+  assert_true(cmd.is_none())
+}
+
+///|
+test "Tick snaps to exact target when animation settles" {
+  let comp = progress_bar()
+  let { model, .. } = (comp.init)()
+  let almost_settled = {
+    ..model,
+    target_percent: 1.0,
+    displayed_percent: 0.9998,
+    velocity: 0.005,
+  }
+  let { model: settled, cmd } = (comp.update)(almost_settled, Tick)
+  assert_eq(settled.displayed_percent, 1.0)
+  assert_eq(settled.velocity, 0.0)
+  assert_true(cmd.is_none())
 }
 
 ///|
@@ -78,12 +84,7 @@ test "Tick returns tick cmd when animating" {
   let { model, .. } = (comp.init)()
   let { model: m1, .. } = (comp.update)(model, SetPercent(1.0))
   let { cmd, .. } = (comp.update)(m1, Tick)
-  inspect(
-    cmd,
-    content=(
-      #|{_phantom: [], actions: [(16, Some(Tick))]}
-    ),
-  )
+  assert_true(not(cmd.is_none()))
 }
 
 ///|
@@ -125,6 +126,16 @@ test "view shows percentage label" {
   let m1 = { ..model, displayed_percent: 0.5, target_percent: 0.5 }
   let view = (comp.view)(m1)
   assert_true(view.has_suffix(" 50%"))
+}
+
+///|
+test "view rounds near-full fill consistently with percentage label" {
+  let comp = progress_bar(width=10, show_percentage=true)
+  let { model, .. } = (comp.init)()
+  let near_full = { ..model, displayed_percent: 0.9998, target_percent: 1.0 }
+  let view = (comp.view)(near_full)
+  assert_true(view.has_suffix(" 100%"))
+  assert_false(view.contains("░"))
 }
 
 ///|

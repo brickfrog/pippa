@@ -36,9 +36,17 @@ pub fn diff_views(String, String) -> Array[PatchOp]
 
 pub fn dim() -> String
 
+pub fn disable_bracketed_paste() -> String
+
+pub fn disable_focus_reporting() -> String
+
 pub fn disable_mouse() -> String
 
 pub fn down_binding() -> Binding
+
+pub fn enable_bracketed_paste() -> String
+
+pub fn enable_focus_reporting() -> String
 
 pub fn enable_mouse() -> String
 
@@ -142,9 +150,12 @@ pub fn[Msg] Cmd::after(Int, () -> Msg) -> Self[Msg]
 pub fn[Msg] Cmd::batch(Array[Self[Msg]]) -> Self[Msg]
 pub fn[Msg] Cmd::is_none(Self[Msg]) -> Bool
 pub fn[A, B] Cmd::map((A) -> B, Self[A]) -> Self[B]
+pub fn[Msg] Cmd::msg(Msg) -> Self[Msg]
 pub fn[Msg] Cmd::none() -> Self[Msg]
+pub fn[Msg] Cmd::perform(() -> Msg?) -> Self[Msg]
+pub fn[Msg] Cmd::sequence(Array[Self[Msg]]) -> Self[Msg]
 pub fn[Msg] Cmd::tick(Int) -> Self[Msg]
-pub impl[Msg : Show] Show for Cmd[Msg]
+pub impl[Msg] Show for Cmd[Msg]
 
 pub(all) struct HelpModel {
   bindings : Array[Binding]
@@ -156,9 +167,11 @@ pub impl Show for HelpModel
 pub(all) enum InputEvent {
   Key(KeyMsg)
   Mouse(MouseMsg)
+  Focus
+  Blur
+  Paste(String)
   Unknown(Bytes)
 }
-pub impl Compare for InputEvent
 pub impl Eq for InputEvent
 pub impl Show for InputEvent
 
@@ -175,7 +188,6 @@ pub(all) enum KeyMsg {
   Special(String)
   Modified(String, String)
 }
-pub impl Compare for KeyMsg
 pub impl Eq for KeyMsg
 pub impl Show for KeyMsg
 
@@ -184,7 +196,6 @@ pub(all) enum MouseMsg {
   Press(Int, Int)
   Release(Int, Int)
 }
-pub impl Compare for MouseMsg
 pub impl Eq for MouseMsg
 pub impl Show for MouseMsg
 
@@ -216,11 +227,31 @@ pub(all) struct Program[Model, Msg] {
   sub : (InputEvent) -> Msg?
   on_tick : () -> Msg?
   mouse : Bool
+  alt_screen : Bool
+  focus_reporting : Bool
+  bracketed_paste : Bool
+  hide_cursor : Bool
+  rendering : Bool
+  read_stdin : Bool
+  output : (String) -> Unit
   on_resize : (Int, Int) -> Msg?
   should_quit : (Model) -> Bool
 }
-pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, on_resize? : (Int, Int) -> Msg?, should_quit? : (Model) -> Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::headless(Self[Model, Msg]) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, alt_screen? : Bool, focus_reporting? : Bool, bracketed_paste? : Bool, hide_cursor? : Bool, rendering? : Bool, read_stdin? : Bool, output? : (String) -> Unit, on_resize? : (Int, Int) -> Msg?, should_quit? : (Model) -> Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::run(Self[Model, Msg]) -> Unit
+pub fn[Model, Msg] Program::run_with_handle(Self[Model, Msg], (ProgramHandle[Msg]) -> Unit) -> Unit
+pub fn[Model, Msg] Program::with_alt_screen(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_bracketed_paste(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_focus_reporting(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_hide_cursor(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_output(Self[Model, Msg], (String) -> Unit) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_rendering(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_stdin(Self[Model, Msg], Bool) -> Self[Model, Msg]
+
+type ProgramHandle[Msg]
+pub fn[Msg] ProgramHandle::is_closed(Self[Msg]) -> Bool
+pub fn[Msg] ProgramHandle::send(Self[Msg], Msg) -> Bool
 
 pub(all) struct Style {
   fg : Int?
