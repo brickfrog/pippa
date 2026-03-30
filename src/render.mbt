@@ -64,3 +64,25 @@ pub fn render_patch(ops : Array[PatchOp]) -> String {
   }
   parts.join("")
 }
+
+///|
+/// Render a complete view string to the terminal using cursor positioning.
+///
+/// Splits `view` on newlines and emits `move_cursor + clear_line + text` for
+/// every line, then clears any remaining lines below down to `prev_lines`.
+/// This avoids writing raw `\n` bytes in raw terminal mode.
+pub fn render_full(view : String, prev_lines : Int) -> String {
+  let lines = split_on_newline(view)
+  let parts : Array[String] = []
+  for i = 0; i < lines.length(); i = i + 1 {
+    parts.push(move_cursor(i + 1, 1))
+    parts.push(clear_line())
+    parts.push(lines[i])
+  }
+  // Clear stale lines below the new view
+  for i = lines.length(); i < prev_lines; i = i + 1 {
+    parts.push(move_cursor(i + 1, 1))
+    parts.push(clear_line())
+  }
+  parts.join("")
+}
