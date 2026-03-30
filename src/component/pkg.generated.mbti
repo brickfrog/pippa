@@ -66,6 +66,8 @@ pub(all) struct FilepickerModel {
   allow_files : Bool
   allow_directories : Bool
   allowed_extensions : Array[String]
+  loading : Bool
+  scan_handle : Int?
   error : String?
 }
 pub impl Eq for FilepickerModel
@@ -87,7 +89,10 @@ pub(all) enum FilepickerMsg {
   SetHeight(Int)
   SetAllowedExtensions(Array[String])
   SetSelectionMode(Bool, Bool)
-  Loaded(String, Array[FileEntry])
+  ScanOpened(String, Int)
+  ContinueScan(String, Int)
+  ScanChunk(String, Int, Array[FileEntry])
+  ScanFinished(String, Int)
   LoadFailed(String)
 }
 pub impl Eq for FilepickerMsg

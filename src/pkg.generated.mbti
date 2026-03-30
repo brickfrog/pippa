@@ -32,6 +32,12 @@ pub fn clear_screen() -> String
 
 pub fn clear_screen_below() -> String
 
+pub fn color_ansi(Int) -> Color
+
+pub fn color_hex(String) -> Color
+
+pub fn color_rgb(Int, Int, Int) -> Color
+
 pub fn diff_views(String, String) -> Array[PatchOp]
 
 pub fn dim() -> String
@@ -70,6 +76,10 @@ pub fn help_view(HelpModel) -> String
 
 pub fn hide_cursor() -> String
 
+pub fn join_horizontal(Array[String], valign? : VerticalAlign) -> String
+
+pub fn join_vertical(Array[String], align? : Align) -> String
+
 pub fn left_binding() -> Binding
 
 pub fn line_count(String) -> Int
@@ -87,6 +97,8 @@ pub fn pad_right(String, Int) -> String
 pub fn parse_all(BytesView) -> (Array[InputEvent], Bytes)
 
 pub fn parse_input(BytesView) -> ParseResult[InputEvent]
+
+pub fn place(Int, Int, String, align? : Align, valign? : VerticalAlign) -> String
 
 pub fn quit_binding() -> Binding
 
@@ -156,6 +168,14 @@ pub fn[Msg] Cmd::perform(() -> Msg?) -> Self[Msg]
 pub fn[Msg] Cmd::sequence(Array[Self[Msg]]) -> Self[Msg]
 pub fn[Msg] Cmd::tick(Int) -> Self[Msg]
 pub impl[Msg] Show for Cmd[Msg]
+
+pub(all) enum Color {
+  Ansi(Int)
+  RGB(Int, Int, Int)
+  Hex(String)
+}
+pub impl Eq for Color
+pub impl Show for Color
 
 pub(all) struct HelpModel {
   bindings : Array[Binding]
@@ -234,49 +254,98 @@ pub(all) struct Program[Model, Msg] {
   rendering : Bool
   read_stdin : Bool
   input : (() -> Array[InputEvent])?
+  raw_input : (() -> Bytes)?
+  cancelled : (() -> Bool)?
+  fps : Int
+  window_width : Int
+  window_height : Int
   output : (String) -> Unit
   on_resize : (Int, Int) -> Msg?
   should_quit : (Model) -> Bool
 }
 pub fn[Model, Msg] Program::headless(Self[Model, Msg]) -> Self[Model, Msg]
-pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, alt_screen? : Bool, focus_reporting? : Bool, bracketed_paste? : Bool, hide_cursor? : Bool, rendering? : Bool, read_stdin? : Bool, input? : (() -> Array[InputEvent])?, output? : (String) -> Unit, on_resize? : (Int, Int) -> Msg?, should_quit? : (Model) -> Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, alt_screen? : Bool, focus_reporting? : Bool, bracketed_paste? : Bool, hide_cursor? : Bool, rendering? : Bool, read_stdin? : Bool, input? : (() -> Array[InputEvent])?, raw_input? : (() -> Bytes)?, cancelled? : (() -> Bool)?, fps? : Int, window_width? : Int, window_height? : Int, output? : (String) -> Unit, on_resize? : (Int, Int) -> Msg?, should_quit? : (Model) -> Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::run(Self[Model, Msg]) -> Unit
 pub fn[Model, Msg] Program::run_with_handle(Self[Model, Msg], (ProgramHandle[Msg]) -> Unit) -> Unit
 pub fn[Model, Msg] Program::with_alt_screen(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_bracketed_paste(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_cancelled(Self[Model, Msg], () -> Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_focus_reporting(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_fps(Self[Model, Msg], Int) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_hide_cursor(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_input(Self[Model, Msg], () -> Array[InputEvent]) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_output(Self[Model, Msg], (String) -> Unit) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_raw_input(Self[Model, Msg], () -> Bytes) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_rendering(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_stdin(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_window_size(Self[Model, Msg], Int, Int) -> Self[Model, Msg]
 
 type ProgramHandle[Msg]
 pub fn[Msg] ProgramHandle::is_closed(Self[Msg]) -> Bool
+pub fn[Msg] ProgramHandle::release_terminal(Self[Msg]) -> Bool
+pub fn[Msg] ProgramHandle::restore_terminal(Self[Msg]) -> Bool
 pub fn[Msg] ProgramHandle::send(Self[Msg], Msg) -> Bool
 
 pub(all) struct Style {
   fg : Int?
   bg : Int?
+  fg_ext : Color?
+  bg_ext : Color?
+  border_fg : Color?
+  border_bg : Color?
   bold : Bool
   dim : Bool
+  italic : Bool
   underline : Bool
+  blink : Bool
+  reverse : Bool
   border : Border?
+  border_top : Bool
+  border_right : Bool
+  border_bottom : Bool
+  border_left : Bool
   padding_top : Int
   padding_bottom : Int
   padding_left : Int
   padding_right : Int
+  margin_top : Int
+  margin_bottom : Int
+  margin_left : Int
+  margin_right : Int
   width : Int
+  height : Int?
+  min_width : Int
+  min_height : Int
+  max_width : Int?
+  max_height : Int?
   align : Align
 }
 pub fn Style::align(Self, Align) -> Self
+pub fn Style::background(Self, Color) -> Self
+pub fn Style::background_hex(Self, String) -> Self
+pub fn Style::background_rgb(Self, Int, Int, Int) -> Self
 pub fn Style::bg_color(Self, Int) -> Self
+pub fn Style::blink(Self) -> Self
 pub fn Style::bold(Self) -> Self
 pub fn Style::border(Self, Border) -> Self
+pub fn Style::border_background(Self, Color) -> Self
+pub fn Style::border_foreground(Self, Color) -> Self
+pub fn Style::border_sides(Self, Bool, Bool, Bool, Bool) -> Self
 pub fn Style::dim(Self) -> Self
 pub fn Style::fg_color(Self, Int) -> Self
+pub fn Style::foreground(Self, Color) -> Self
+pub fn Style::foreground_hex(Self, String) -> Self
+pub fn Style::foreground_rgb(Self, Int, Int, Int) -> Self
+pub fn Style::height(Self, Int) -> Self
+pub fn Style::italic(Self) -> Self
+pub fn Style::margin(Self, Int, Int, Int, Int) -> Self
+pub fn Style::max_height(Self, Int) -> Self
+pub fn Style::max_width(Self, Int) -> Self
+pub fn Style::min_height(Self, Int) -> Self
+pub fn Style::min_width(Self, Int) -> Self
 pub fn Style::padding(Self, Int, Int, Int, Int) -> Self
 pub fn Style::render(Self, String) -> String
+pub fn Style::reverse(Self) -> Self
 pub fn Style::underline(Self) -> Self
 pub fn Style::width(Self, Int) -> Self
 pub impl Eq for Style
@@ -288,6 +357,14 @@ pub(all) struct UpdateResult[Model, Msg] {
 }
 pub fn[Model, Msg] UpdateResult::new(model~ : Model, cmd~ : Cmd[Msg]) -> Self[Model, Msg]
 pub impl[Model : Show, Msg : Show] Show for UpdateResult[Model, Msg]
+
+pub(all) enum VerticalAlign {
+  Top
+  Middle
+  Bottom
+}
+pub impl Eq for VerticalAlign
+pub impl Show for VerticalAlign
 
 pub(all) struct WindowSize {
   width : Int

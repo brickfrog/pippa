@@ -15,6 +15,8 @@ test "filepicker selection and hidden toggle update the model" {
     allow_files: true,
     allow_directories: false,
     allowed_extensions: [".json"],
+    loading: false,
+    scan_handle: None,
     error: None,
   }
   let toggled = (c.update)(model, ToggleHidden).model
@@ -36,6 +38,8 @@ test "filepicker open on disabled file reports an error" {
     allow_files: true,
     allow_directories: false,
     allowed_extensions: [".txt"],
+    loading: false,
+    scan_handle: None,
     error: None,
   }
   let next = (c.update)(model, Open).model
@@ -58,9 +62,40 @@ test "filepicker view marks directories and selected entries" {
     allow_files: true,
     allow_directories: false,
     allowed_extensions: [],
+    loading: false,
+    scan_handle: None,
     error: None,
   }
   let view = (c.view)(model)
   assert_true(view.contains("src/"))
   assert_true(view.contains("notes.txt"))
+}
+
+///|
+test "filepicker scan chunks append entries and keep loading until finished" {
+  let c = filepicker(height=3)
+  let model : FilepickerModel = {
+    current_directory: ".",
+    entries: [],
+    cursor: 0,
+    selected_path: None,
+    height: 3,
+    show_hidden: true,
+    allow_files: true,
+    allow_directories: false,
+    allowed_extensions: [],
+    loading: true,
+    scan_handle: Some(7),
+    error: None,
+  }
+  let chunked = (c.update)(
+    model,
+    ScanChunk(".", 7, [{ name: "src", path: "./src", is_dir: true }]),
+  )
+  assert_true(chunked.model.loading)
+  assert_eq(chunked.model.entries.length(), 1)
+  assert_false(chunked.cmd.is_none())
+  let finished = (c.update)(chunked.model, ScanFinished(".", 7))
+  assert_false(finished.model.loading)
+  assert_eq(finished.model.scan_handle, None)
 }

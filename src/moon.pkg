@@ -3,6 +3,7 @@ import {
   "moonbitlang/core/deque",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/queue",
+  "moonbitlang/core/strconv",
 }
 
 options(

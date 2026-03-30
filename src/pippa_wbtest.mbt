@@ -129,13 +129,31 @@ test "pippa cmd map transforms nested sequence lazily" {
 #cfg(any(target="native", target="llvm"))
 test "pippa program handle send queues messages until closed" {
   let pending_msgs = @queue.Queue::new()
+  let pending_controls = @queue.Queue::new()
   let closed = Ref::new(false)
-  let handle : ProgramHandle[Int] = { pending_msgs, wake: fn() { () }, closed }
+  let handle : ProgramHandle[Int] = {
+    pending_msgs,
+    pending_controls,
+    wake: fn() { () },
+    closed,
+  }
   assert_true(handle.send(7))
   assert_eq(pending_msgs.pop(), Some(7))
+  assert_true(handle.release_terminal())
+  match pending_controls.pop() {
+    Some(ReleaseTerminal) => ()
+    _ => fail("expected ReleaseTerminal")
+  }
+  assert_true(handle.restore_terminal())
+  match pending_controls.pop() {
+    Some(RestoreTerminal) => ()
+    _ => fail("expected RestoreTerminal")
+  }
   closed.val = true
   assert_false(handle.send(8))
+  assert_false(handle.release_terminal())
   assert_eq(pending_msgs.pop(), None)
+  assert_true(pending_controls.pop() is None)
 }
 
 ///|
@@ -237,6 +255,39 @@ test "pippa with_input disables stdin and installs custom input source" {
 }
 
 ///|
+test "pippa builder options install raw input cancellation fps and window size" {
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+    )
+    .with_raw_input(fn() { Bytes::new(0) })
+    .with_cancelled(fn() { false })
+    .with_fps(144)
+    .with_window_size(120, 40)
+  assert_false(program.read_stdin)
+  assert_true(program.raw_input is Some(_))
+  assert_true(program.cancelled is Some(_))
+  assert_eq(program.fps, 144)
+  assert_eq(program.window_width, 120)
+  assert_eq(program.window_height, 40)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa runtime timeout clamps custom polling and render fps" {
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+    )
+    .with_input(fn() { [] })
+    .with_fps(500)
+  assert_eq(render_interval_ms(program), 9L)
+  assert_eq(runtime_timeout_ms(program, [], None), 16)
+}
+
+///|
 #cfg(any(target="native", target="llvm"))
 test "pippa custom output captures rendered views" {
   let captured = Ref::new("")
@@ -325,6 +376,121 @@ test "pippa custom input can render updates without stdin" {
   program.run()
   assert_true(captured.val.contains("idle"))
   assert_true(captured.val.contains("typed"))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa raw input source drives parsing without stdin" {
+  let polled = Ref::new(false)
+  let seen : Ref[Array[Int]] = Ref::new([])
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(_model, msg) {
+        seen.val = [..seen.val, msg]
+        UpdateResult::new(model=msg, cmd=Cmd::none())
+      },
+      view=fn(_model) { "" },
+      sub=fn(evt) {
+        match evt {
+          Key(Char('a')) => Some(1)
+          Key(Char('b')) => Some(2)
+          _ => None
+        }
+      },
+      should_quit=fn(model) { model == 2 },
+    )
+    .headless()
+    .with_raw_input(fn() {
+      if polled.val {
+        Bytes::new(0)
+      } else {
+        polled.val = true
+        @utf8.encode("ab")
+      }
+    })
+  program.run()
+  assert_eq(seen.val, [1, 2])
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa window size option seeds initial resize message" {
+  let seen = Ref::new(None)
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(_model, msg) {
+        seen.val = Some(msg)
+        UpdateResult::new(model=msg, cmd=Cmd::none())
+      },
+      view=fn(_model) { "" },
+      on_resize=fn(cols, rows) { Some(cols * 1000 + rows) },
+      should_quit=fn(model) { model == 80024 },
+    )
+    .headless()
+    .with_window_size(80, 24)
+  program.run()
+  assert_eq(seen.val, Some(80024))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa cancellation hook stops a headless program" {
+  let polls = Ref::new(0)
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+    )
+    .headless()
+    .with_cancelled(fn() {
+      polls.val = polls.val + 1
+      polls.val >= 2
+    })
+  program.run()
+  assert_true(polls.val >= 2)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa handle can release and restore terminal" {
+  let handle_ref : Ref[ProgramHandle[Int]?] = Ref::new(None)
+  let polled = Ref::new(false)
+  let captured = Ref::new("")
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(_model, msg) {
+        let cmd = if msg == 1 { Cmd::msg(2) } else { Cmd::none() }
+        UpdateResult::new(model=msg, cmd~)
+      },
+      view=fn(model) { if model == 0 { "zero" } else { "one" } },
+      sub=fn(evt) {
+        match evt {
+          Key(Char('x')) => Some(1)
+          _ => None
+        }
+      },
+      should_quit=fn(model) { model == 2 },
+    )
+    .with_raw_input(fn() {
+      if polled.val {
+        Bytes::new(0)
+      } else {
+        polled.val = true
+        handle_ref.val
+        .iter()
+        .each(fn(handle) {
+          ignore(handle.release_terminal())
+          ignore(handle.restore_terminal())
+        })
+        @utf8.encode("x")
+      }
+    })
+    .with_output(fn(output) { captured.val = captured.val + output })
+  program.run_with_handle(handle => handle_ref.val = Some(handle))
+  assert_true(captured.val.contains(enter_alt_screen()))
+  assert_true(captured.val.contains(exit_alt_screen()))
+  assert_true(captured.val.contains("zero"))
+  assert_true(captured.val.contains("one"))
 }
 
 ///|

@@ -1,10 +1,15 @@
 ///|
 #cfg(any(target="native", target="llvm"))
-test "filepicker native reader can read the current directory" {
-  let result = filepicker_read_dir(".")
-  match result {
-    Ok(entries) => assert_true(entries.length() > 0)
-    Err(_) => assert_true(false)
+test "filepicker native scanner can stream chunks" {
+  match filepicker_open_scan(".") {
+    Some(handle) => {
+      defer filepicker_close_scan(handle)
+      match filepicker_scan_next(".", handle, 8) {
+        Ok(Some(entries)) => assert_true(entries.length() > 0)
+        _ => assert_true(false)
+      }
+    }
+    None => assert_true(false)
   }
 }
 
@@ -16,6 +21,7 @@ test "filepicker parent dir handles repo-like paths" {
 }
 
 ///|
+#cfg(any(target="native", target="llvm"))
 test "filepicker parse_entries keeps directories first" {
   let nul = String::from_array([(0 : Int).unsafe_to_char()])
   let raw = @utf8.encode(

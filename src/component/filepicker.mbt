@@ -20,6 +20,8 @@ pub(all) struct FilepickerModel {
   allow_files : Bool
   allow_directories : Bool
   allowed_extensions : Array[String]
+  loading : Bool
+  scan_handle : Int?
   error : String?
 } derive(Show, Eq)
 
@@ -40,7 +42,10 @@ pub(all) enum FilepickerMsg {
   SetHeight(Int)
   SetAllowedExtensions(Array[String])
   SetSelectionMode(Bool, Bool)
-  Loaded(String, Array[FileEntry])
+  ScanOpened(String, Int)
+  ContinueScan(String, Int)
+  ScanChunk(String, Int, Array[FileEntry])
+  ScanFinished(String, Int)
   LoadFailed(String)
 } derive(Show, Eq)
 
@@ -74,6 +79,7 @@ fn filepicker_parent_dir(path : String) -> String {
 }
 
 ///|
+#cfg(any(target="native", target="llvm"))
 fn filepicker_join_path(dir : String, name : String) -> String {
   if dir == "" || dir == "." {
     name
@@ -107,6 +113,7 @@ fn filepicker_sort_entries(entries : Array[FileEntry]) -> Array[FileEntry] {
 }
 
 ///|
+#cfg(any(target="native", target="llvm"))
 fn filepicker_parse_entries(path : String, raw : Bytes) -> Array[FileEntry] {
   if raw.length() == 0 {
     return []
@@ -132,24 +139,62 @@ fn filepicker_parse_entries(path : String, raw : Bytes) -> Array[FileEntry] {
 }
 
 ///|
-fn filepicker_read_dir(path : String) -> Result[Array[FileEntry], String] {
-  match filepicker_read_dir_bytes(path) {
-    Some(raw) => Ok(filepicker_parse_entries(path, raw))
-    None => Err("failed to read directory: " + path)
+fn filepicker_open_scan_message(path : String) -> FilepickerMsg {
+  match filepicker_open_scan(path) {
+    Some(handle) => ScanOpened(path, handle)
+    None => LoadFailed("failed to open directory scan: " + path)
   }
 }
 
 ///|
-fn filepicker_load_message(path : String) -> FilepickerMsg {
-  match filepicker_read_dir(path) {
-    Ok(entries) => Loaded(path, entries)
+fn filepicker_open_scan_cmd(path : String) -> @pippa.Cmd[FilepickerMsg] {
+  @pippa.Cmd::perform(fn() { Some(filepicker_open_scan_message(path)) })
+}
+
+///|
+fn filepicker_continue_scan_message(
+  path : String,
+  handle : Int,
+) -> FilepickerMsg {
+  match filepicker_scan_next(path, handle, 64) {
+    Ok(Some(entries)) => ScanChunk(path, handle, entries)
+    Ok(None) => ScanFinished(path, handle)
     Err(err) => LoadFailed(err)
   }
 }
 
 ///|
-fn filepicker_load_cmd(path : String) -> @pippa.Cmd[FilepickerMsg] {
-  @pippa.Cmd::perform(fn() { Some(filepicker_load_message(path)) })
+fn filepicker_continue_scan_cmd(
+  path : String,
+  handle : Int,
+) -> @pippa.Cmd[FilepickerMsg] {
+  @pippa.Cmd::after(1, fn() { ContinueScan(path, handle) })
+}
+
+///|
+fn filepicker_close_active_scan(model : FilepickerModel) -> Unit {
+  model.scan_handle.iter().each(filepicker_close_scan)
+}
+
+///|
+fn filepicker_begin_loading(
+  model : FilepickerModel,
+  path : String,
+) -> @pippa.UpdateResult[FilepickerModel, FilepickerMsg] {
+  filepicker_close_active_scan(model)
+  @pippa.UpdateResult::new(
+    model=filepicker_normalize({
+      ..model,
+      current_directory: path,
+      entries: [],
+      cursor: 0,
+      selected_path: None,
+      loading: true,
+      scan_handle: None,
+      error: None,
+    }),
+    cmd=filepicker_open_scan_cmd(path),
+  )
 }
 
 ///|
@@ -235,18 +280,16 @@ pub fn filepicker(
           allow_files,
           allow_directories,
           allowed_extensions,
+          loading: true,
+          scan_handle: None,
           error: None,
         }),
-        cmd=filepicker_load_cmd(directory),
+        cmd=filepicker_open_scan_cmd(directory),
       )
     },
     update: fn(model, msg) {
       match msg {
-        Refresh =>
-          @pippa.UpdateResult::new(
-            model={ ..model, error: None },
-            cmd=filepicker_load_cmd(model.current_directory),
-          )
+        Refresh => filepicker_begin_loading(model, model.current_directory)
         CursorUp =>
           @pippa.UpdateResult::new(
             model=filepicker_normalize({ ..model, cursor: model.cursor - 1 }),
@@ -290,15 +333,7 @@ pub fn filepicker(
           match filepicker_current_entry(model) {
             Some(entry) =>
               if entry.is_dir {
-                @pippa.UpdateResult::new(
-                  model=filepicker_normalize({
-                    ..model,
-                    current_directory: entry.path,
-                    cursor: 0,
-                    error: None,
-                  }),
-                  cmd=filepicker_load_cmd(entry.path),
-                )
+                filepicker_begin_loading(model, entry.path)
               } else if filepicker_can_select(model, entry) {
                 @pippa.UpdateResult::new(
                   model={
@@ -344,15 +379,7 @@ pub fn filepicker(
           }
         Back => {
           let parent = filepicker_parent_dir(model.current_directory)
-          @pippa.UpdateResult::new(
-            model=filepicker_normalize({
-              ..model,
-              current_directory: parent,
-              cursor: 0,
-              error: None,
-            }),
-            cmd=filepicker_load_cmd(parent),
-          )
+          filepicker_begin_loading(model, parent)
         }
         ToggleHidden =>
           @pippa.UpdateResult::new(
@@ -364,15 +391,7 @@ pub fn filepicker(
           )
         SetDirectory(path) => {
           let directory = if path == "" { "." } else { path }
-          @pippa.UpdateResult::new(
-            model=filepicker_normalize({
-              ..model,
-              current_directory: directory,
-              cursor: 0,
-              error: None,
-            }),
-            cmd=filepicker_load_cmd(directory),
-          )
+          filepicker_begin_loading(model, directory)
         }
         SetHeight(height) =>
           @pippa.UpdateResult::new(
@@ -389,27 +408,95 @@ pub fn filepicker(
             model={ ..model, allow_files, allow_directories },
             cmd=@pippa.Cmd::none(),
           )
-        Loaded(path, entries) =>
-          @pippa.UpdateResult::new(
-            model=filepicker_normalize({
-              ..model,
-              current_directory: path,
-              entries,
-              cursor: 0,
-              error: None,
-            }),
-            cmd=@pippa.Cmd::none(),
-          )
-        LoadFailed(err) =>
+        ScanOpened(path, handle) =>
+          if model.current_directory != path || model.loading == false {
+            filepicker_close_scan(handle)
+            @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
+          } else {
+            @pippa.UpdateResult::new(
+              model={ ..model, scan_handle: Some(handle), error: None },
+              cmd=filepicker_continue_scan_cmd(path, handle),
+            )
+          }
+        ContinueScan(path, handle) =>
+          match model.scan_handle {
+            Some(active) =>
+              if active == handle && model.current_directory == path {
+                @pippa.UpdateResult::new(
+                  model~,
+                  cmd=@pippa.Cmd::perform(fn() {
+                    Some(filepicker_continue_scan_message(path, handle))
+                  }),
+                )
+              } else {
+                filepicker_close_scan(handle)
+                @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
+              }
+            None => {
+              filepicker_close_scan(handle)
+              @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
+            }
+          }
+        ScanChunk(path, handle, entries) =>
+          match model.scan_handle {
+            Some(active) =>
+              if active == handle && model.current_directory == path {
+                @pippa.UpdateResult::new(
+                  model=filepicker_normalize({
+                    ..model,
+                    entries: filepicker_sort_entries(
+                      [..model.entries, ..entries],
+                    ),
+                    error: None,
+                  }),
+                  cmd=filepicker_continue_scan_cmd(path, handle),
+                )
+              } else {
+                filepicker_close_scan(handle)
+                @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
+              }
+            None => {
+              filepicker_close_scan(handle)
+              @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
+            }
+          }
+        ScanFinished(path, handle) =>
+          match model.scan_handle {
+            Some(active) =>
+              if active == handle && model.current_directory == path {
+                filepicker_close_scan(handle)
+                @pippa.UpdateResult::new(
+                  model=filepicker_normalize({
+                    ..model,
+                    loading: false,
+                    scan_handle: None,
+                    error: None,
+                  }),
+                  cmd=@pippa.Cmd::none(),
+                )
+              } else {
+                filepicker_close_scan(handle)
+                @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
+              }
+            None => {
+              filepicker_close_scan(handle)
+              @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
+            }
+          }
+        LoadFailed(err) => {
+          filepicker_close_active_scan(model)
           @pippa.UpdateResult::new(
             model=filepicker_normalize({
               ..model,
               entries: [],
               cursor: 0,
+              loading: false,
+              scan_handle: None,
               error: Some(err),
             }),
             cmd=@pippa.Cmd::none(),
           )
+        }
       }
     },
     view: fn(model) {
@@ -422,8 +509,19 @@ pub fn filepicker(
       model.error
       .iter()
       .each(fn(err) { lines.push(@pippa.fg_color(1) + err + @pippa.reset()) })
+      if model.loading {
+        lines.push(@pippa.dim() + "(loading...)" + @pippa.reset())
+      }
       if visible.is_empty() {
-        lines.push(@pippa.dim() + "(empty directory)" + @pippa.reset())
+        lines.push(
+          @pippa.dim() +
+          (if model.loading {
+            "(waiting for entries)"
+          } else {
+            "(empty directory)"
+          }) +
+          @pippa.reset(),
+        )
       } else {
         for i in page_start..<page_end {
           let entry = visible[i]
@@ -462,6 +560,7 @@ pub fn filepicker(
         @pippa.dim() +
         "hidden:\{hidden_label} " +
         "items:\{visible.length()}" +
+        (if model.loading { " loading" } else { "" }) +
         @pippa.reset(),
       )
       lines.join("\n")
