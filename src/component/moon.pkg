@@ -1,3 +1,4 @@
 import {
   "brickfrog/pippa",
+  "moonbitlang/core/math",
 }

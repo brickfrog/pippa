@@ -6,11 +6,13 @@ import {
 }
 
 // Values
-pub fn progress_bar(width? : Int, label? : String) -> Component[ProgressBarModel, ProgressBarMsg]
+pub fn progress_bar(width? : Int, show_percentage? : Bool, blend_start? : (Int, Int, Int), blend_end? : (Int, Int, Int), empty_color? : (Int, Int, Int), spring_frequency? : Double, spring_damping? : Double) -> Component[ProgressBarModel, ProgressBarMsg]
 
 pub fn select_list(items? : Array[String]) -> Component[SelectListModel, SelectListMsg]
 
 pub fn spinner(label? : String) -> Component[SpinnerModel, SpinnerMsg]
+
+pub fn spring_step(Double, Double, Double, Double, Double, Double) -> (Double, Double)
 
 pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg]
 
@@ -35,15 +37,22 @@ pub(all) struct Component[Model, Msg] {
 pub impl[Model : Show, Msg : Show] Show for Component[Model, Msg]
 
 pub(all) struct ProgressBarModel {
-  percent : Double
   width : Int
-  label : String
+  target_percent : Double
+  displayed_percent : Double
+  velocity : Double
+  spring_frequency : Double
+  spring_damping : Double
+  blend_start : (Int, Int, Int)
+  blend_end : (Int, Int, Int)
+  empty_color : (Int, Int, Int)
+  show_percentage : Bool
 }
 pub impl Show for ProgressBarModel
 
 pub(all) enum ProgressBarMsg {
   SetPercent(Double)
-  SetLabel(String)
+  Tick
 }
 pub impl Show for ProgressBarMsg
 
