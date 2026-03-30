@@ -1,7 +1,8 @@
 ///|
 /// A spring-physics animated gradient progress bar component.
 ///
-/// Uses an analytical spring solution for smooth, stable animation at any dt.
+/// Uses an analytical spring solution for smooth, stable animation with the
+/// component's fixed timestep (~16 ms, 16.0 / 1000.0 s).
 
 ///|
 /// Model for the animated gradient progress bar.
@@ -65,7 +66,8 @@ pub fn spring_step(
   damping : Double,
   dt : Double,
 ) -> (Double, Double) {
-  let zeta = damping
+  // Clamp damping to non-negative to avoid NaN from sqrt(1 - ζ²) when ζ < -1.
+  let zeta = if damping < 0.0 { 0.0 } else { damping }
   let omega = frequency
   if (zeta - 1.0).abs() < 1.0e-10 {
     // Critically damped
@@ -151,7 +153,7 @@ pub fn progress_bar(
             model.target_percent,
             model.spring_frequency,
             model.spring_damping,
-            1.0 / 60.0,
+            16.0 / 1000.0,
           )
           let next = { ..model, displayed_percent: new_pos, velocity: new_vel }
           let cmd = if is_animating(next) {

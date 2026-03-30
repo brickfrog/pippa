@@ -188,7 +188,7 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
       )
     ProgressMsg(progress_msg) => {
       // Advance target and tick spinner every ~9 frames (≈150ms at 16ms ticks)
-      let (progress_base, spinner) = if model.tick_count % 9 == 0 {
+      let (progress_base, spinner, extra_cmd) = if model.tick_count % 9 == 0 {
         let new_target = showcase_progress_next(model.progress.target_percent)
         let set_result = (progress_comp.update)(
           model.progress,
@@ -198,13 +198,14 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
             model.spinner,
             @component.SpinnerMsg::Tick,
           ).model
-        (set_result.model, sp)
+        (set_result.model, sp, set_result.cmd)
       } else {
-        (model.progress, model.spinner)
+        (model.progress, model.spinner, @pippa.Cmd::none())
       }
       // Drive the spring step
       let result = (progress_comp.update)(progress_base, progress_msg)
       let merged = @pippa.Cmd::batch([
+        @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, extra_cmd),
         @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, result.cmd),
         showcase_tick_cmd(),
       ])
