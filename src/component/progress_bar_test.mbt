@@ -24,7 +24,7 @@ test "SetPercent returns a tick cmd" {
   let comp = progress_bar()
   let { model, .. } = (comp.init)()
   let { cmd, .. } = (comp.update)(model, SetPercent(0.5))
-  assert_true(not(cmd.is_none()))
+  assert_true(!cmd.is_none())
 }
 
 ///|
@@ -84,7 +84,7 @@ test "Tick returns tick cmd when animating" {
   let { model, .. } = (comp.init)()
   let { model: m1, .. } = (comp.update)(model, SetPercent(1.0))
   let { cmd, .. } = (comp.update)(m1, Tick)
-  assert_true(not(cmd.is_none()))
+  assert_true(!cmd.is_none())
 }
 
 ///|

@@ -85,7 +85,7 @@ pub fn timer(
             cmd=@pippa.Cmd::none(),
           )
         Tick =>
-          if not(model.running) || model.finished {
+          if !model.running || model.finished {
             @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
           } else {
             let remaining = (model.remaining_ms - model.interval_ms).max(0)
@@ -94,7 +94,7 @@ pub fn timer(
               model={
                 ..model,
                 remaining_ms: remaining,
-                running: not(finished),
+                running: !finished,
                 finished,
               },
               cmd=if finished {

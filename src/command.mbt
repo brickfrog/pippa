@@ -51,7 +51,7 @@ pub fn[Msg] Cmd::after(interval_ms : Int, f : () -> Msg) -> Cmd[Msg] {
 /// been drained by the runtime. Delayed timers from earlier steps continue to
 /// run independently once scheduled.
 pub fn[Msg] Cmd::sequence(cmds : Array[Cmd[Msg]]) -> Cmd[Msg] {
-  let non_empty = cmds.filter(fn(cmd) { not(cmd.is_none()) })
+  let non_empty = cmds.filter(fn(cmd) { !cmd.is_none() })
   match non_empty {
     [] => Cmd::none()
     [cmd] => cmd

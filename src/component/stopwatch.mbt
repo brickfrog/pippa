@@ -65,7 +65,7 @@ pub fn stopwatch(
             cmd=@pippa.Cmd::none(),
           )
         Tick =>
-          if not(model.running) {
+          if !model.running {
             @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
           } else {
             @pippa.UpdateResult::new(

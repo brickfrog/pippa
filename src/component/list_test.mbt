@@ -6,7 +6,7 @@ test "list filters items" {
   assert_eq(m1.filter, "ga")
   let view = (c.view)(m1)
   assert_true(view.contains("gamma"))
-  assert_true(not(view.contains("alpha")))
+  assert_true(!view.contains("alpha"))
 }
 
 ///|

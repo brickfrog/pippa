@@ -500,7 +500,7 @@ fn[Msg] queue_cmd_effects(
           [] => ()
           [head, .. tail] => {
             queue_cmd_effects(head, now, pending, timers, sequences)
-            if not(tail.is_empty()) {
+            if !tail.is_empty() {
               sequences.push_back(tail.to_array())
             }
           }
@@ -700,7 +700,7 @@ fn[Model, Msg] drain_controls(
     0
   }
   let mut rendered = false
-  while not(pending_controls.is_empty()) {
+  while !pending_controls.is_empty() {
     match pending_controls.pop() {
       Some(ReleaseTerminal) =>
         if active {
@@ -709,7 +709,7 @@ fn[Model, Msg] drain_controls(
           line_count_after = 0
         }
       Some(RestoreTerminal) =>
-        if not(active) {
+        if !active {
           activate_terminal(program)
           active = true
           if program.rendering {
@@ -748,8 +748,8 @@ fn[Model, Msg] flush_view(
   last_render_ms : Int64,
   force : Bool,
 ) -> (String, Int, Int64, Int64?) {
-  if not(program.rendering) ||
-    not(terminal_active) ||
+  if !program.rendering ||
+    !terminal_active ||
     next_view == rendered_view {
     (rendered_view, prev_line_count, last_render_ms, None)
   } else {
@@ -787,10 +787,10 @@ fn[Model, Msg] drain_runtime(
   let mut current_model = model
   let mut quit = false
   let mut updated = false
-  while not(quit) {
+  while !quit {
     let mut progressed = false
 
-    while not(quit) && not(sent_msgs.is_empty()) {
+    while !quit && !sent_msgs.is_empty() {
       let msg = sent_msgs.pop().unwrap()
       let (next_model, should_quit, cmd) = apply_msg(
         program, current_model, msg,
@@ -804,7 +804,7 @@ fn[Model, Msg] drain_runtime(
       }
     }
 
-    while not(quit) && not(pending.is_empty()) {
+    while !quit && !pending.is_empty() {
       let task = pending.pop().unwrap()
       progressed = true
       match task() {
@@ -831,7 +831,7 @@ fn[Model, Msg] drain_runtime(
       match sequences.pop_front() {
         Some([head, .. tail]) => {
           queue_cmd_effects(head, pippa_now_ms(), pending, timers, sequences)
-          if not(tail.is_empty()) {
+          if !tail.is_empty() {
             sequences.push_back(tail.to_array())
           }
           progressed = true
@@ -841,7 +841,7 @@ fn[Model, Msg] drain_runtime(
       }
     }
 
-    if not(progressed) {
+    if !progressed {
       break
     }
   }
@@ -914,7 +914,7 @@ fn[Model, Msg] run_internal(
   let mut raw_buf : Array[Byte] = []
   let mut quit = initial_quit || boot_quit
 
-  while not(quit) {
+  while !quit {
     let (next_active, control_line_count, control_rendered) = drain_controls(
       program, pending_controls, terminal_active, desired,
     )
@@ -924,7 +924,7 @@ fn[Model, Msg] run_internal(
       prev_line_count = control_line_count
       last_render_ms = pippa_now_ms()
       render_due_at = None
-    } else if not(terminal_active) {
+    } else if !terminal_active {
       rendered = ""
       prev_line_count = 0
       render_due_at = None
@@ -993,7 +993,7 @@ fn[Model, Msg] run_internal(
       break
     }
 
-    if not(updated) {
+    if !updated {
       let poll_result = pippa_poll_events(
         runtime_timeout_ms(program, timers, render_due_at),
         if terminal_active && program.read_stdin {

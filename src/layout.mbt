@@ -29,7 +29,7 @@ pub fn strip_ansi(s : String) -> String {
         if next == '[' {
           // CSI sequence: skip until (and including) the terminating letter.
           i = i + 1
-          while i < n && not(is_csi_terminator(chars[i])) {
+          while i < n && !is_csi_terminator(chars[i]) {
             i = i + 1
           }
           if i < n {
@@ -193,7 +193,7 @@ pub fn truncate(s : String, max_width : Int) -> String {
         i = i + 1
         if next == '[' {
           // CSI sequence: copy until (and including) the terminating letter.
-          while i < n && not(is_csi_terminator(chars[i])) {
+          while i < n && !is_csi_terminator(chars[i]) {
             buf.write_char(chars[i])
             i = i + 1
           }

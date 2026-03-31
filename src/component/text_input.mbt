@@ -148,7 +148,7 @@ fn text_input_update(
 ///|
 fn text_input_view(model : TextInputModel) -> String {
   let buf = StringBuilder::new(size_hint=64)
-  if not(model.focused) && model.value == "" {
+  if !model.focused && model.value == "" {
     // Show placeholder with dim styling
     buf.write_string(@pippa.dim())
     buf.write_string(model.placeholder)

@@ -101,9 +101,9 @@ fn filepicker_is_hidden(name : String) -> Bool {
 fn filepicker_sort_entries(entries : Array[FileEntry]) -> Array[FileEntry] {
   let sorted = entries.copy()
   sorted.sort_by(fn(a, b) {
-    if a.is_dir && not(b.is_dir) {
+    if a.is_dir && !b.is_dir {
       -1
-    } else if not(a.is_dir) && b.is_dir {
+    } else if !a.is_dir && b.is_dir {
       1
     } else {
       a.name.compare(b.name)
@@ -215,7 +215,7 @@ fn filepicker_visible_entries(model : FilepickerModel) -> Array[FileEntry] {
   } else {
     let visible : Array[FileEntry] = []
     for entry in model.entries {
-      if not(filepicker_is_hidden(entry.name)) {
+      if !filepicker_is_hidden(entry.name) {
         visible.push(entry)
       }
     }
@@ -237,7 +237,7 @@ fn filepicker_current_entry(model : FilepickerModel) -> FileEntry? {
 fn filepicker_can_select(model : FilepickerModel, entry : FileEntry) -> Bool {
   if entry.is_dir {
     model.allow_directories
-  } else if not(model.allow_files) {
+  } else if !model.allow_files {
     false
   } else if model.allowed_extensions.is_empty() {
     true
@@ -385,7 +385,7 @@ pub fn filepicker(
           @pippa.UpdateResult::new(
             model=filepicker_normalize({
               ..model,
-              show_hidden: not(model.show_hidden),
+              show_hidden: !model.show_hidden,
             }),
             cmd=@pippa.Cmd::none(),
           )
@@ -543,7 +543,7 @@ pub fn filepicker(
           }
           let style_prefix = if entry.is_dir {
             @pippa.fg_rgb(90, 130, 220)
-          } else if not(selectable) {
+          } else if !selectable {
             @pippa.dim()
           } else {
             ""

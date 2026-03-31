@@ -597,7 +597,7 @@ fn textarea_visible_slice(line : String, start : Int, width : Int) -> String {
 
 ///|
 fn textarea_cursor_line(model : TextareaModel, line : String) -> String {
-  if not(model.focused) {
+  if !model.focused {
     return line
   }
   let chars = line.to_array()
@@ -625,7 +625,7 @@ fn textarea_view(model : TextareaModel) -> String {
     return ""
   }
 
-  if model.value == "" && not(model.focused) {
+  if model.value == "" && !model.focused {
     let first_line = @pippa.pad_right(
       @pippa.truncate(
         @pippa.dim() + model.placeholder + @pippa.reset(),

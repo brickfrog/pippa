@@ -74,7 +74,7 @@ test "showcase progress no longer waits for full settle before rebounding" {
   let dipped = showcase_advance_until_phase(model, 1, 120)
   assert_eq(dipped.progress_phase, 1)
   assert_true(dipped.progress.velocity > 0.0)
-  assert_true(not(progress_settled(dipped.progress)))
+  assert_true(!progress_settled(dipped.progress))
 }
 
 ///|
