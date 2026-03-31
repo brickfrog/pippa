@@ -887,9 +887,9 @@ fn hex_to_rgb(hex : String) -> (Int, Int, Int)? {
   match normalized {
     Some(value) => {
       let parts = value[:]
-      let r = try? @strconv.parse_uint(parts[0:2], base=16)
-      let g = try? @strconv.parse_uint(parts[2:4], base=16)
-      let b = try? @strconv.parse_uint(parts[4:6], base=16)
+      let r = try? @string.parse_uint(parts[0:2], base=16)
+      let g = try? @string.parse_uint(parts[2:4], base=16)
+      let b = try? @string.parse_uint(parts[4:6], base=16)
       match (r, g, b) {
         (Ok(rv), Ok(gv), Ok(bv)) =>
           Some(
