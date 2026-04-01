@@ -17,8 +17,8 @@ Pippa provides a **Model–Update–View** pattern where:
   output.
 
 The runtime handles raw terminal mode, input parsing, and efficient
-diffing/re-rendering, so library users only think about state transitions and
-string output.
+diffing and re-rendering, so library users only think about state transitions
+and string output.
 
 A component library ships alongside the core — spinners, text inputs, textareas,
 lists, selection lists, tables, paginators, viewports, timers, stopwatches,
