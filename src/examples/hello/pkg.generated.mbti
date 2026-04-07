@@ -1,16 +1,18 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "brickfrog/pippa/examples/hello"
 
+import {
+  "moonbitlang/core/debug",
+}
+
 // Values
 
 // Errors
 
 // Types and methods
-type Model
-pub impl Show for Model
+type Model derive(@debug.Debug)
 
-type Msg
-pub impl Show for Msg
+type Msg derive(@debug.Debug)
 
 // Type aliases
 

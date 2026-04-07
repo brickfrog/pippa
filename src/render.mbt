@@ -4,7 +4,7 @@ pub(all) struct PatchOp {
   row : Int
   col : Int
   text : String
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Compare two view strings line-by-line and return the minimal set of

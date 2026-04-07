@@ -8,7 +8,7 @@ pub(all) struct TimerModel {
   interval_ms : Int
   running : Bool
   finished : Bool
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 pub(all) enum TimerMsg {
@@ -16,7 +16,7 @@ pub(all) enum TimerMsg {
   Pause
   Reset
   Tick
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 fn timer_clamp_non_negative(n : Int) -> Int {

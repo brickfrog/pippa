@@ -22,7 +22,7 @@ pub(all) struct TextareaModel {
   placeholder : String
   /// Whether the field currently has keyboard focus.
   focused : Bool
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Messages that drive a `TextareaModel`.
@@ -46,7 +46,7 @@ pub(all) enum TextareaMsg {
   Resize(Int, Int)
   Focus
   Blur
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 fn textarea_lines(value : String) -> Array[String] {

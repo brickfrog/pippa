@@ -7,7 +7,7 @@ pub(all) struct Border {
   bottom_right : String
   horizontal : String
   vertical : String
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Horizontal alignment within a styled width.
@@ -15,7 +15,7 @@ pub(all) enum Align {
   Left
   Center
   Right
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Rich color representation used by the styling APIs.
@@ -23,7 +23,7 @@ pub(all) enum Color {
   Ansi(Int)
   RGB(Int, Int, Int)
   Hex(String)
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Vertical alignment for layout helpers.
@@ -31,7 +31,7 @@ pub(all) enum VerticalAlign {
   Top
   Middle
   Bottom
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// A composable style description for terminal strings.
@@ -68,7 +68,7 @@ pub(all) struct Style {
   max_width : Int?
   max_height : Int?
   align : Align
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 pub fn border_normal() -> Border {

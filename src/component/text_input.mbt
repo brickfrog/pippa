@@ -17,7 +17,7 @@ pub(all) struct TextInputModel {
   placeholder : String
   /// Whether the field currently has keyboard focus.
   focused : Bool
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Messages that drive a `TextInputModel`.
@@ -40,7 +40,7 @@ pub(all) enum TextInputMsg {
   Focus
   /// Remove focus from this input.
   Blur
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 fn text_input_chars_to_string(chars : Array[Char]) -> String {

@@ -1,5 +1,6 @@
 import {
   "brickfrog/pippa/internal",
   "brickfrog/pippa",
+  "moonbitlang/core/debug",
   "moonbitlang/core/string",
 }

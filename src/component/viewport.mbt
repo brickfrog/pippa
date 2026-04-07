@@ -15,7 +15,7 @@ pub(all) struct ViewportModel {
   height : Int
   offset : Int
   total_lines : Int
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Messages handled by the Viewport component.
@@ -36,7 +36,7 @@ pub(all) enum ViewportMsg {
   SetContent(String)
   /// Update the viewport dimensions and re-clamp the offset.
   Resize(Int, Int)
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Construct a Viewport `Component`.

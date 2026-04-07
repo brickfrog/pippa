@@ -1,6 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "brickfrog/pippa"
 
+import {
+  "moonbitlang/core/debug",
+}
+
 // Values
 pub const CSI : String = "\x1b["
 
@@ -135,16 +139,12 @@ pub(all) enum Align {
   Left
   Center
   Right
-}
-pub impl Eq for Align
-pub impl Show for Align
+} derive(Eq, @debug.Debug)
 
 pub(all) struct Binding {
   keys : Array[String]
   help : String
-}
-pub impl Eq for Binding
-pub impl Show for Binding
+} derive(Eq, @debug.Debug)
 
 pub(all) struct Border {
   top_left : String
@@ -153,9 +153,7 @@ pub(all) struct Border {
   bottom_right : String
   horizontal : String
   vertical : String
-}
-pub impl Eq for Border
-pub impl Show for Border
+} derive(Eq, @debug.Debug)
 
 type Cmd[Msg]
 pub fn[Msg] Cmd::after(Int, () -> Msg) -> Self[Msg]
@@ -167,22 +165,18 @@ pub fn[Msg] Cmd::none() -> Self[Msg]
 pub fn[Msg] Cmd::perform(() -> Msg?) -> Self[Msg]
 pub fn[Msg] Cmd::sequence(Array[Self[Msg]]) -> Self[Msg]
 pub fn[Msg] Cmd::tick(Int) -> Self[Msg]
-pub impl[Msg] Show for Cmd[Msg]
+pub impl[Msg] @debug.Debug for Cmd[Msg]
 
 pub(all) enum Color {
   Ansi(Int)
   RGB(Int, Int, Int)
   Hex(String)
-}
-pub impl Eq for Color
-pub impl Show for Color
+} derive(Eq, @debug.Debug)
 
 pub(all) struct HelpModel {
   bindings : Array[Binding]
   show_full : Bool
-}
-pub impl Eq for HelpModel
-pub impl Show for HelpModel
+} derive(Eq, @debug.Debug)
 
 pub(all) enum InputEvent {
   Key(KeyMsg)
@@ -191,54 +185,40 @@ pub(all) enum InputEvent {
   Blur
   Paste(String)
   Unknown(Bytes)
-}
-pub impl Eq for InputEvent
-pub impl Show for InputEvent
+} derive(Eq, @debug.Debug)
 
 pub(all) enum InternalMsg {
   KeyPress(Array[Byte])
   WindowResize(WindowSize)
   QuitRequested
-}
-pub impl Eq for InternalMsg
-pub impl Show for InternalMsg
+} derive(Eq, @debug.Debug)
 
 pub(all) enum KeyMsg {
   Char(Char)
   Special(String)
   Modified(String, String)
-}
-pub impl Eq for KeyMsg
-pub impl Show for KeyMsg
+} derive(Eq, @debug.Debug)
 
 pub(all) enum MouseMsg {
   Motion(Int, Int)
   Press(Int, Int)
   Release(Int, Int)
-}
-pub impl Eq for MouseMsg
-pub impl Show for MouseMsg
+} derive(Eq, @debug.Debug)
 
 pub(all) struct Nothing {
-}
-pub impl Eq for Nothing
-pub impl Show for Nothing
+} derive(Eq, @debug.Debug)
 
 pub(all) enum ParseResult[T] {
   Ok(T, Int)
   Incomplete
   Invalid(String)
-}
-pub impl[T : Eq] Eq for ParseResult[T]
-pub impl[T : Show] Show for ParseResult[T]
+} derive(Eq, @debug.Debug)
 
 pub(all) struct PatchOp {
   row : Int
   col : Int
   text : String
-}
-pub impl Eq for PatchOp
-pub impl Show for PatchOp
+} derive(Eq, @debug.Debug)
 
 pub(all) struct Program[Model, Msg] {
   init : () -> UpdateResult[Model, Msg]
@@ -319,7 +299,7 @@ pub(all) struct Style {
   max_width : Int?
   max_height : Int?
   align : Align
-}
+} derive(Eq, @debug.Debug)
 pub fn Style::align(Self, Align) -> Self
 pub fn Style::background(Self, Color) -> Self
 pub fn Style::background_hex(Self, String) -> Self
@@ -348,30 +328,23 @@ pub fn Style::render(Self, String) -> String
 pub fn Style::reverse(Self) -> Self
 pub fn Style::underline(Self) -> Self
 pub fn Style::width(Self, Int) -> Self
-pub impl Eq for Style
-pub impl Show for Style
 
 pub(all) struct UpdateResult[Model, Msg] {
   model : Model
   cmd : Cmd[Msg]
-}
+} derive(@debug.Debug)
 pub fn[Model, Msg] UpdateResult::new(model~ : Model, cmd~ : Cmd[Msg]) -> Self[Model, Msg]
-pub impl[Model : Show, Msg : Show] Show for UpdateResult[Model, Msg]
 
 pub(all) enum VerticalAlign {
   Top
   Middle
   Bottom
-}
-pub impl Eq for VerticalAlign
-pub impl Show for VerticalAlign
+} derive(Eq, @debug.Debug)
 
 pub(all) struct WindowSize {
   width : Int
   height : Int
-}
-pub impl Eq for WindowSize
-pub impl Show for WindowSize
+} derive(Eq, @debug.Debug)
 
 // Type aliases
 

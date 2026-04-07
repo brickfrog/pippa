@@ -11,14 +11,14 @@ pub(all) struct SpinnerModel {
   frames : Array[String]
   current : Int
   label : String
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Messages handled by the Spinner component.
 pub(all) enum SpinnerMsg {
   /// Advance to the next animation frame.
   Tick
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Construct a Spinner `Component`.

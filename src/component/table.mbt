@@ -2,7 +2,7 @@
 pub(all) struct Column {
   header : String
   width : Int
-} derive(Show)
+} derive(Debug)
 
 ///|
 pub(all) struct TableModel {
@@ -10,7 +10,7 @@ pub(all) struct TableModel {
   rows : Array[Array[String]]
   cursor : Int
   selected : Int
-} derive(Show)
+} derive(Debug)
 
 ///|
 pub(all) enum TableMsg {
@@ -18,7 +18,7 @@ pub(all) enum TableMsg {
   CursorDown
   Select
   SetRows(Array[Array[String]])
-} derive(Show)
+} derive(Debug)
 
 ///|
 pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg] {

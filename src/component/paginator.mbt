@@ -6,7 +6,7 @@ pub(all) struct PaginatorModel {
   page : Int
   per_page : Int
   total_items : Int
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 pub(all) enum PaginatorMsg {
@@ -15,7 +15,7 @@ pub(all) enum PaginatorMsg {
   SetPage(Int)
   SetPerPage(Int)
   SetTotalItems(Int)
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 fn paginator_page_count(total_items : Int, per_page : Int) -> Int {

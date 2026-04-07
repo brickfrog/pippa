@@ -7,7 +7,7 @@ pub(all) struct FileEntry {
   name : String
   path : String
   is_dir : Bool
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 pub(all) struct FilepickerModel {
@@ -23,7 +23,7 @@ pub(all) struct FilepickerModel {
   loading : Bool
   scan_handle : Int?
   error : String?
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 pub(all) enum FilepickerMsg {
@@ -47,7 +47,7 @@ pub(all) enum FilepickerMsg {
   ScanChunk(String, Int, Array[FileEntry])
   ScanFinished(String, Int)
   LoadFailed(String)
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 fn filepicker_initial_directory(current_directory : String) -> String {

@@ -21,4 +21,4 @@ pub(all) struct Component[Model, Msg] {
   update : (Model, Msg) -> @pippa.UpdateResult[Model, Msg]
   /// Render the current model to an ANSI string.
   view : (Model) -> String
-} derive(Show)
+} derive(Debug)

@@ -12,7 +12,7 @@ pub(all) struct SelectListModel {
   items : Array[String]
   cursor : Int
   selected : Int
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Messages handled by the SelectList component.
@@ -25,7 +25,7 @@ pub(all) enum SelectListMsg {
   Select
   /// Replace the item list entirely.
   SetItems(Array[String])
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Construct a SelectList `Component`.

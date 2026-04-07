@@ -8,7 +8,7 @@ pub(all) struct ListModel {
   cursor : Int
   selected : Int
   page_size : Int
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 pub(all) enum ListMsg {
@@ -22,7 +22,7 @@ pub(all) enum ListMsg {
   FilterInsertChar(Char)
   FilterBackspace
   ClearFilter
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 fn list_chars_to_string(chars : Array[Char]) -> String {

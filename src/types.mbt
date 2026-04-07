@@ -20,7 +20,7 @@
 
 ///|
 /// Sentinel type for commands that carry no payload.
-pub(all) struct Nothing {} derive(Show, Eq)
+pub(all) struct Nothing {} derive(Debug, Eq)
 
 ///|
 /// A batch of I/O commands to be performed by the runtime.
@@ -54,7 +54,7 @@ priv enum CmdAction[Msg] {
 }
 
 ///|
-pub impl[Msg] Show for Cmd[Msg] with output(self, logger) {
+pub impl[Msg] Debug for Cmd[Msg] with to_repr(self) {
   let mut perform_count = 0
   let mut tick_count = 0
   let mut after_count = 0
@@ -67,25 +67,27 @@ pub impl[Msg] Show for Cmd[Msg] with output(self, logger) {
       Sequence(_) => sequence_count = sequence_count + 1
     }
   }
-  logger.write_string("Cmd(actions=")
-  logger.write_string(self.actions.length().to_string())
+  let buf = StringBuilder::new()
+  buf.write_string("Cmd(actions=")
+  buf.write_string(self.actions.length().to_string())
   if perform_count > 0 {
-    logger.write_string(", perform=")
-    logger.write_string(perform_count.to_string())
+    buf.write_string(", perform=")
+    buf.write_string(perform_count.to_string())
   }
   if tick_count > 0 {
-    logger.write_string(", tick=")
-    logger.write_string(tick_count.to_string())
+    buf.write_string(", tick=")
+    buf.write_string(tick_count.to_string())
   }
   if after_count > 0 {
-    logger.write_string(", after=")
-    logger.write_string(after_count.to_string())
+    buf.write_string(", after=")
+    buf.write_string(after_count.to_string())
   }
   if sequence_count > 0 {
-    logger.write_string(", sequence=")
-    logger.write_string(sequence_count.to_string())
+    buf.write_string(", sequence=")
+    buf.write_string(sequence_count.to_string())
   }
-  logger.write_string(")")
+  buf.write_string(")")
+  Repr::literal(buf.to_string())
 }
 
 ///|
@@ -93,7 +95,7 @@ pub impl[Msg] Show for Cmd[Msg] with output(self, logger) {
 pub(all) struct UpdateResult[Model, Msg] {
   model : Model
   cmd : Cmd[Msg]
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Create an `UpdateResult` from a model and a command.
@@ -109,7 +111,7 @@ pub fn[Model, Msg] UpdateResult::new(
 pub(all) struct WindowSize {
   width : Int
   height : Int
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Built-in messages that the Pippa runtime can emit.
@@ -123,4 +125,4 @@ pub(all) enum InternalMsg {
   WindowResize(WindowSize)
   /// An explicit quit request.
   QuitRequested
-} derive(Show, Eq)
+} derive(Debug, Eq)

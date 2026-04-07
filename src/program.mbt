@@ -748,9 +748,7 @@ fn[Model, Msg] flush_view(
   last_render_ms : Int64,
   force : Bool,
 ) -> (String, Int, Int64, Int64?) {
-  if !program.rendering ||
-    !terminal_active ||
-    next_view == rendered_view {
+  if !program.rendering || !terminal_active || next_view == rendered_view {
     (rendered_view, prev_line_count, last_render_ms, None)
   } else {
     let now = pippa_now_ms()

@@ -12,7 +12,7 @@
 struct Model {
   count : Int
   quitting : Bool
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Application messages.
@@ -21,7 +21,7 @@ enum Msg {
   Decrement
   Reset
   Quit
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Initialise the model.

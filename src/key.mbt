@@ -3,7 +3,7 @@
 pub(all) struct Binding {
   keys : Array[String]
   help : String
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Check if a KeyMsg matches a Binding.
@@ -61,7 +61,7 @@ pub fn help_binding() -> Binding {
 pub(all) struct HelpModel {
   bindings : Array[Binding]
   show_full : Bool
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 pub fn help_view(model : HelpModel) -> String {

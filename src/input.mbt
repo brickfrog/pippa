@@ -22,7 +22,7 @@ pub(all) enum InputEvent {
   Paste(String)
   /// Bytes that could not be mapped to a known event.
   Unknown(Bytes)
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 /// Result of attempting to parse one event from a byte buffer.
@@ -33,7 +33,7 @@ pub(all) enum ParseResult[T] {
   Incomplete
   /// The byte sequence is definitively malformed.
   Invalid(String)
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 fn unknown_event(bv : BytesView, consumed : Int) -> InputEvent {

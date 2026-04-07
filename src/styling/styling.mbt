@@ -6,21 +6,21 @@ pub(all) enum Color {
   Ansi(Int)
   RGB(Int, Int, Int)
   Hex(String)
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 pub(all) enum Align {
   Left
   Center
   Right
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 pub(all) enum VerticalAlign {
   Top
   Middle
   Bottom
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 pub(all) struct Style {
@@ -54,7 +54,7 @@ pub(all) struct Style {
   max_width : Int?
   max_height : Int?
   align : Align
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 pub fn border_normal() -> @pippa.Border {

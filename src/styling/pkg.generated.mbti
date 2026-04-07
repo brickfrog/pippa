@@ -3,6 +3,7 @@ package "brickfrog/pippa/styling"
 
 import {
   "brickfrog/pippa",
+  "moonbitlang/core/debug",
 }
 
 // Values
@@ -16,19 +17,31 @@ pub fn border_rounded() -> @pippa.Border
 
 pub fn border_thick() -> @pippa.Border
 
+pub fn col(Array[String]) -> String
+
 pub fn color_ansi(Int) -> Color
 
 pub fn color_hex(String) -> Color
 
 pub fn color_rgb(Int, Int, Int) -> Color
 
+pub fn gap(n? : Int) -> String
+
+pub fn hgap(n? : Int) -> String
+
 pub fn join_horizontal(Array[String], valign? : VerticalAlign) -> String
 
 pub fn join_vertical(Array[String], align? : Align) -> String
 
+pub fn lines(Array[String]) -> String
+
 pub fn place(Int, Int, String, align? : Align, valign? : VerticalAlign) -> String
 
+pub fn row(Array[String]) -> String
+
 pub fn style() -> Style
+
+pub fn text(String) -> String
 
 // Errors
 
@@ -37,17 +50,13 @@ pub(all) enum Align {
   Left
   Center
   Right
-}
-pub impl Eq for Align
-pub impl Show for Align
+} derive(Eq, @debug.Debug)
 
 pub(all) enum Color {
   Ansi(Int)
   RGB(Int, Int, Int)
   Hex(String)
-}
-pub impl Eq for Color
-pub impl Show for Color
+} derive(Eq, @debug.Debug)
 
 pub(all) struct Style {
   fg : Color?
@@ -80,7 +89,7 @@ pub(all) struct Style {
   max_width : Int?
   max_height : Int?
   align : Align
-}
+} derive(Eq, @debug.Debug)
 pub fn Style::align(Self, Align) -> Self
 pub fn Style::background(Self, Color) -> Self
 pub fn Style::background_hex(Self, String) -> Self
@@ -107,16 +116,12 @@ pub fn Style::render(Self, String) -> String
 pub fn Style::reverse(Self) -> Self
 pub fn Style::underline(Self) -> Self
 pub fn Style::width(Self, Int) -> Self
-pub impl Eq for Style
-pub impl Show for Style
 
 pub(all) enum VerticalAlign {
   Top
   Middle
   Bottom
-}
-pub impl Eq for VerticalAlign
-pub impl Show for VerticalAlign
+} derive(Eq, @debug.Debug)
 
 // Type aliases
 

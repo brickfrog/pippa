@@ -6,7 +6,7 @@ pub(all) struct StopwatchModel {
   elapsed_ms : Int
   interval_ms : Int
   running : Bool
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 pub(all) enum StopwatchMsg {
@@ -14,7 +14,7 @@ pub(all) enum StopwatchMsg {
   Pause
   Reset
   Tick
-} derive(Show, Eq)
+} derive(Debug, Eq)
 
 ///|
 fn stopwatch_next_tick_cmd(interval_ms : Int) -> @pippa.Cmd[StopwatchMsg] {

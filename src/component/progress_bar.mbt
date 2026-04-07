@@ -27,7 +27,7 @@ pub(all) struct ProgressBarModel {
   empty_color : (Int, Int, Int)
   /// Whether to show a percentage label to the right of the bar.
   show_percentage : Bool
-} derive(Show)
+} derive(Debug)
 
 ///|
 /// Messages handled by the progress bar component.
@@ -36,7 +36,7 @@ pub(all) enum ProgressBarMsg {
   SetPercent(Double)
   /// Drive one spring physics step (~16 ms dt); typically scheduled via `Cmd::after`.
   Tick
-} derive(Show)
+} derive(Debug)
 
 ///|
 fn lerp_channel(a : Int, b : Int, t : Double) -> Int {

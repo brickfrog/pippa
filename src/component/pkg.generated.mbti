@@ -3,6 +3,7 @@ package "brickfrog/pippa/component"
 
 import {
   "brickfrog/pippa",
+  "moonbitlang/core/debug",
 }
 
 // Values
@@ -38,23 +39,19 @@ pub fn viewport(width~ : Int, height~ : Int) -> Component[ViewportModel, Viewpor
 pub(all) struct Column {
   header : String
   width : Int
-}
-pub impl Show for Column
+} derive(@debug.Debug)
 
 pub(all) struct Component[Model, Msg] {
   init : () -> @pippa.UpdateResult[Model, Msg]
   update : (Model, Msg) -> @pippa.UpdateResult[Model, Msg]
   view : (Model) -> String
-}
-pub impl[Model : Show, Msg : Show] Show for Component[Model, Msg]
+} derive(@debug.Debug)
 
 pub(all) struct FileEntry {
   name : String
   path : String
   is_dir : Bool
-}
-pub impl Eq for FileEntry
-pub impl Show for FileEntry
+} derive(Eq, @debug.Debug)
 
 pub(all) struct FilepickerModel {
   current_directory : String
@@ -69,9 +66,7 @@ pub(all) struct FilepickerModel {
   loading : Bool
   scan_handle : Int?
   error : String?
-}
-pub impl Eq for FilepickerModel
-pub impl Show for FilepickerModel
+} derive(Eq, @debug.Debug)
 
 pub(all) enum FilepickerMsg {
   Refresh
@@ -94,9 +89,7 @@ pub(all) enum FilepickerMsg {
   ScanChunk(String, Int, Array[FileEntry])
   ScanFinished(String, Int)
   LoadFailed(String)
-}
-pub impl Eq for FilepickerMsg
-pub impl Show for FilepickerMsg
+} derive(Eq, @debug.Debug)
 
 pub(all) struct ListModel {
   items : Array[String]
@@ -104,9 +97,7 @@ pub(all) struct ListModel {
   cursor : Int
   selected : Int
   page_size : Int
-}
-pub impl Eq for ListModel
-pub impl Show for ListModel
+} derive(Eq, @debug.Debug)
 
 pub(all) enum ListMsg {
   CursorUp
@@ -119,17 +110,13 @@ pub(all) enum ListMsg {
   FilterInsertChar(Char)
   FilterBackspace
   ClearFilter
-}
-pub impl Eq for ListMsg
-pub impl Show for ListMsg
+} derive(Eq, @debug.Debug)
 
 pub(all) struct PaginatorModel {
   page : Int
   per_page : Int
   total_items : Int
-}
-pub impl Eq for PaginatorModel
-pub impl Show for PaginatorModel
+} derive(Eq, @debug.Debug)
 
 pub(all) enum PaginatorMsg {
   NextPage
@@ -137,9 +124,7 @@ pub(all) enum PaginatorMsg {
   SetPage(Int)
   SetPerPage(Int)
   SetTotalItems(Int)
-}
-pub impl Eq for PaginatorMsg
-pub impl Show for PaginatorMsg
+} derive(Eq, @debug.Debug)
 
 pub(all) struct ProgressBarModel {
   width : Int
@@ -152,83 +137,69 @@ pub(all) struct ProgressBarModel {
   blend_end : (Int, Int, Int)
   empty_color : (Int, Int, Int)
   show_percentage : Bool
-}
-pub impl Show for ProgressBarModel
+} derive(@debug.Debug)
 
 pub(all) enum ProgressBarMsg {
   SetPercent(Double)
   Tick
-}
-pub impl Show for ProgressBarMsg
+} derive(@debug.Debug)
 
 pub(all) struct SelectListModel {
   items : Array[String]
   cursor : Int
   selected : Int
-}
-pub impl Show for SelectListModel
+} derive(@debug.Debug)
 
 pub(all) enum SelectListMsg {
   CursorUp
   CursorDown
   Select
   SetItems(Array[String])
-}
-pub impl Show for SelectListMsg
+} derive(@debug.Debug)
 
 pub(all) struct SpinnerModel {
   frames : Array[String]
   current : Int
   label : String
-}
-pub impl Show for SpinnerModel
+} derive(@debug.Debug)
 
 pub(all) enum SpinnerMsg {
   Tick
-}
-pub impl Show for SpinnerMsg
+} derive(@debug.Debug)
 
 pub(all) struct StopwatchModel {
   elapsed_ms : Int
   interval_ms : Int
   running : Bool
-}
-pub impl Eq for StopwatchModel
-pub impl Show for StopwatchModel
+} derive(Eq, @debug.Debug)
 
 pub(all) enum StopwatchMsg {
   Start
   Pause
   Reset
   Tick
-}
-pub impl Eq for StopwatchMsg
-pub impl Show for StopwatchMsg
+} derive(Eq, @debug.Debug)
 
 pub(all) struct TableModel {
   columns : Array[Column]
   rows : Array[Array[String]]
   cursor : Int
   selected : Int
-}
-pub impl Show for TableModel
+} derive(@debug.Debug)
 
 pub(all) enum TableMsg {
   CursorUp
   CursorDown
   Select
   SetRows(Array[Array[String]])
-}
-pub impl Show for TableMsg
+} derive(@debug.Debug)
 
 pub(all) struct TextInputModel {
   value : String
   cursor : Int
   placeholder : String
   focused : Bool
-}
-pub impl Eq for TextInputModel
-pub impl Show for TextInputModel
+} derive(Eq, @debug.Debug)
 
 pub(all) enum TextInputMsg {
   InsertChar(Char)
@@ -240,9 +211,7 @@ pub(all) enum TextInputMsg {
   MoveToEnd
   Focus
   Blur
-}
-pub impl Eq for TextInputMsg
-pub impl Show for TextInputMsg
+} derive(Eq, @debug.Debug)
 
 pub(all) struct TextareaModel {
   value : String
@@ -254,9 +223,7 @@ pub(all) struct TextareaModel {
   scroll_col : Int
   placeholder : String
   focused : Bool
-}
-pub impl Eq for TextareaModel
-pub impl Show for TextareaModel
+} derive(Eq, @debug.Debug)
 
 pub(all) enum TextareaMsg {
   InsertChar(Char)
@@ -278,9 +245,7 @@ pub(all) enum TextareaMsg {
   Resize(Int, Int)
   Focus
   Blur
-}
-pub impl Eq for TextareaMsg
-pub impl Show for TextareaMsg
+} derive(Eq, @debug.Debug)
 
 pub(all) struct TimerModel {
   duration_ms : Int
@@ -288,18 +253,14 @@ pub(all) struct TimerModel {
   interval_ms : Int
   running : Bool
   finished : Bool
-}
-pub impl Eq for TimerModel
-pub impl Show for TimerModel
+} derive(Eq, @debug.Debug)
 
 pub(all) enum TimerMsg {
   Start
   Pause
   Reset
   Tick
-}
-pub impl Eq for TimerMsg
-pub impl Show for TimerMsg
+} derive(Eq, @debug.Debug)
 
 pub(all) struct ViewportModel {
   content : String
@@ -307,8 +268,7 @@ pub(all) struct ViewportModel {
   height : Int
   offset : Int
   total_lines : Int
-}
-pub impl Show for ViewportModel
+} derive(@debug.Debug)
 
 pub(all) enum ViewportMsg {
   ScrollUp
@@ -319,8 +279,7 @@ pub(all) enum ViewportMsg {
   ScrollToBottom
   SetContent(String)
   Resize(Int, Int)
-}
-pub impl Show for ViewportMsg
+} derive(@debug.Debug)
 
 // Type aliases
 
