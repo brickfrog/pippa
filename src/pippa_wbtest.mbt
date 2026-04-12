@@ -511,3 +511,77 @@ test "pippa headless run_with_handle can quit from injected message" {
   assert_true(sent.val)
   assert_eq(seen.val, 7)
 }
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa catch_interrupt false delivers ctrl-c to sub" {
+  let polled = Ref::new(false)
+  let seen : Ref[Array[String]] = Ref::new([])
+  let program : Program[String, String] = Program::new(
+      init=fn() { UpdateResult::new(model="", cmd=Cmd::none()) },
+      update=fn(_model, msg) {
+        seen.val = [..seen.val, msg]
+        UpdateResult::new(model=msg, cmd=Cmd::none())
+      },
+      view=fn(_model) { "" },
+      sub=fn(evt) {
+        match evt {
+          Key(Modified("ctrl", "c")) => Some("ctrl-c")
+          Key(Char('q')) => Some("q")
+          _ => None
+        }
+      },
+      should_quit=fn(model) { model == "q" },
+      catch_interrupt=false,
+    )
+    .headless()
+    .with_input(fn() {
+      if polled.val {
+        []
+      } else {
+        polled.val = true
+        [Key(Modified("ctrl", "c")), Key(Char('q'))]
+      }
+    })
+  program.run()
+  // With catch_interrupt=false the runtime does NOT force-quit on Ctrl+C,
+  // so both events reach sub and update sees them both.
+  assert_eq(seen.val, ["ctrl-c", "q"])
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa catch_interrupt true force-quits on ctrl-c before sub sees it" {
+  let polled = Ref::new(false)
+  let seen : Ref[Array[String]] = Ref::new([])
+  let program : Program[String, String] = Program::new(
+      init=fn() { UpdateResult::new(model="", cmd=Cmd::none()) },
+      update=fn(_model, msg) {
+        seen.val = [..seen.val, msg]
+        UpdateResult::new(model=msg, cmd=Cmd::none())
+      },
+      view=fn(_model) { "" },
+      sub=fn(evt) {
+        match evt {
+          Key(Modified("ctrl", "c")) => Some("ctrl-c")
+          Key(Char('q')) => Some("q")
+          _ => None
+        }
+      },
+      // catch_interrupt defaults to true
+    )
+    .headless()
+    .with_input(fn() {
+      if polled.val {
+        []
+      } else {
+        polled.val = true
+        [Key(Modified("ctrl", "c")), Key(Char('q'))]
+      }
+    })
+  program.run()
+  // With catch_interrupt=true the runtime force-quits on Ctrl+C.
+  // sub still fires for the Ctrl+C event (it runs before the quit check breaks
+  // the loop), but 'q' is never reached because we already broke out.
+  assert_eq(seen.val, ["ctrl-c"])
+}
