@@ -56,6 +56,10 @@ pub(all) struct Program[Model, Msg] {
   on_resize : (Int, Int) -> Msg?
   /// Return true to exit the event loop after an update.
   should_quit : (Model) -> Bool
+  /// Intercept Ctrl+C and force-quit before delivering the event to `sub`.
+  /// Set to false if the application wants to handle Ctrl+C itself (e.g. copy
+  /// mode, graceful cancel). Defaults to true.
+  catch_interrupt : Bool
 }
 
 ///|
@@ -153,6 +157,7 @@ pub fn[Model, Msg] Program::new(
   output? : (String) -> Unit = default_output,
   on_resize? : (Int, Int) -> Msg? = fn(_cols, _rows) { None },
   should_quit? : (Model) -> Bool = fn(_model) { false },
+  catch_interrupt? : Bool = true,
 ) -> Program[Model, Msg] {
   {
     init,
@@ -176,6 +181,7 @@ pub fn[Model, Msg] Program::new(
     output,
     on_resize,
     should_quit,
+    catch_interrupt,
   }
 }
 
@@ -294,6 +300,14 @@ pub fn[Model, Msg] Program::headless(
     rendering: false,
     read_stdin: false,
   }
+}
+
+///|
+pub fn[Model, Msg] Program::with_catch_interrupt(
+  self : Program[Model, Msg],
+  enabled : Bool,
+) -> Program[Model, Msg] {
+  { ..self, catch_interrupt: enabled }
 }
 
 ///|
@@ -660,9 +674,11 @@ fn[Model, Msg] apply_input_events(
   let mut quit = false
   let mut updated = false
   for evt in events {
-    match evt {
-      Key(Modified("ctrl", "c")) => quit = true
-      _ => ()
+    if program.catch_interrupt {
+      match evt {
+        Key(Modified("ctrl", "c")) => quit = true
+        _ => ()
+      }
     }
     match (program.sub)(evt) {
       Some(msg) => {
@@ -1029,6 +1045,16 @@ fn[Model, Msg] run_internal(
           }
 
           stdin_buf.push(b.to_byte())
+
+          // Drain any immediately available bytes so we parse the whole burst
+          // in one pass rather than re-scanning a growing buffer per byte.
+          while (pippa_poll_events(0, 1) & 1) != 0 {
+            let nb = pippa_read_byte()
+            if nb < 0 {
+              break
+            }
+            stdin_buf.push(nb.to_byte())
+          }
 
           let bytes = Bytes::from_array(stdin_buf)
           let bv = bytes[:]
