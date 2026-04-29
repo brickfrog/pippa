@@ -7,6 +7,14 @@ import {
   "moonbitlang/core/string",
 }
 
+import {
+  "moonbitlang/core/test",
+} for "test"
+
+import {
+  "moonbitlang/core/test",
+} for "wbtest"
+
 options(
   "native-stub": [ "terminal.c" ],
   targets: { "ffi_native.mbt": [ "native", "llvm" ] },

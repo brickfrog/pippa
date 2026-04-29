@@ -764,7 +764,7 @@ fn hex_to_rgb(hex : String) -> (Int, Int, Int)? {
     }
     Some(buf.to_string())
   } else if view.length() == 6 {
-    Some(view.to_string())
+    Some(view.to_owned())
   } else {
     None
   }

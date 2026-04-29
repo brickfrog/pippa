@@ -64,6 +64,7 @@ pub(all) struct Program[Model, Msg] {
 
 ///|
 /// Terminal control requests that can be sent through `ProgramHandle`.
+#warnings("-unused_constructor")
 priv enum RuntimeControl {
   ReleaseTerminal
   RestoreTerminal
@@ -515,7 +516,7 @@ fn[Msg] queue_cmd_effects(
           [head, .. tail] => {
             queue_cmd_effects(head, now, pending, timers, sequences)
             if !tail.is_empty() {
-              sequences.push_back(tail.to_array())
+              sequences.push_back(tail.to_owned())
             }
           }
         }
@@ -846,7 +847,7 @@ fn[Model, Msg] drain_runtime(
         Some([head, .. tail]) => {
           queue_cmd_effects(head, pippa_now_ms(), pending, timers, sequences)
           if !tail.is_empty() {
-            sequences.push_back(tail.to_array())
+            sequences.push_back(tail.to_owned())
           }
           progressed = true
         }

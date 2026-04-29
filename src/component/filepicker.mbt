@@ -67,13 +67,13 @@ fn filepicker_parent_dir(path : String) -> String {
     return if path == "" { "." } else { path }
   }
   let trimmed = if path.length() > 1 && path.has_suffix("/") {
-    path[:path.length() - 1].to_string()
+    path[:path.length() - 1].to_owned()
   } else {
     path
   }
   match trimmed.rev_find("/") {
     Some(0) => "/"
-    Some(i) => trimmed[:i].to_string()
+    Some(i) => trimmed[:i].to_owned()
     None => "."
   }
 }
@@ -120,7 +120,7 @@ fn filepicker_parse_entries(path : String, raw : Bytes) -> Array[FileEntry] {
   }
   let encoded = @utf8.decode_lossy(raw[:])
   let nul = String::from_array([(0 : Int).unsafe_to_char()])
-  let parts = encoded.split(nul[:]).map(StringView::to_string).collect()
+  let parts = encoded.split(nul[:]).map(StringView::to_owned).collect()
   let entries : Array[FileEntry] = []
   let mut i = 0
   while i + 1 < parts.length() {

@@ -167,7 +167,7 @@ pub fn list(
           let next_filter = if chars.is_empty() {
             ""
           } else {
-            list_chars_to_string(chars[0:chars.length() - 1].to_array())
+            list_chars_to_string(chars[0:chars.length() - 1].to_owned())
           }
           list_normalize(
             model.items,

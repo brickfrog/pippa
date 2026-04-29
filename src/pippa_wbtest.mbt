@@ -41,7 +41,7 @@ test "pippa cmd batch preserves all action kinds" {
     _ => fail("expected After action")
   }
   match batched.actions[1] {
-    Perform(task) => assert_eq(task(), Some(2))
+    Perform(task) => @test.assert_eq(task(), Some(2))
     _ => fail("expected Perform action")
   }
   match batched.actions[2] {
@@ -73,7 +73,7 @@ test "pippa cmd map transforms perform and after results lazily" {
   )
   value = 9
   match mapped.actions[0] {
-    Perform(task) => assert_eq(task(), Some("9"))
+    Perform(task) => @test.assert_eq(task(), Some("9"))
     _ => fail("expected Perform action")
   }
   match mapped.actions[1] {
@@ -90,7 +90,7 @@ test "pippa cmd sequence collapses empty commands" {
   let cmd : Cmd[Int] = Cmd::sequence([Cmd::none(), Cmd::msg(1), Cmd::none()])
   assert_eq(cmd.actions.length(), 1)
   match cmd.actions[0] {
-    Perform(task) => assert_eq(task(), Some(1))
+    Perform(task) => @test.assert_eq(task(), Some(1))
     _ => fail("expected collapsed immediate command")
   }
 }
@@ -110,7 +110,7 @@ test "pippa cmd map transforms nested sequence lazily" {
   match mapped.actions[0] {
     Sequence([first, second]) => {
       match first.actions[0] {
-        Perform(task) => assert_eq(task(), Some("8"))
+        Perform(task) => @test.assert_eq(task(), Some("8"))
         _ => fail("expected Perform action")
       }
       match second.actions[0] {
@@ -138,7 +138,7 @@ test "pippa program handle send queues messages until closed" {
     closed,
   }
   assert_true(handle.send(7))
-  assert_eq(pending_msgs.pop(), Some(7))
+  @test.assert_eq(pending_msgs.pop(), Some(7))
   assert_true(handle.release_terminal())
   match pending_controls.pop() {
     Some(ReleaseTerminal) => ()
@@ -152,7 +152,7 @@ test "pippa program handle send queues messages until closed" {
   closed.val = true
   assert_false(handle.send(8))
   assert_false(handle.release_terminal())
-  assert_eq(pending_msgs.pop(), None)
+  @test.assert_eq(pending_msgs.pop(), None)
   assert_true(pending_controls.pop() is None)
 }
 
@@ -429,7 +429,7 @@ test "pippa window size option seeds initial resize message" {
     .headless()
     .with_window_size(80, 24)
   program.run()
-  assert_eq(seen.val, Some(80024))
+  @test.assert_eq(seen.val, Some(80024))
 }
 
 ///|

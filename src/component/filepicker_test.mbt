@@ -22,7 +22,7 @@ test "filepicker selection and hidden toggle update the model" {
   let toggled = (c.update)(model, ToggleHidden).model
   assert_eq(toggled.show_hidden, true)
   let selected = (c.update)({ ..toggled, cursor: 2 }, Select).model
-  assert_eq(selected.selected_path, Some("moon.mod.json"))
+  @test.assert_eq(selected.selected_path, Some("moon.mod.json"))
 }
 
 ///|
@@ -97,5 +97,5 @@ test "filepicker scan chunks append entries and keep loading until finished" {
   assert_false(chunked.cmd.is_none())
   let finished = (c.update)(chunked.model, ScanFinished(".", 7))
   assert_false(finished.model.loading)
-  assert_eq(finished.model.scan_handle, None)
+  @test.assert_eq(finished.model.scan_handle, None)
 }

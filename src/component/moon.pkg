@@ -5,6 +5,14 @@ import {
   "moonbitlang/core/math",
 }
 
+import {
+  "moonbitlang/core/test",
+} for "test"
+
+import {
+  "moonbitlang/core/test",
+} for "wbtest"
+
 options(
   "native-stub": [ "filepicker_native.c" ],
   targets: { "filepicker_ffi_native.mbt": [ "native", "llvm" ] },

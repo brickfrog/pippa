@@ -39,7 +39,15 @@ test "filepicker parse_entries keeps directories first" {
     nul)[:],
   )
   let entries = filepicker_parse_entries(".", raw)
-  assert_eq(entries[0], { name: "alpha", path: "alpha", is_dir: true })
-  assert_eq(entries[1], { name: "beta.txt", path: "beta.txt", is_dir: false })
-  assert_eq(entries[2], { name: "zeta.txt", path: "zeta.txt", is_dir: false })
+  @test.assert_eq(entries[0], { name: "alpha", path: "alpha", is_dir: true })
+  @test.assert_eq(entries[1], {
+    name: "beta.txt",
+    path: "beta.txt",
+    is_dir: false,
+  })
+  @test.assert_eq(entries[2], {
+    name: "zeta.txt",
+    path: "zeta.txt",
+    is_dir: false,
+  })
 }
