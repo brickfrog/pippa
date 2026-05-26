@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "pippa",
+  "project_id": "d942e233-41d4-4ea7-810e-22c935638f86"
+}
