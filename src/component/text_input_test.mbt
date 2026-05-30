@@ -17,6 +17,7 @@ fn text_input_test_model(
     echo_mode: Normal,
     char_limit: None,
     validation: Valid,
+    suggestions: { items: [], selected: 0 },
     focused,
     disabled: false,
   }
@@ -415,6 +416,7 @@ test "text_input: viewport slice preserves wide glyph cells" {
     echo_mode: Normal,
     char_limit: None,
     validation: Valid,
+    suggestions: { items: [], selected: 0 },
     disabled: false,
   }
   assert_eq((comp.view)(model), " |")
@@ -454,4 +456,135 @@ test "text_input: disabled ignores input and blur hides cursor" {
   assert_eq((comp.view)(m2), "ab|")
   let blurred = (comp.update)(m2, Blur).model
   assert_eq((comp.view)(blurred), "ab")
+}
+
+///|
+test "text_input: word movement follows grapheme safe mixed boundaries" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let value = "foo  bar.baz\{accented}界字"
+  let comp = text_input(placeholder="")
+  let end = value.to_array().length()
+  let model = text_input_test_model(value~, cursor=end, focused=true)
+  let m1 = (comp.update)(model, MoveWordLeft).model
+  let m2 = (comp.update)(m1, MoveWordLeft).model
+  let m3 = (comp.update)(m2, MoveWordLeft).model
+  let m4 = (comp.update)(m3, MoveWordLeft).model
+  let m5 = (comp.update)(m4, MoveWordLeft).model
+  let m6 = (comp.update)(m5, MoveWordLeft).model
+  assert_eq(m1.cursor, 14)
+  assert_eq(m2.cursor, 9)
+  assert_eq(m3.cursor, 8)
+  assert_eq(m4.cursor, 5)
+  assert_eq(m5.cursor, 3)
+  assert_eq(m6.cursor, 0)
+
+  let start = { ..model, cursor: 0 }
+  let r1 = (comp.update)(start, MoveWordRight).model
+  let r2 = (comp.update)(r1, MoveWordRight).model
+  let r3 = (comp.update)(r2, MoveWordRight).model
+  let r4 = (comp.update)(r3, MoveWordRight).model
+  let r5 = (comp.update)(r4, MoveWordRight).model
+  let r6 = (comp.update)(r5, MoveWordRight).model
+  assert_eq(r1.cursor, 3)
+  assert_eq(r2.cursor, 5)
+  assert_eq(r3.cursor, 8)
+  assert_eq(r4.cursor, 9)
+  assert_eq(r5.cursor, 14)
+  assert_eq(r6.cursor, end)
+}
+
+///|
+test "text_input: word delete removes mixed runs without splitting clusters" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let value = "foo  bar.baz\{accented}界字"
+  let comp = text_input(placeholder="")
+  let end = value.to_array().length()
+  let model = text_input_test_model(value~, cursor=end, focused=true)
+  let m1 = (comp.update)(model, DeleteWordBackward).model
+  let m2 = (comp.update)(m1, DeleteWordBackward).model
+  let m3 = (comp.update)(m2, DeleteWordBackward).model
+  assert_eq(m1.value, "foo  bar.baz\{accented}")
+  assert_eq(m1.cursor, 14)
+  assert_eq(m2.value, "foo  bar.")
+  assert_eq(m2.cursor, 9)
+  assert_eq(m3.value, "foo  bar")
+  assert_eq(m3.cursor, 8)
+
+  let f1 = (comp.update)({ ..model, cursor: 0 }, DeleteWordForward).model
+  let f2 = (comp.update)(f1, DeleteWordForward).model
+  assert_eq(f1.value, "  bar.baz\{accented}界字")
+  assert_eq(f1.cursor, 0)
+  assert_eq(f2.value, "bar.baz\{accented}界字")
+  assert_eq(f2.cursor, 0)
+}
+
+///|
+test "text_input: paste input event inserts once and truncates at grapheme limit" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  let validation_calls = Ref(0)
+  let comp = text_input(placeholder="", char_limit=Some(2), validator=fn(
+    _value,
+  ) {
+    validation_calls.val = validation_calls.val + 1
+    Ok(())
+  })
+  let m0 = (comp.init)().model
+  assert_eq(validation_calls.val, 1)
+  let m1 = (comp.update)(
+      m0,
+      HandleInput(@pippa.Paste("\{accented}\{technologist}x")),
+    ).model
+  assert_eq(m1.value, "\{accented}\{technologist}")
+  assert_eq(m1.cursor, m1.value.to_array().length())
+  assert_eq(validation_calls.val, 2)
+}
+
+///|
+test "text_input: suggestions render ghost hint cycle and accept current" {
+  let comp = text_input(placeholder="", suggestions=["apple", "apricot"])
+  let m0 = (comp.init)().model
+  let m1 = (comp.update)(m0, Focus).model
+  let m2 = (comp.update)(m1, InsertText("ap")).model
+  assert_eq((comp.view)(m2), "ap|\u{1b}[2mple\u{1b}[0m")
+  assert_eq(m2.value, "ap")
+  let m3 = (comp.update)(m2, CycleSuggestionNext).model
+  assert_eq((comp.view)(m3), "ap|\u{1b}[2mricot\u{1b}[0m")
+  let m4 = (comp.update)(m3, AcceptSuggestion).model
+  assert_eq(m4.value, "apricot")
+  assert_eq(m4.cursor, 7)
+  assert_eq((comp.view)(m4), "apricot|")
+}
+
+///|
+test "text_input: accepting suggestion respects char limit at cluster boundary" {
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  let comp = text_input(
+    placeholder="",
+    suggestions=["a\{technologist}界"],
+    char_limit=Some(2),
+  )
+  let m0 = (comp.init)().model
+  let m1 = (comp.update)(m0, AcceptSuggestion).model
+  assert_eq(m1.value, "a\{technologist}")
+  assert_eq(m1.cursor, m1.value.to_array().length())
+}
+
+///|
+test "text_input: keymap override changes binding action" {
+  let keymap : TextInputKeymap = {
+    bindings: [
+      {
+        binding: { keys: ["left"], help: "word left" },
+        action: TextInputActionMoveWordLeft,
+      },
+    ],
+  }
+  let comp = text_input(placeholder="", keymap~)
+  let model = text_input_test_model(value="foo bar", cursor=7, focused=true)
+  let moved = (comp.update)(
+      model,
+      HandleInput(@pippa.Key(@pippa.Special("left"))),
+    ).model
+  assert_eq(moved.cursor, 4)
 }
