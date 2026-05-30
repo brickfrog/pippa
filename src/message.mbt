@@ -65,6 +65,41 @@ pub(all) struct EnhancedKeyMsg {
 } derive(Debug, Eq)
 
 ///|
+/// 1-based cursor location reported by a terminal CPR reply.
+pub(all) struct CursorPositionReply {
+  /// 1-based terminal row.
+  row : Int
+  /// 1-based terminal column.
+  col : Int
+} derive(Debug, Eq)
+
+///|
+/// Color value reported by OSC terminal color queries.
+pub(all) enum TerminalColorReply {
+  /// OSC 10 foreground color reply payload.
+  ForegroundColor(String)
+  /// OSC 11 background color reply payload.
+  BackgroundColor(String)
+  /// OSC 4 palette color reply payload for the given palette index.
+  PaletteColor(Int, String)
+} derive(Debug, Eq)
+
+///|
+/// Replies emitted by terminal query sequences.
+pub(all) enum TerminalReplyMsg {
+  /// Cursor position report: CSI row ; col R.
+  CursorPosition(CursorPositionReply)
+  /// Primary device attributes: CSI ? params c.
+  DeviceAttributes(Array[Int])
+  /// Secondary device attributes / terminal version: CSI > params c.
+  SecondaryDeviceAttributes(Array[Int])
+  /// OSC color query reply.
+  Color(TerminalColorReply)
+  /// A structurally complete reply that Pippa does not decode yet.
+  UnknownReply(Bytes)
+} derive(Debug, Eq)
+
+///|
 /// Represents a mouse event.
 pub(all) struct MouseMsg {
   /// The button or wheel direction reported by the terminal.

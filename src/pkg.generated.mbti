@@ -173,6 +173,11 @@ pub(all) enum Color {
   Hex(String)
 } derive(Eq, @debug.Debug)
 
+pub(all) struct CursorPositionReply {
+  row : Int
+  col : Int
+} derive(Eq, @debug.Debug)
+
 pub(all) enum EnhancedKeyCode {
   UnicodeKey(Int)
   FunctionalKey(Int)
@@ -216,6 +221,7 @@ pub(all) enum InputEvent {
   Focus
   Blur
   Paste(String)
+  TerminalReply(TerminalReplyMsg)
   Unknown(Bytes)
 } derive(Eq, @debug.Debug)
 
@@ -389,6 +395,20 @@ pub fn Style::render(Self, String) -> String
 pub fn Style::reverse(Self) -> Self
 pub fn Style::underline(Self) -> Self
 pub fn Style::width(Self, Int) -> Self
+
+pub(all) enum TerminalColorReply {
+  ForegroundColor(String)
+  BackgroundColor(String)
+  PaletteColor(Int, String)
+} derive(Eq, @debug.Debug)
+
+pub(all) enum TerminalReplyMsg {
+  CursorPosition(CursorPositionReply)
+  DeviceAttributes(Array[Int])
+  SecondaryDeviceAttributes(Array[Int])
+  Color(TerminalColorReply)
+  UnknownReply(Bytes)
+} derive(Eq, @debug.Debug)
 
 pub(all) struct UpdateResult[Model, Msg] {
   model : Model

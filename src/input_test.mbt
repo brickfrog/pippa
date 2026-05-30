@@ -144,6 +144,14 @@ test "parse_input: Alt+a" {
 }
 
 ///|
+test "parse_input: Alt+] is not shadowed by OSC" {
+  let bare = Bytes::from_array([b'\x1b', b']'])
+  assert_eq(parse_input(bare[:]), Ok(Key(Modified("alt", "]")), 2))
+  let followed = Bytes::from_array([b'\x1b', b']', b'x'])
+  assert_eq(parse_input(followed[:]), Ok(Key(Modified("alt", "]")), 2))
+}
+
+///|
 test "parse_input: Ctrl+c (0x03)" {
   let bytes = Bytes::from_array([b'\x03'])
   let bv = bytes[0:bytes.length()]
@@ -451,6 +459,96 @@ test "parse_input: bracketed paste" {
     b'0', b'1', b'~',
   ])
   assert_eq(parse_input(pasted[:]), Ok(Paste("hi\n"), 15))
+}
+
+///|
+test "parse_all: bracketed paste multiline payload is one event" {
+  let bytes = @utf8.encode("\u001b[200~alpha\nbeta\ngamma\u001b[201~x")
+  let (events, leftover) = parse_all(bytes[:])
+  assert_eq(events.length(), 2)
+  assert_eq(events[0], Paste("alpha\nbeta\ngamma"))
+  assert_eq(events[1], Key(Char('x')))
+  assert_eq(leftover.length(), 0)
+}
+
+///|
+test "parse_input: unterminated bracketed paste is incomplete" {
+  let bytes = @utf8.encode("\u001b[200~alpha\nbeta")
+  assert_eq(parse_input(bytes[:]), Incomplete)
+  let (events, leftover) = parse_all(bytes[:])
+  assert_eq(events.length(), 0)
+  assert_eq(leftover, bytes)
+}
+
+///|
+test "parse_input: cursor position reply is typed" {
+  let bytes = @utf8.encode("\u001b[12;34R")
+  assert_eq(
+    parse_input(bytes[:]),
+    Ok(TerminalReply(CursorPosition({ row: 12, col: 34 })), bytes.length()),
+  )
+}
+
+///|
+test "parse_input: device attributes replies are typed" {
+  let da1 = @utf8.encode("\u001b[?1;2c")
+  assert_eq(
+    parse_input(da1[:]),
+    Ok(TerminalReply(DeviceAttributes([1, 2])), da1.length()),
+  )
+  let da2 = @utf8.encode("\u001b[>0;95;0c")
+  assert_eq(
+    parse_input(da2[:]),
+    Ok(TerminalReply(SecondaryDeviceAttributes([0, 95, 0])), da2.length()),
+  )
+}
+
+///|
+test "parse_input: OSC color replies are typed" {
+  let foreground = @utf8.encode("\u001b]10;rgb:ffff/eeee/dddd\u001b\\")
+  assert_eq(
+    parse_input(foreground[:]),
+    Ok(
+      TerminalReply(Color(ForegroundColor("rgb:ffff/eeee/dddd"))),
+      foreground.length(),
+    ),
+  )
+  let background = @utf8.encode("\u001b]11;rgb:0000/1111/2222\u0007")
+  assert_eq(
+    parse_input(background[:]),
+    Ok(
+      TerminalReply(Color(BackgroundColor("rgb:0000/1111/2222"))),
+      background.length(),
+    ),
+  )
+  let palette = @utf8.encode("\u001b]4;2;rgb:aaaa/bbbb/cccc\u0007")
+  assert_eq(
+    parse_input(palette[:]),
+    Ok(
+      TerminalReply(Color(PaletteColor(2, "rgb:aaaa/bbbb/cccc"))),
+      palette.length(),
+    ),
+  )
+}
+
+///|
+test "parse_input: unterminated OSC color reply is incomplete" {
+  let bytes = @utf8.encode("\u001b]11;")
+  assert_eq(parse_input(bytes[:]), Incomplete)
+}
+
+///|
+test "parse_input: unknown well-formed reply is typed" {
+  let bytes = @utf8.encode("\u001b[?2026n")
+  assert_eq(
+    parse_input(bytes[:]),
+    Ok(TerminalReply(UnknownReply(bytes)), bytes.length()),
+  )
+  let window_size = @utf8.encode("\u001b[8;24;80t")
+  assert_eq(
+    parse_input(window_size[:]),
+    Ok(TerminalReply(UnknownReply(window_size)), window_size.length()),
+  )
 }
 
 ///|
