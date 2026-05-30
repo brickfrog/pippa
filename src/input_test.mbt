@@ -2,6 +2,14 @@
 /// Tests for the ANSI input parser.
 
 ///|
+fn assert_not_special(evt : InputEvent) -> Unit raise {
+  match evt {
+    Key(Special(name)) => fail("valid UTF-8 text became Special(\{name})")
+    _ => ()
+  }
+}
+
+///|
 test "parse_input: empty bytes returns Incomplete" {
   let bytes = Bytes::from_array([])
   let bv = bytes[0:bytes.length()]
@@ -12,7 +20,60 @@ test "parse_input: empty bytes returns Incomplete" {
 test "parse_input: printable ASCII" {
   let bytes = Bytes::from_array([b'A'])
   let bv = bytes[0:bytes.length()]
-  assert_eq(parse_input(bv), Ok(Key(Char('A')), 1))
+  let parsed = parse_input(bv)
+  assert_eq(parsed, Ok(Key(Char('A')), 1))
+  match parsed {
+    Ok(evt, _) => assert_not_special(evt)
+    _ => fail("expected ASCII text event")
+  }
+}
+
+///|
+test "parse_input: UTF-8 two-byte scalar" {
+  let bytes = Bytes::from_array([b'\xC3', b'\xA9'])
+  let parsed = parse_input(bytes[:])
+  assert_eq(parsed, Ok(Key(Char('é')), 2))
+  match parsed {
+    Ok(evt, _) => assert_not_special(evt)
+    _ => fail("expected UTF-8 text event")
+  }
+}
+
+///|
+test "parse_input: UTF-8 wide CJK scalar" {
+  let bytes = Bytes::from_array([b'\xE7', b'\x95', b'\x8C'])
+  let parsed = parse_input(bytes[:])
+  assert_eq(parsed, Ok(Key(Char('界')), 3))
+  match parsed {
+    Ok(evt, _) => assert_not_special(evt)
+    _ => fail("expected UTF-8 text event")
+  }
+}
+
+///|
+test "parse_input: combining mark grapheme stays one text event" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let bytes = Bytes::from_array([b'e', b'\xCC', b'\x81'])
+  let parsed = parse_input(bytes[:])
+  assert_eq(parsed, Ok(Key(Text(accented)), 3))
+  match parsed {
+    Ok(evt, _) => assert_not_special(evt)
+    _ => fail("expected UTF-8 text event")
+  }
+}
+
+///|
+test "parse_all: split UTF-8 scalar waits for completion" {
+  let first = Bytes::from_array([b'\xC3'])
+  let (first_events, first_leftover) = parse_all(first[:])
+  assert_eq(first_events.length(), 0)
+  assert_eq(first_leftover.to_array(), [b'\xC3'])
+  let second = Bytes::from_array([..first_leftover.to_array(), b'\xA9'])
+  let (events, leftover) = parse_all(second[:])
+  assert_eq(events.length(), 1)
+  assert_eq(events[0], Key(Char('é')))
+  assert_not_special(events[0])
+  assert_eq(leftover.length(), 0)
 }
 
 ///|
