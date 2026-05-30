@@ -195,12 +195,46 @@ test "text_input: cursor movement stays on grapheme boundaries" {
 }
 
 ///|
+test "text_input: cursor right steps over base combining cluster once" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let comp = text_input(placeholder="")
+  let model : TextInputModel = {
+    value: "\{accented}x",
+    cursor: 0,
+    placeholder: "",
+    focused: true,
+  }
+  let m1 = (comp.update)(model, MoveCursorRight).model
+  let m2 = (comp.update)(m1, MoveCursorRight).model
+  assert_eq(m1.cursor, 2)
+  assert_eq((comp.view)(m1), "\{accented}|x")
+  assert_eq(m2.cursor, 3)
+  assert_eq((comp.view)(m2), "\{accented}x|")
+}
+
+///|
 test "text_input: delete before removes a whole grapheme cluster" {
   let accented = String::from_array(['e', '\u{0301}'])
   let comp = text_input(placeholder="")
   let model : TextInputModel = {
     value: "\{accented}x",
     cursor: 2,
+    placeholder: "",
+    focused: true,
+  }
+  let next = (comp.update)(model, DeleteBefore).model
+  assert_eq(next.value, "x")
+  assert_eq(next.cursor, 0)
+  assert_eq((comp.view)(next), "|x")
+}
+
+///|
+test "text_input: delete before removes emoji ZWJ cluster as one unit" {
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  let comp = text_input(placeholder="")
+  let model : TextInputModel = {
+    value: "\{technologist}x",
+    cursor: technologist.to_array().length(),
     placeholder: "",
     focused: true,
   }
