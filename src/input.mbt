@@ -716,6 +716,41 @@ fn parse_osc(bv : BytesView) -> ParseResult[InputEvent] {
 }
 
 ///|
+fn hex_value(b : Int) -> Int? {
+  if b >= 0x30 && b <= 0x39 {
+    Some(b - 0x30)
+  } else if b >= 0x41 && b <= 0x46 {
+    Some(b - 0x41 + 10)
+  } else if b >= 0x61 && b <= 0x66 {
+    Some(b - 0x61 + 10)
+  } else {
+    None
+  }
+}
+
+///|
+fn decode_hex_slice(bv : BytesView, start : Int, end : Int) -> Bytes? {
+  if (end - start) % 2 != 0 {
+    return None
+  }
+  let decoded : Array[Byte] = []
+  let mut i = start
+  while i < end {
+    let high = match hex_value(bv[i].to_int()) {
+      Some(value) => value
+      None => return None
+    }
+    let low = match hex_value(bv[i + 1].to_int()) {
+      Some(value) => value
+      None => return None
+    }
+    decoded.push(((high << 4) | low).to_byte())
+    i = i + 2
+  }
+  Some(Bytes::from_array(decoded))
+}
+
+///|
 fn parse_capability_reply(
   bv : BytesView,
   payload_start : Int,
@@ -736,22 +771,27 @@ fn parse_capability_reply(
     return None
   }
   let data_start = payload_start + 3
+  let data = match decode_hex_slice(bv, data_start, payload_end) {
+    Some(bytes) => bytes
+    None => return None
+  }
+  let data_view = data[:]
   let mut separator = -1
-  let mut i = data_start
-  while i < payload_end {
-    if bv[i].to_int() == 0x3D {
+  let mut i = 0
+  while i < data_view.length() {
+    if data_view[i].to_int() == 0x3D {
       separator = i
       break
     }
     i = i + 1
   }
-  let name_end = if separator >= 0 { separator } else { payload_end }
-  if name_end <= data_start {
+  let name_end = if separator >= 0 { separator } else { data_view.length() }
+  if name_end <= 0 {
     return None
   }
-  let name = decode_slice_lossy(bv, data_start, name_end)
+  let name = decode_slice_lossy(data_view, 0, name_end)
   let value = if separator >= 0 {
-    Some(decode_slice_lossy(bv, separator + 1, payload_end))
+    Some(decode_slice_lossy(data_view, separator + 1, data_view.length()))
   } else {
     None
   }

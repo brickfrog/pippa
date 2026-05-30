@@ -181,7 +181,7 @@ test "pippa terminal query commands round-trip through typed replies" {
   assert_terminal_query_round_trip(
     Cmd::request_capability("Co"),
     "\u001bP+q436f\u001b\\",
-    "\u001bP1+rCo=256\u001b\\",
+    "\u001bP1+r436f3d323536\u001b\\",
     Capability({ name: "Co", value: Some("256"), valid: true }),
   )
   assert_terminal_query_round_trip(
@@ -206,7 +206,7 @@ test "pippa terminal mode commands emit focus and paste control sequences" {
 
 ///|
 test "parse_input: capability replies handle invalid and partial payloads" {
-  let invalid = @utf8.encode("\u001bP0+rCo\u001b\\")
+  let invalid = @utf8.encode("\u001bP0+r436f\u001b\\")
   @test.assert_eq(
     parse_input(invalid[:]),
     Ok(
@@ -214,9 +214,9 @@ test "parse_input: capability replies handle invalid and partial payloads" {
       invalid.length(),
     ),
   )
-  let partial = @utf8.encode("\u001bP1+rCo=256")
+  let partial = @utf8.encode("\u001bP1+r436f3d323536")
   @test.assert_eq(parse_input(partial[:]), Incomplete)
-  let malformed = @utf8.encode("\u001bP1+r=256\u001b\\")
+  let malformed = @utf8.encode("\u001bP1+r3d323536\u001b\\")
   @test.assert_eq(
     parse_input(malformed[:]),
     Ok(TerminalReply(UnknownReply(malformed)), malformed.length()),
