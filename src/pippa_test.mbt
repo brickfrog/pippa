@@ -45,12 +45,12 @@ test "pippa ansi enter alternate screen" {
 
 ///|
 test "pippa ansi enable mouse" {
-  inspect(enable_mouse(), content="\u001b[?1000h")
+  inspect(enable_mouse(), content="\u001b[?1000h\u001b[?1006h")
 }
 
 ///|
 test "pippa ansi enable mouse motion" {
-  inspect(enable_mouse_motion(), content="\u001b[?1003h")
+  inspect(enable_mouse_motion(), content="\u001b[?1003h\u001b[?1006h")
 }
 
 ///|
@@ -65,7 +65,7 @@ test "pippa ansi enable bracketed paste" {
 
 ///|
 test "pippa ansi disable mouse" {
-  inspect(disable_mouse(), content="\u001b[?1000l\u001b[?1003l")
+  inspect(disable_mouse(), content="\u001b[?1000l\u001b[?1003l\u001b[?1006l")
 }
 
 ///|

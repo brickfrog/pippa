@@ -249,6 +249,114 @@ fn parse_bracketed_paste(
 }
 
 ///|
+fn mouse_modifiers(cb : Int) -> Array[MouseModifier] {
+  let modifiers : Array[MouseModifier] = []
+  if (cb & 0x04) != 0 {
+    modifiers.push(MouseShift)
+  }
+  if (cb & 0x08) != 0 {
+    modifiers.push(MouseAlt)
+  }
+  if (cb & 0x10) != 0 {
+    modifiers.push(MouseCtrl)
+  }
+  modifiers
+}
+
+///|
+fn mouse_button(cb : Int) -> MouseButton {
+  let low = cb & 0x03
+  if (cb & 0x40) != 0 {
+    match low {
+      0 => MouseWheelUp
+      1 => MouseWheelDown
+      2 => MouseWheelLeft
+      _ => MouseWheelRight
+    }
+  } else {
+    match low {
+      0 => MouseLeft
+      1 => MouseMiddle
+      2 => MouseRight
+      _ => MouseNoButton
+    }
+  }
+}
+
+///|
+fn is_no_button_report(cb : Int) -> Bool {
+  (cb & 0x40) == 0 && (cb & 0x03) == 0x03
+}
+
+///|
+fn parse_sgr_mouse(bv : BytesView) -> ParseResult[InputEvent] {
+  let n = bv.length()
+  let mut final_index = 3
+  while final_index < n {
+    let b = bv[final_index].to_int()
+    if b == 0x4D || b == 0x6D {
+      let values : Array[Int] = []
+      let mut value = 0
+      let mut has_digit = false
+      let mut j = 3
+      while j < final_index {
+        let part = bv[j].to_int()
+        if part >= 0x30 && part <= 0x39 {
+          value = value * 10 + part - 0x30
+          has_digit = true
+        } else if part == 0x3B {
+          if !has_digit {
+            return Invalid("empty SGR mouse parameter")
+          }
+          values.push(value)
+          value = 0
+          has_digit = false
+        } else {
+          return Invalid("invalid byte \{part} in SGR mouse sequence")
+        }
+        j = j + 1
+      }
+      if !has_digit {
+        return Invalid("empty SGR mouse parameter")
+      }
+      values.push(value)
+      if values.length() != 3 {
+        return Invalid("SGR mouse report must contain Cb, Cx, and Cy")
+      }
+      let cb = values[0]
+      let col = values[1]
+      let row = values[2]
+      if col <= 0 || row <= 0 {
+        return Invalid("SGR mouse coordinates must be 1-based")
+      }
+      let is_wheel = (cb & 0x40) != 0
+      let action = if is_wheel {
+        MouseWheel
+      } else if b == 0x6D {
+        MouseRelease
+      } else if (cb & 0x20) != 0 {
+        MouseMotion
+      } else {
+        MousePress
+      }
+      if is_no_button_report(cb) && action != MouseMotion {
+        return Ok(unknown_event(bv, final_index + 1), final_index + 1)
+      }
+      let button = mouse_button(cb)
+      return Ok(
+        Mouse({ button, action, modifiers: mouse_modifiers(cb), col, row }),
+        final_index + 1,
+      )
+    } else if (b >= 0x30 && b <= 0x39) || b == 0x3B {
+      final_index = final_index + 1
+    } else {
+      return Invalid("invalid byte \{b} in SGR mouse sequence")
+    }
+  }
+  Incomplete
+}
+
+///|
 /// Parse an ANSI CSI sequence starting at `bv[0]` (which must be ESC).
 /// `bv[1]` must be `[` (0x5B) before calling this function.
 fn parse_csi(bv : BytesView) -> ParseResult[InputEvent] {
@@ -257,22 +365,9 @@ fn parse_csi(bv : BytesView) -> ParseResult[InputEvent] {
   if n < 3 {
     return Incomplete
   }
-  // X10 mouse report: ESC [ M cb cx cy
-  if bv[2].to_int() == 0x4D {
-    if n < 6 {
-      return Incomplete
-    }
-    let cb = bv[3].to_int() - 32
-    let cx = bv[4].to_int() - 32
-    let cy = bv[5].to_int() - 32
-    let evt = if (cb & 64) != 0 {
-      InputEvent::Mouse(MouseMsg::Motion(cx, cy))
-    } else if cb == 3 {
-      InputEvent::Mouse(MouseMsg::Release(cx, cy))
-    } else {
-      InputEvent::Mouse(MouseMsg::Press(cx, cy))
-    }
-    return Ok(evt, 6)
+  // SGR mouse report: ESC [ < Cb ; Cx ; Cy (M|m)
+  if bv[2].to_int() == 0x3C {
+    return parse_sgr_mouse(bv)
   }
   // Scan parameter / intermediate bytes until we hit the final byte.
   // Parameter bytes: 0x30-0x3F, intermediate bytes: 0x20-0x2F.

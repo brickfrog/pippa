@@ -181,6 +181,175 @@ test "parse_input: focus and blur events" {
 }
 
 ///|
+fn assert_sgr_mouse(raw : String, expected : MouseMsg) -> Unit raise {
+  let bytes = @utf8.encode(raw)
+  assert_eq(parse_input(bytes[:]), Ok(Mouse(expected), bytes.length()))
+}
+
+///|
+fn assert_sgr_unknown(raw : String) -> Unit raise {
+  let bytes = @utf8.encode(raw)
+  assert_eq(parse_input(bytes[:]), Ok(Unknown(bytes), bytes.length()))
+}
+
+///|
+fn assert_sgr_invalid(raw : String) -> Unit raise {
+  let bytes = @utf8.encode(raw)
+  match parse_input(bytes[:]) {
+    Invalid(_) => ()
+    _ => fail("expected Invalid")
+  }
+}
+
+///|
+test "parse_input: SGR mouse left press keeps coordinates" {
+  assert_sgr_mouse("\u001b[<0;12;34M", {
+    button: MouseLeft,
+    action: MousePress,
+    modifiers: [],
+    col: 12,
+    row: 34,
+  })
+}
+
+///|
+test "parse_input: SGR mouse middle and bare right press" {
+  assert_sgr_mouse("\u001b[<1;3;4M", {
+    button: MouseMiddle,
+    action: MousePress,
+    modifiers: [],
+    col: 3,
+    row: 4,
+  })
+  assert_sgr_mouse("\u001b[<2;5;6M", {
+    button: MouseRight,
+    action: MousePress,
+    modifiers: [],
+    col: 5,
+    row: 6,
+  })
+}
+
+///|
+test "parse_input: SGR mouse release keeps button" {
+  assert_sgr_mouse("\u001b[<0;12;34m", {
+    button: MouseLeft,
+    action: MouseRelease,
+    modifiers: [],
+    col: 12,
+    row: 34,
+  })
+}
+
+///|
+test "parse_input: SGR mouse drag reports motion" {
+  assert_sgr_mouse("\u001b[<32;5;6M", {
+    button: MouseLeft,
+    action: MouseMotion,
+    modifiers: [],
+    col: 5,
+    row: 6,
+  })
+}
+
+///|
+test "parse_input: SGR mouse no-button motion" {
+  assert_sgr_mouse("\u001b[<35;15;16M", {
+    button: MouseNoButton,
+    action: MouseMotion,
+    modifiers: [],
+    col: 15,
+    row: 16,
+  })
+}
+
+///|
+test "parse_input: SGR no-button press and release are unknown" {
+  assert_sgr_unknown("\u001b[<3;1;1M")
+  assert_sgr_unknown("\u001b[<3;1;1m")
+}
+
+///|
+test "parse_input: SGR mouse wheel up and down" {
+  assert_sgr_mouse("\u001b[<64;7;8M", {
+    button: MouseWheelUp,
+    action: MouseWheel,
+    modifiers: [],
+    col: 7,
+    row: 8,
+  })
+  assert_sgr_mouse("\u001b[<65;9;10M", {
+    button: MouseWheelDown,
+    action: MouseWheel,
+    modifiers: [],
+    col: 9,
+    row: 10,
+  })
+}
+
+///|
+test "parse_input: SGR mouse horizontal wheel reports" {
+  assert_sgr_mouse("\u001b[<66;11;12M", {
+    button: MouseWheelLeft,
+    action: MouseWheel,
+    modifiers: [],
+    col: 11,
+    row: 12,
+  })
+  assert_sgr_mouse("\u001b[<67;13;14M", {
+    button: MouseWheelRight,
+    action: MouseWheel,
+    modifiers: [],
+    col: 13,
+    row: 14,
+  })
+}
+
+///|
+test "parse_all: SGR horizontal wheel is consumed as one event" {
+  let bytes = @utf8.encode("\u001b[<66;11;12Mx")
+  let (events, leftover) = parse_all(bytes[:])
+  assert_eq(events.length(), 2)
+  assert_eq(
+    events[0],
+    Mouse({
+      button: MouseWheelLeft,
+      action: MouseWheel,
+      modifiers: [],
+      col: 11,
+      row: 12,
+    }),
+  )
+  assert_eq(events[1], Key(Char('x')))
+  assert_eq(leftover.length(), 0)
+}
+
+///|
+test "parse_input: SGR mouse shift alt ctrl modifiers" {
+  assert_sgr_mouse("\u001b[<30;120;45M", {
+    button: MouseRight,
+    action: MousePress,
+    modifiers: [MouseShift, MouseAlt, MouseCtrl],
+    col: 120,
+    row: 45,
+  })
+}
+
+///|
+test "parse_input: malformed SGR mouse sequences" {
+  assert_sgr_invalid("\u001b[<;1;1M")
+  assert_sgr_invalid("\u001b[<0;;1M")
+  assert_sgr_invalid("\u001b[<0;x;1M")
+  assert_sgr_invalid("\u001b[<0;1M")
+  let missing_final = @utf8.encode("\u001b[<0;1;1")
+  assert_eq(parse_input(missing_final[:]), Incomplete)
+  let split = @utf8.encode("\u001b[<0;1;")
+  let (events, leftover) = parse_all(split[:])
+  assert_eq(events.length(), 0)
+  assert_eq(leftover, split)
+}
+
+///|
 test "parse_input: bracketed paste" {
   let pasted = Bytes::from_array([
     b'\x1b', b'[', b'2', b'0', b'0', b'~', b'h', b'i', b'\n', b'\x1b', b'[', b'2',

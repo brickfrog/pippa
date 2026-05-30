@@ -200,10 +200,36 @@ pub(all) enum KeyMsg {
   Modified(String, String)
 } derive(Eq, @debug.Debug)
 
-pub(all) enum MouseMsg {
-  Motion(Int, Int)
-  Press(Int, Int)
-  Release(Int, Int)
+pub(all) enum MouseAction {
+  MousePress
+  MouseRelease
+  MouseMotion
+  MouseWheel
+} derive(Eq, @debug.Debug)
+
+pub(all) enum MouseButton {
+  MouseLeft
+  MouseMiddle
+  MouseRight
+  MouseNoButton
+  MouseWheelUp
+  MouseWheelDown
+  MouseWheelLeft
+  MouseWheelRight
+} derive(Eq, @debug.Debug)
+
+pub(all) enum MouseModifier {
+  MouseShift
+  MouseAlt
+  MouseCtrl
+} derive(Eq, @debug.Debug)
+
+pub(all) struct MouseMsg {
+  button : MouseButton
+  action : MouseAction
+  modifiers : Array[MouseModifier]
+  col : Int
+  row : Int
 } derive(Eq, @debug.Debug)
 
 pub(all) struct Nothing {
