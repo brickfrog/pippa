@@ -144,9 +144,13 @@ fn textarea_content_width(
   line_numbers : Bool,
   line_count : Int,
 ) -> Int {
-  (width.max(0) -
-  textarea_line_number_gutter_width(line_count, line_numbers) -
-  textarea_prompt_width(prompt)).max(0)
+  if width <= 0 {
+    0
+  } else {
+    (width -
+    textarea_line_number_gutter_width(line_count, line_numbers) -
+    textarea_prompt_width(prompt)).max(1)
+  }
 }
 
 ///|
@@ -342,7 +346,14 @@ fn textarea_visual_row_index_for_cursor(
   for i, visual in rows {
     if visual.logical_row == row {
       fallback = i
-      if col >= visual.start_col && col <= visual.end_col {
+      let final_visual_row = i + 1 >= rows.length() ||
+        rows[i + 1].logical_row != row
+      let contains_cursor = if final_visual_row {
+        col >= visual.start_col && col <= visual.end_col
+      } else {
+        col >= visual.start_col && col < visual.end_col
+      }
+      if contains_cursor {
         return i
       }
     }
@@ -369,7 +380,7 @@ fn textarea_normalize(
   min_height : Int,
   max_height : Int,
   scroll_row : Int,
-  scroll_col : Int,
+  _scroll_col : Int,
   prompt : String,
   line_numbers : Bool,
   char_limit : Int?,
@@ -402,16 +413,6 @@ fn textarea_normalize(
     visual_rows, row, col,
   )
   let mut next_scroll_row = scroll_row.max(0)
-  let mut next_scroll_col = scroll_col.max(0)
-  let cursor_cells = if cursor_visual_row < visual_rows.length() {
-    textarea_cursor_cell_in_visual_row(
-      lines,
-      visual_rows[cursor_visual_row],
-      col,
-    )
-  } else {
-    0
-  }
 
   if safe_height > 0 {
     if cursor_visual_row < next_scroll_row {
@@ -425,16 +426,6 @@ fn textarea_normalize(
     next_scroll_row = 0
   }
 
-  if content_width > 0 {
-    if cursor_cells < next_scroll_col {
-      next_scroll_col = cursor_cells
-    } else if cursor_cells >= next_scroll_col + content_width {
-      next_scroll_col = cursor_cells - content_width + 1
-    }
-  } else {
-    next_scroll_col = 0
-  }
-
   {
     value,
     cursor_row: row,
@@ -444,7 +435,7 @@ fn textarea_normalize(
     min_height: safe_min_height,
     max_height: safe_max_height,
     scroll_row: next_scroll_row,
-    scroll_col: next_scroll_col,
+    scroll_col: 0,
     cursor_visual_row,
     prompt,
     line_numbers,
@@ -1137,28 +1128,26 @@ fn textarea_render_visual_row(
     !model.disabled &&
     visual_index == cursor_visual_index &&
     visual.logical_row == model.cursor_row
-  let effective_scroll_col = if show_cursor || !model.focused {
-    model.scroll_col
-  } else {
-    0
-  }
   let source = if show_cursor {
     textarea_visual_line_with_cursor(line, model.cursor_col)
   } else {
     line
   }
-  let slice_width = if show_cursor && effective_scroll_col == 0 {
-    (visual.width + 1).max(1)
-  } else if effective_scroll_col == 0 {
-    visual.width
+  let cursor_at_full_row_end = show_cursor &&
+    model.cursor_col == visual.end_col &&
+    visual.width >= content_width &&
+    content_width > 0
+  let content = if cursor_at_full_row_end {
+    textarea_visible_slice(line, visual.start_cell, (content_width - 1).max(0)) +
+    "|"
   } else {
-    content_width
+    let slice_width = if show_cursor {
+      (visual.width + 1).max(1)
+    } else {
+      visual.width
+    }
+    textarea_visible_slice(source, visual.start_cell, slice_width)
   }
-  let content = textarea_visible_slice(
-    source,
-    visual.start_cell + effective_scroll_col,
-    slice_width,
-  )
   textarea_render_with_prefix(model, prefix, content, content_width)
 }
 
