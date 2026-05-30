@@ -7,6 +7,8 @@ import {
 }
 
 // Values
+pub fn default_text_input_keymap() -> TextInputKeymap
+
 pub fn filepicker(current_directory? : String, height? : Int, show_hidden? : Bool, allow_files? : Bool, allow_directories? : Bool, allowed_extensions? : Array[String]) -> Component[FilepickerModel, FilepickerMsg]
 
 pub fn list(items? : Array[String], page_size? : Int) -> Component[ListModel, ListMsg]
@@ -25,7 +27,9 @@ pub fn stopwatch(interval_ms? : Int) -> Component[StopwatchModel, StopwatchMsg]
 
 pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg]
 
-pub fn text_input(placeholder~ : String, prompt? : String, width? : Int, echo_mode? : TextInputEchoMode, char_limit? : Int?, disabled? : Bool, validator? : (String) -> Result[Unit, String]) -> Component[TextInputModel, TextInputMsg]
+pub fn text_input(placeholder~ : String, prompt? : String, width? : Int, echo_mode? : TextInputEchoMode, char_limit? : Int?, suggestions? : Array[String], keymap? : TextInputKeymap, disabled? : Bool, validator? : (String) -> Result[Unit, String]) -> Component[TextInputModel, TextInputMsg]
+
+pub fn text_input_msg_from_input_event(@pippa.InputEvent, keymap? : TextInputKeymap) -> TextInputMsg?
 
 pub fn textarea(width~ : Int, height~ : Int, placeholder? : String) -> Component[TextareaModel, TextareaMsg]
 
@@ -207,6 +211,31 @@ pub(all) enum TextInputEchoMode {
   Hidden
 } derive(Eq, @debug.Debug)
 
+pub(all) enum TextInputEditingAction {
+  TextInputActionMoveCursorLeft
+  TextInputActionMoveCursorRight
+  TextInputActionMoveWordLeft
+  TextInputActionMoveWordRight
+  TextInputActionDeleteBefore
+  TextInputActionDeleteAfter
+  TextInputActionDeleteWordBackward
+  TextInputActionDeleteWordForward
+  TextInputActionMoveToStart
+  TextInputActionMoveToEnd
+  TextInputActionAcceptSuggestion
+  TextInputActionCycleSuggestionNext
+  TextInputActionCycleSuggestionPrev
+} derive(Eq, @debug.Debug)
+
+pub(all) struct TextInputKeyBinding {
+  binding : @pippa.Binding
+  action : TextInputEditingAction
+} derive(Eq, @debug.Debug)
+
+pub(all) struct TextInputKeymap {
+  bindings : Array[TextInputKeyBinding]
+} derive(Eq, @debug.Debug)
+
 pub(all) struct TextInputModel {
   value : String
   cursor : Int
@@ -217,6 +246,7 @@ pub(all) struct TextInputModel {
   echo_mode : TextInputEchoMode
   char_limit : Int?
   validation : TextInputValidation
+  suggestions : TextInputSuggestionState
   focused : Bool
   disabled : Bool
 } derive(Eq, @debug.Debug)
@@ -228,10 +258,24 @@ pub(all) enum TextInputMsg {
   DeleteAfter
   MoveCursorLeft
   MoveCursorRight
+  MoveWordLeft
+  MoveWordRight
+  DeleteWordBackward
+  DeleteWordForward
   MoveToStart
   MoveToEnd
+  AcceptSuggestion
+  CycleSuggestionNext
+  CycleSuggestionPrev
+  SetSuggestions(Array[String])
+  HandleInput(@pippa.InputEvent)
   Focus
   Blur
+} derive(Eq, @debug.Debug)
+
+pub(all) struct TextInputSuggestionState {
+  items : Array[String]
+  selected : Int
 } derive(Eq, @debug.Debug)
 
 pub(all) enum TextInputValidation {
