@@ -284,6 +284,11 @@ fn mouse_button(cb : Int) -> MouseButton {
 }
 
 ///|
+fn is_no_button_report(cb : Int) -> Bool {
+  (cb & 0x40) == 0 && (cb & 0x03) == 0x03
+}
+
+///|
 fn parse_sgr_mouse(bv : BytesView) -> ParseResult[InputEvent] {
   let n = bv.length()
   let mut final_index = 3
@@ -333,6 +338,9 @@ fn parse_sgr_mouse(bv : BytesView) -> ParseResult[InputEvent] {
         MouseMotion
       } else {
         MousePress
+      }
+      if is_no_button_report(cb) && action != MouseMotion {
+        return Ok(unknown_event(bv, final_index + 1), final_index + 1)
       }
       let button = mouse_button(cb)
       return Ok(

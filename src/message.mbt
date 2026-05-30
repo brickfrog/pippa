@@ -33,7 +33,7 @@ pub(all) struct MouseMsg {
 } derive(Debug, Eq)
 
 ///|
-/// Mouse button or wheel direction.
+/// Mouse button, no-button motion sentinel, or wheel scroll direction.
 pub(all) enum MouseButton {
   MouseLeft
   MouseMiddle

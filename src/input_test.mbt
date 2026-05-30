@@ -187,6 +187,21 @@ fn assert_sgr_mouse(raw : String, expected : MouseMsg) -> Unit raise {
 }
 
 ///|
+fn assert_sgr_unknown(raw : String) -> Unit raise {
+  let bytes = @utf8.encode(raw)
+  assert_eq(parse_input(bytes[:]), Ok(Unknown(bytes), bytes.length()))
+}
+
+///|
+fn assert_sgr_invalid(raw : String) -> Unit raise {
+  let bytes = @utf8.encode(raw)
+  match parse_input(bytes[:]) {
+    Invalid(_) => ()
+    _ => fail("expected Invalid")
+  }
+}
+
+///|
 test "parse_input: SGR mouse left press keeps coordinates" {
   assert_sgr_mouse("\u001b[<0;12;34M", {
     button: MouseLeft,
@@ -194,6 +209,24 @@ test "parse_input: SGR mouse left press keeps coordinates" {
     modifiers: [],
     col: 12,
     row: 34,
+  })
+}
+
+///|
+test "parse_input: SGR mouse middle and bare right press" {
+  assert_sgr_mouse("\u001b[<1;3;4M", {
+    button: MouseMiddle,
+    action: MousePress,
+    modifiers: [],
+    col: 3,
+    row: 4,
+  })
+  assert_sgr_mouse("\u001b[<2;5;6M", {
+    button: MouseRight,
+    action: MousePress,
+    modifiers: [],
+    col: 5,
+    row: 6,
   })
 }
 
@@ -217,6 +250,23 @@ test "parse_input: SGR mouse drag reports motion" {
     col: 5,
     row: 6,
   })
+}
+
+///|
+test "parse_input: SGR mouse no-button motion" {
+  assert_sgr_mouse("\u001b[<35;15;16M", {
+    button: MouseNoButton,
+    action: MouseMotion,
+    modifiers: [],
+    col: 15,
+    row: 16,
+  })
+}
+
+///|
+test "parse_input: SGR no-button press and release are unknown" {
+  assert_sgr_unknown("\u001b[<3;1;1M")
+  assert_sgr_unknown("\u001b[<3;1;1m")
 }
 
 ///|
@@ -283,6 +333,20 @@ test "parse_input: SGR mouse shift alt ctrl modifiers" {
     col: 120,
     row: 45,
   })
+}
+
+///|
+test "parse_input: malformed SGR mouse sequences" {
+  assert_sgr_invalid("\u001b[<;1;1M")
+  assert_sgr_invalid("\u001b[<0;;1M")
+  assert_sgr_invalid("\u001b[<0;x;1M")
+  assert_sgr_invalid("\u001b[<0;1M")
+  let missing_final = @utf8.encode("\u001b[<0;1;1")
+  assert_eq(parse_input(missing_final[:]), Incomplete)
+  let split = @utf8.encode("\u001b[<0;1;")
+  let (events, leftover) = parse_all(split[:])
+  assert_eq(events.length(), 0)
+  assert_eq(leftover, split)
 }
 
 ///|
