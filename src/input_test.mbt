@@ -181,6 +181,101 @@ test "parse_input: focus and blur events" {
 }
 
 ///|
+fn assert_enhanced_key(raw : String, expected : EnhancedKeyMsg) -> Unit raise {
+  let bytes = @utf8.encode(raw)
+  assert_eq(parse_input(bytes[:]), Ok(EnhancedKey(expected), bytes.length()))
+}
+
+///|
+fn assert_enhanced_invalid(raw : String) -> Unit raise {
+  let bytes = @utf8.encode(raw)
+  match parse_input(bytes[:]) {
+    Invalid(_) => ()
+    Ok(EnhancedKey(_), _) =>
+      fail("\{raw}: malformed CSI-u decoded as EnhancedKey")
+    _ => fail("\{raw}: expected Invalid")
+  }
+}
+
+///|
+test "parse_input: Kitty CSI-u press defaults to press with no modifiers" {
+  assert_enhanced_key("\u001b[97u", {
+    code: UnicodeKey(97),
+    shifted: None,
+    base_layout: None,
+    modifiers: [],
+    event_type: KeyPress,
+    text_codepoints: [],
+  })
+}
+
+///|
+test "parse_input: Kitty CSI-u rejects empty modifiers field" {
+  assert_enhanced_invalid("\u001b[97;u")
+  assert_enhanced_invalid("\u001b[97;:3u")
+}
+
+///|
+test "parse_input: Kitty CSI-u release event type" {
+  assert_enhanced_key("\u001b[97;1:3u", {
+    code: UnicodeKey(97),
+    shifted: None,
+    base_layout: None,
+    modifiers: [],
+    event_type: KeyRelease,
+    text_codepoints: [],
+  })
+}
+
+///|
+test "parse_input: Kitty CSI-u repeat event type" {
+  assert_enhanced_key("\u001b[97;1:2u", {
+    code: UnicodeKey(97),
+    shifted: None,
+    base_layout: None,
+    modifiers: [],
+    event_type: KeyRepeat,
+    text_codepoints: [],
+  })
+}
+
+///|
+test "parse_input: Kitty CSI-u modifiers decode bitfield plus one" {
+  assert_enhanced_key("\u001b[97;6u", {
+    code: UnicodeKey(97),
+    shifted: None,
+    base_layout: None,
+    modifiers: [KeyShift, KeyCtrl],
+    event_type: KeyPress,
+    text_codepoints: [],
+  })
+}
+
+///|
+test "parse_input: Kitty CSI-u alternate keys and associated text" {
+  assert_enhanced_key("\u001b[97:65:113;2;65u", {
+    code: UnicodeKey(97),
+    shifted: Some(UnicodeKey(65)),
+    base_layout: Some(UnicodeKey(113)),
+    modifiers: [KeyShift],
+    event_type: KeyPress,
+    text_codepoints: [65],
+  })
+}
+
+///|
+test "parse_input: legacy plain and escape keys keep stable KeyMsg values" {
+  let plain = @utf8.encode("A")
+  let up = @utf8.encode("\u001b[A")
+  let shift_tab = @utf8.encode("\u001b[Z")
+  let ctrl_c = Bytes::from_array([b'\x03'])
+  assert_eq(parse_input(plain[:]), Ok(Key(Char('A')), 1))
+  assert_eq(parse_input(up[:]), Ok(Key(Special("up")), 3))
+  assert_eq(parse_input(shift_tab[:]), Ok(Key(Modified("shift", "tab")), 3))
+  assert_eq(parse_input(ctrl_c[:]), Ok(Key(Modified("ctrl", "c")), 1))
+}
+
+///|
 fn assert_sgr_mouse(raw : String, expected : MouseMsg) -> Unit raise {
   let bytes = @utf8.encode(raw)
   assert_eq(parse_input(bytes[:]), Ok(Mouse(expected), bytes.length()))

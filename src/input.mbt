@@ -12,6 +12,8 @@
 pub(all) enum InputEvent {
   /// A keyboard event.
   Key(KeyMsg)
+  /// An enhanced keyboard-protocol event.
+  EnhancedKey(EnhancedKeyMsg)
   /// A mouse event.
   Mouse(MouseMsg)
   /// The terminal window gained focus.
@@ -357,6 +359,285 @@ fn parse_sgr_mouse(bv : BytesView) -> ParseResult[InputEvent] {
 }
 
 ///|
+priv enum EnhancedKeyParse {
+  EnhancedKeyOk(InputEvent)
+  EnhancedKeyUnknown
+  EnhancedKeyInvalid(String)
+}
+
+///|
+fn enhanced_key_code(value : Int) -> EnhancedKeyCode {
+  if value >= 57344 && value <= 63743 {
+    FunctionalKey(value)
+  } else {
+    UnicodeKey(value)
+  }
+}
+
+///|
+fn parse_decimal_segment(bv : BytesView, start : Int, end : Int) -> Int? {
+  if start >= end {
+    return None
+  }
+  let mut value = 0
+  let mut i = start
+  while i < end {
+    let b = bv[i].to_int()
+    if b < 0x30 || b > 0x39 {
+      return None
+    }
+    value = value * 10 + b - 0x30
+    i = i + 1
+  }
+  Some(value)
+}
+
+///|
+fn parse_key_code_segment(
+  bv : BytesView,
+  start : Int,
+  end : Int,
+) -> EnhancedKeyCode? {
+  match parse_decimal_segment(bv, start, end) {
+    Some(value) => Some(enhanced_key_code(value))
+    None => None
+  }
+}
+
+///|
+fn parse_enhanced_key_code_triple(
+  bv : BytesView,
+  start : Int,
+  end : Int,
+) -> EnhancedKeyParse {
+  if start >= end {
+    return EnhancedKeyUnknown
+  }
+  let first = bv[start].to_int()
+  if first < 0x30 || first > 0x39 {
+    return EnhancedKeyUnknown
+  }
+  let colon_positions : Array[Int] = []
+  let mut i = start
+  while i < end {
+    if bv[i].to_int() == 0x3A {
+      colon_positions.push(i)
+    }
+    i = i + 1
+  }
+  if colon_positions.length() > 2 {
+    return EnhancedKeyInvalid("CSI-u key code contains too many alternates")
+  }
+  let primary_end = if colon_positions.length() == 0 {
+    end
+  } else {
+    colon_positions[0]
+  }
+  let primary = match parse_key_code_segment(bv, start, primary_end) {
+    Some(code) => code
+    None => return EnhancedKeyInvalid("invalid CSI-u primary key code")
+  }
+  let shifted = if colon_positions.length() >= 1 {
+    let shifted_start = colon_positions[0] + 1
+    let shifted_end = if colon_positions.length() == 1 {
+      end
+    } else {
+      colon_positions[1]
+    }
+    match parse_key_code_segment(bv, shifted_start, shifted_end) {
+      Some(code) => Some(code)
+      None => return EnhancedKeyInvalid("invalid CSI-u shifted key code")
+    }
+  } else {
+    None
+  }
+  let base_layout = if colon_positions.length() == 2 {
+    match parse_key_code_segment(bv, colon_positions[1] + 1, end) {
+      Some(code) => Some(code)
+      None => return EnhancedKeyInvalid("invalid CSI-u base-layout key code")
+    }
+  } else {
+    None
+  }
+  EnhancedKeyOk(
+    EnhancedKey({
+      code: primary,
+      shifted,
+      base_layout,
+      modifiers: [],
+      event_type: KeyPress,
+      text_codepoints: [],
+    }),
+  )
+}
+
+///|
+fn parse_enhanced_event_type(value : Int) -> EnhancedKeyEventType? {
+  match value {
+    1 => Some(KeyPress)
+    2 => Some(KeyRepeat)
+    3 => Some(KeyRelease)
+    _ => None
+  }
+}
+
+///|
+fn enhanced_key_modifiers(encoded : Int) -> Array[EnhancedKeyModifier]? {
+  if encoded < 1 {
+    return None
+  }
+  let bits = encoded - 1
+  let modifiers : Array[EnhancedKeyModifier] = []
+  if (bits & 0x01) != 0 {
+    modifiers.push(KeyShift)
+  }
+  if (bits & 0x02) != 0 {
+    modifiers.push(KeyAlt)
+  }
+  if (bits & 0x04) != 0 {
+    modifiers.push(KeyCtrl)
+  }
+  if (bits & 0x08) != 0 {
+    modifiers.push(KeySuper)
+  }
+  if (bits & 0x10) != 0 {
+    modifiers.push(KeyHyper)
+  }
+  if (bits & 0x20) != 0 {
+    modifiers.push(KeyMeta)
+  }
+  if (bits & 0x40) != 0 {
+    modifiers.push(KeyCapsLock)
+  }
+  if (bits & 0x80) != 0 {
+    modifiers.push(KeyNumLock)
+  }
+  Some(modifiers)
+}
+
+///|
+fn parse_enhanced_key_modifiers(
+  bv : BytesView,
+  start : Int,
+  end : Int,
+) -> (Array[EnhancedKeyModifier], EnhancedKeyEventType)? {
+  if start >= end {
+    return None
+  }
+  let mut colon_index = -1
+  let mut i = start
+  while i < end {
+    if bv[i].to_int() == 0x3A {
+      if colon_index >= 0 {
+        return None
+      }
+      colon_index = i
+    }
+    i = i + 1
+  }
+  let modifiers_end = if colon_index >= 0 { colon_index } else { end }
+  let modifiers = if start == modifiers_end {
+    return None
+  } else {
+    match parse_decimal_segment(bv, start, modifiers_end) {
+      Some(value) =>
+        match enhanced_key_modifiers(value) {
+          Some(modifiers) => modifiers
+          None => return None
+        }
+      None => return None
+    }
+  }
+  let event_type = if colon_index >= 0 {
+    match parse_decimal_segment(bv, colon_index + 1, end) {
+      Some(value) =>
+        match parse_enhanced_event_type(value) {
+          Some(kind) => kind
+          None => return None
+        }
+      None => return None
+    }
+  } else {
+    KeyPress
+  }
+  Some((modifiers, event_type))
+}
+
+///|
+fn parse_enhanced_text_codepoints(
+  bv : BytesView,
+  start : Int,
+  end : Int,
+) -> Array[Int]? {
+  let codepoints : Array[Int] = []
+  if start >= end {
+    return None
+  }
+  let mut segment_start = start
+  let mut i = start
+  while i <= end {
+    if i == end || bv[i].to_int() == 0x3A {
+      match parse_decimal_segment(bv, segment_start, i) {
+        Some(value) => codepoints.push(value)
+        None => return None
+      }
+      segment_start = i + 1
+    }
+    i = i + 1
+  }
+  Some(codepoints)
+}
+
+///|
+fn parse_enhanced_key(bv : BytesView, final_index : Int) -> EnhancedKeyParse {
+  let start = 2
+  let end = final_index
+  let semicolons : Array[Int] = []
+  let mut i = start
+  while i < end {
+    if bv[i].to_int() == 0x3B {
+      semicolons.push(i)
+    }
+    i = i + 1
+  }
+  if semicolons.length() > 2 {
+    return EnhancedKeyInvalid("CSI-u key event has too many parameters")
+  }
+  let key_end = if semicolons.length() == 0 { end } else { semicolons[0] }
+  let key_data = match parse_enhanced_key_code_triple(bv, start, key_end) {
+    EnhancedKeyOk(EnhancedKey(key)) => key
+    EnhancedKeyOk(_) => return EnhancedKeyInvalid("invalid CSI-u key payload")
+    EnhancedKeyUnknown => return EnhancedKeyUnknown
+    EnhancedKeyInvalid(message) => return EnhancedKeyInvalid(message)
+  }
+  let (modifiers, event_type) = if semicolons.length() >= 1 {
+    let modifiers_start = semicolons[0] + 1
+    let modifiers_end = if semicolons.length() == 1 {
+      end
+    } else {
+      semicolons[1]
+    }
+    match parse_enhanced_key_modifiers(bv, modifiers_start, modifiers_end) {
+      Some(parsed) => parsed
+      None => return EnhancedKeyInvalid("invalid CSI-u modifiers or event type")
+    }
+  } else {
+    ([], KeyPress)
+  }
+  let text_codepoints = if semicolons.length() == 2 {
+    match parse_enhanced_text_codepoints(bv, semicolons[1] + 1, end) {
+      Some(codepoints) => codepoints
+      None => return EnhancedKeyInvalid("invalid CSI-u text codepoint list")
+    }
+  } else {
+    []
+  }
+  EnhancedKeyOk(
+    EnhancedKey({ ..key_data, modifiers, event_type, text_codepoints }),
+  )
+}
+
+///|
 /// Parse an ANSI CSI sequence starting at `bv[0]` (which must be ESC).
 /// `bv[1]` must be `[` (0x5B) before calling this function.
 fn parse_csi(bv : BytesView) -> ParseResult[InputEvent] {
@@ -378,6 +659,13 @@ fn parse_csi(bv : BytesView) -> ParseResult[InputEvent] {
     if b >= 0x40 && b <= 0x7E {
       let consumed = i + 1
       let params = @utf8.decode_lossy(Bytes::from_array(bv[2:i].to_array()))
+      if b == 0x75 {
+        match parse_enhanced_key(bv, i) {
+          EnhancedKeyOk(evt) => return Ok(evt, consumed)
+          EnhancedKeyUnknown => ()
+          EnhancedKeyInvalid(message) => return Invalid(message)
+        }
+      }
       let evt : InputEvent = match (b, params) {
         (0x41, "") => Key(Special("up"))
         (0x42, "") => Key(Special("down"))
