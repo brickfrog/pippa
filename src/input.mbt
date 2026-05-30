@@ -205,7 +205,12 @@ fn parse_text_event(bv : BytesView) -> ParseResult[InputEvent] {
           return emit_text_event(chars, byte_offsets)
         }
       }
-      Utf8Incomplete => return Incomplete
+      Utf8Incomplete => {
+        if chars.is_empty() {
+          return Incomplete
+        }
+        return emit_text_event(chars, byte_offsets)
+      }
       Utf8Invalid(message) => {
         if chars.is_empty() {
           return Invalid(message)

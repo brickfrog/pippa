@@ -2,14 +2,6 @@
 /// Tests for the ANSI input parser.
 
 ///|
-fn assert_not_special(evt : InputEvent) -> Unit raise {
-  match evt {
-    Key(Special(name)) => fail("valid UTF-8 text became Special(\{name})")
-    _ => ()
-  }
-}
-
-///|
 test "parse_input: empty bytes returns Incomplete" {
   let bytes = Bytes::from_array([])
   let bv = bytes[0:bytes.length()]
@@ -20,45 +12,63 @@ test "parse_input: empty bytes returns Incomplete" {
 test "parse_input: printable ASCII" {
   let bytes = Bytes::from_array([b'A'])
   let bv = bytes[0:bytes.length()]
-  let parsed = parse_input(bv)
-  assert_eq(parsed, Ok(Key(Char('A')), 1))
-  match parsed {
-    Ok(evt, _) => assert_not_special(evt)
-    _ => fail("expected ASCII text event")
-  }
+  assert_eq(parse_input(bv), Ok(Key(Char('A')), 1))
 }
 
 ///|
 test "parse_input: UTF-8 two-byte scalar" {
   let bytes = Bytes::from_array([b'\xC3', b'\xA9'])
-  let parsed = parse_input(bytes[:])
-  assert_eq(parsed, Ok(Key(Char('é')), 2))
-  match parsed {
-    Ok(evt, _) => assert_not_special(evt)
-    _ => fail("expected UTF-8 text event")
-  }
+  assert_eq(parse_input(bytes[:]), Ok(Key(Char('é')), 2))
 }
 
 ///|
 test "parse_input: UTF-8 wide CJK scalar" {
   let bytes = Bytes::from_array([b'\xE7', b'\x95', b'\x8C'])
-  let parsed = parse_input(bytes[:])
-  assert_eq(parsed, Ok(Key(Char('界')), 3))
-  match parsed {
-    Ok(evt, _) => assert_not_special(evt)
-    _ => fail("expected UTF-8 text event")
-  }
+  assert_eq(parse_input(bytes[:]), Ok(Key(Char('界')), 3))
+}
+
+///|
+test "parse_input: UTF-8 four-byte scalar" {
+  let bytes = Bytes::from_array([b'\xF0', b'\x9F', b'\x98', b'\x80'])
+  assert_eq(parse_input(bytes[:]), Ok(Key(Char('😀')), 4))
 }
 
 ///|
 test "parse_input: combining mark grapheme stays one text event" {
   let accented = String::from_array(['e', '\u{0301}'])
   let bytes = Bytes::from_array([b'e', b'\xCC', b'\x81'])
-  let parsed = parse_input(bytes[:])
-  assert_eq(parsed, Ok(Key(Text(accented)), 3))
-  match parsed {
-    Ok(evt, _) => assert_not_special(evt)
-    _ => fail("expected UTF-8 text event")
+  assert_eq(parse_input(bytes[:]), Ok(Key(Text(accented)), 3))
+}
+
+///|
+fn assert_invalid_utf8(name : String, raw : Array[Byte]) -> Unit raise {
+  let bytes = Bytes::from_array(raw)
+  match parse_input(bytes[:]) {
+    Invalid(_) => ()
+    Ok(Key(Char(ch)), _) =>
+      fail("\{name}: malformed UTF-8 decoded as Char(\{ch})")
+    Ok(Key(Text(text)), _) =>
+      fail("\{name}: malformed UTF-8 decoded as Text(\{text})")
+    _ => fail("\{name}: expected Invalid")
+  }
+}
+
+///|
+test "parse_input: malformed UTF-8 is rejected" {
+  let cases = [
+    ("invalid continuation", [b'\xC3', b'(']),
+    ("overlong C0 lead", [b'\xC0', b'\x80']),
+    ("overlong C1 lead", [b'\xC1', b'\xBF']),
+    ("bad E0 A0 floor", [b'\xE0', b'\x9F', b'\x80']),
+    ("bad F0 90 floor", [b'\xF0', b'\x80', b'\x80', b'\x80']),
+    ("surrogate range", [b'\xED', b'\xA0', b'\x80']),
+    ("above U+10FFFF F4", [b'\xF4', b'\x90', b'\x80', b'\x80']),
+    ("above U+10FFFF F5", [b'\xF5', b'\x80', b'\x80', b'\x80']),
+    ("lone continuation", [b'\x80']),
+  ]
+  for case in cases {
+    let (name, raw) = case
+    assert_invalid_utf8(name, raw)
   }
 }
 
@@ -72,8 +82,16 @@ test "parse_all: split UTF-8 scalar waits for completion" {
   let (events, leftover) = parse_all(second[:])
   assert_eq(events.length(), 1)
   assert_eq(events[0], Key(Char('é')))
-  assert_not_special(events[0])
   assert_eq(leftover.length(), 0)
+}
+
+///|
+test "parse_all: complete text before split UTF-8 scalar is emitted" {
+  let bytes = Bytes::from_array([b'a', b'\xC3'])
+  let (events, leftover) = parse_all(bytes[:])
+  assert_eq(events.length(), 1)
+  assert_eq(events[0], Key(Char('a')))
+  assert_eq(leftover.to_array(), [b'\xC3'])
 }
 
 ///|
