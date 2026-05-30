@@ -117,7 +117,7 @@ fn textarea_digits(value : Int) -> Int {
 
 ///|
 fn textarea_line_count(value : String) -> Int {
-  textarea_lines(value).length()
+  @pippa.line_count(value)
 }
 
 ///|
