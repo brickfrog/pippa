@@ -1,4 +1,5 @@
 import {
+  "brickfrog/pippa/internal",
   "brickfrog/pippa",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/env",

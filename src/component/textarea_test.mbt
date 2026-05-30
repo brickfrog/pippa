@@ -66,3 +66,49 @@ test "textarea: cursor stays visible by scrolling" {
   let view = (c.view)(m3)
   assert_true(view.contains("|"))
 }
+
+///|
+test "textarea: view truncates wide text by display width" {
+  let c = textarea(width=4, height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("你好x")).model
+  assert_eq((c.view)(m1), "你好")
+}
+
+///|
+test "textarea: view does not split combining marks" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let c = textarea(width=1, height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("\{accented}x")).model
+  assert_eq((c.view)(m1), accented)
+}
+
+///|
+test "textarea: cursor movement stays on grapheme boundaries" {
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  let c = textarea(width=6, height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("\{technologist}x")).model
+  let focused = { ..m1, focused: true, cursor_col: 4 }
+  let moved = (c.update)(focused, MoveCursorLeft).model
+  assert_eq(moved.cursor_col, 3)
+  assert_eq((c.view)(moved), "\{technologist}|x  ")
+}
+
+///|
+test "textarea: placeholder pads ANSI-styled wide text by display width" {
+  let c = textarea(width=4, height=1, placeholder="\u001b[31m界\u001b[0m")
+  let model = (c.init)().model
+  let view = (c.view)(model)
+  assert_true(view == "\u001b[2m\u001b[31m界  \u001b[0m\u001b[0m")
+}
+
+///|
+test "textarea: horizontal scroll inside wide glyph preserves cell columns" {
+  let c = textarea(width=2, height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("你x")).model
+  let focused = { ..m1, focused: true, cursor_col: 1, scroll_col: 1 }
+  assert_eq((c.view)(focused), " |")
+}

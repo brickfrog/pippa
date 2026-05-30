@@ -88,3 +88,44 @@ test "Table negative column width is clamped to zero" {
     "\n"
   assert_eq(out, expected)
 }
+
+///|
+test "Table truncates and pads cells by display width" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let columns : Array[Column] = [
+    { header: "名", width: 4 },
+    { header: "Accent", width: 3 },
+  ]
+  let tbl = table(columns~)
+  let mut res = (tbl.init)()
+  res = (tbl.update)(res.model, SetRows([["你好x", "\{accented}bc"]]))
+  let out = (tbl.view)(res.model)
+  let bold = @pippa.bold()
+  let reset = @pippa.reset()
+  let expected = "名   │ Acc\n" +
+    "──────────\n" +
+    bold +
+    "你好 │ \{accented}bc" +
+    reset +
+    "\n"
+  assert_eq(@pippa.strip_ansi(out), @pippa.strip_ansi(expected))
+  assert_true(out == expected)
+}
+
+///|
+test "Table pads ANSI-styled cells before trailing reset" {
+  let columns : Array[Column] = [{ header: "Wide", width: 4 }]
+  let tbl = table(columns~)
+  let mut res = (tbl.init)()
+  res = (tbl.update)(res.model, SetRows([["\u001b[31m界\u001b[0m"]]))
+  let out = (tbl.view)(res.model)
+  let bold = @pippa.bold()
+  let reset = @pippa.reset()
+  let expected = "Wide\n" +
+    "────\n" +
+    bold +
+    "\u001b[31m界  \u001b[0m" +
+    reset +
+    "\n"
+  assert_true(out == expected)
+}

@@ -79,8 +79,8 @@ pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg] {
       // Header row
       for i, col in model.columns {
         let w = if col.width < 0 { 0 } else { col.width }
-        let cell = @pippa.truncate(col.header, w)
-        buf.write_string(@pippa.pad_right(cell, w))
+        let cell = @internal.truncate_width(col.header, w)
+        buf.write_string(@internal.pad_right_width(cell, w))
         if i < model.columns.length() - 1 {
           buf.write_string(" │ ")
         }
@@ -118,8 +118,8 @@ pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg] {
           for c, col in model.columns {
             let w = if col.width < 0 { 0 } else { col.width }
             let cell_text = if c < row.length() { row[c] } else { "" }
-            let cell = @pippa.truncate(cell_text, w)
-            buf.write_string(@pippa.pad_right(cell, w))
+            let cell = @internal.truncate_width(cell_text, w)
+            buf.write_string(@internal.pad_right_width(cell, w))
             if c < model.columns.length() - 1 {
               buf.write_string(" │ ")
             }

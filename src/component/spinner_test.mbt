@@ -49,3 +49,12 @@ test "spinner view reflects current frame after tick" {
   let output = (s.view)(m1)
   assert_eq(output, "⠙ Go")
 }
+
+///|
+test "spinner view reports emoji labels in display cells" {
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  let s = spinner(label=technologist)
+  let { model, .. } = (s.init)()
+  let output = (s.view)(model)
+  assert_eq(@pippa.visible_width(output), 4)
+}

@@ -163,12 +163,7 @@ pub fn list(
           )
         }
         FilterBackspace => {
-          let chars = model.filter.to_array()
-          let next_filter = if chars.is_empty() {
-            ""
-          } else {
-            list_chars_to_string(chars[0:chars.length() - 1].to_owned())
-          }
+          let next_filter = component_without_last_grapheme(model.filter)
           list_normalize(
             model.items,
             next_filter,

@@ -49,32 +49,10 @@ pub fn strip_ansi(s : String) -> String {
 }
 
 ///|
-/// Return the visible width of `s` (number of printable characters after
-/// stripping ANSI sequences).  No wide-character handling is performed yet;
-/// every character counts as 1.
+/// Return the visible terminal-cell width of `s`, ignoring ANSI escape
+/// sequences and treating wide/combining/grapheme clusters as terminal cells.
 pub fn visible_width(s : String) -> Int {
-  let mut width = 0
-  let mut escaped = false
-  let mut csi = false
-  for ch in s {
-    if escaped {
-      if csi {
-        if is_csi_terminator(ch) {
-          escaped = false
-          csi = false
-        }
-      } else if ch == '[' {
-        csi = true
-      } else {
-        escaped = false
-      }
-    } else if ch == '\u001b' {
-      escaped = true
-    } else {
-      width = width + 1
-    }
-  }
-  width
+  @internal.display_width(s)
 }
 
 ///|
@@ -155,11 +133,7 @@ pub fn pad_left(s : String, width : Int) -> String {
 /// Right-pad `s` with spaces until its visible width equals `width`.
 /// Returns `s` unchanged if its visible width is already ≥ `width`.
 pub fn pad_right(s : String, width : Int) -> String {
-  let sw = visible_width(s)
-  if sw >= width {
-    return s
-  }
-  s + String::make(width - sw, ' ')
+  @internal.pad_right_width(s, width)
 }
 
 ///|
@@ -168,46 +142,5 @@ pub fn pad_right(s : String, width : Int) -> String {
 /// ANSI-aware: escape sequences are never split mid-sequence and do not
 /// themselves consume any visible width.
 pub fn truncate(s : String, max_width : Int) -> String {
-  if max_width <= 0 {
-    return ""
-  }
-  let chars = s.to_array()
-  let n = chars.length()
-  let buf = StringBuilder::new(size_hint=n)
-  let mut i = 0
-  let mut width = 0
-  while i < n {
-    // Stop as soon as the visible budget is exhausted — including any trailing
-    // ANSI sequences that would otherwise leak styling into subsequent output.
-    if width >= max_width {
-      break
-    }
-    let ch = chars[i]
-    if ch == '\u001b' {
-      // Copy the entire escape sequence without counting visible width.
-      buf.write_char(ch)
-      i = i + 1
-      if i < n {
-        let next = chars[i]
-        buf.write_char(next)
-        i = i + 1
-        if next == '[' {
-          // CSI sequence: copy until (and including) the terminating letter.
-          while i < n && !is_csi_terminator(chars[i]) {
-            buf.write_char(chars[i])
-            i = i + 1
-          }
-          if i < n {
-            buf.write_char(chars[i])
-            i = i + 1
-          }
-        }
-      }
-    } else {
-      buf.write_char(ch)
-      width = width + 1
-      i = i + 1
-    }
-  }
-  buf.to_string()
+  @internal.truncate_width(s, max_width)
 }

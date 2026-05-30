@@ -40,3 +40,14 @@ test "list filter typing appends and backspaces" {
   assert_eq(m2.filter, "al")
   assert_eq(m3.filter, "a")
 }
+
+///|
+test "list filter backspace removes a whole grapheme cluster" {
+  let c = list(items=["accent"], page_size=5)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, FilterInsertChar('e')).model
+  let m2 = (c.update)(m1, FilterInsertChar('\u{0301}')).model
+  let m3 = (c.update)(m2, FilterBackspace).model
+  assert_eq(m2.filter, String::from_array(['e', '\u{0301}']))
+  assert_eq(m3.filter, "")
+}
