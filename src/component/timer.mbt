@@ -8,6 +8,8 @@ pub(all) struct TimerModel {
   interval_ms : Int
   running : Bool
   finished : Bool
+  instance_id : Int
+  tick_generation : Int
 } derive(Debug, Eq)
 
 ///|
@@ -15,8 +17,11 @@ pub(all) enum TimerMsg {
   Start
   Pause
   Reset
-  Tick
+  Tick(Int, Int)
 } derive(Debug, Eq)
+
+///|
+let timer_instance_counter : Ref[Int] = Ref(0)
 
 ///|
 fn timer_clamp_non_negative(n : Int) -> Int {
@@ -24,8 +29,29 @@ fn timer_clamp_non_negative(n : Int) -> Int {
 }
 
 ///|
-fn timer_next_tick_cmd(interval_ms : Int) -> @pippa.Cmd[TimerMsg] {
-  @pippa.Cmd::after(interval_ms.max(1), fn() { Tick })
+fn timer_next_instance_id() -> Int {
+  timer_instance_counter.val = timer_instance_counter.val + 1
+  timer_instance_counter.val
+}
+
+///|
+fn timer_next_tick_cmd(
+  interval_ms : Int,
+  instance_id : Int,
+  tick_generation : Int,
+) -> @pippa.Cmd[TimerMsg] {
+  @pippa.Cmd::after(interval_ms.max(1), fn() {
+    Tick(instance_id, tick_generation)
+  })
+}
+
+///|
+fn timer_tick_is_current(
+  model : TimerModel,
+  instance_id : Int,
+  tick_generation : Int,
+) -> Bool {
+  instance_id == model.instance_id && tick_generation == model.tick_generation
 }
 
 ///|
@@ -47,6 +73,7 @@ pub fn timer(
   let safe_interval = interval_ms.max(1)
   {
     init: fn() {
+      let instance_id = timer_next_instance_id()
       @pippa.UpdateResult::new(
         model={
           duration_ms: safe_duration,
@@ -54,6 +81,8 @@ pub fn timer(
           interval_ms: safe_interval,
           running: false,
           finished: safe_duration == 0,
+          instance_id,
+          tick_generation: 0,
         },
         cmd=@pippa.Cmd::none(),
       )
@@ -64,9 +93,14 @@ pub fn timer(
           if model.running || model.finished {
             @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
           } else {
+            let tick_generation = model.tick_generation + 1
             @pippa.UpdateResult::new(
-              model={ ..model, running: true },
-              cmd=timer_next_tick_cmd(model.interval_ms),
+              model={ ..model, running: true, tick_generation },
+              cmd=timer_next_tick_cmd(
+                model.interval_ms,
+                model.instance_id,
+                tick_generation,
+              ),
             )
           }
         Pause =>
@@ -84,23 +118,35 @@ pub fn timer(
             },
             cmd=@pippa.Cmd::none(),
           )
-        Tick =>
-          if !model.running || model.finished {
+        Tick(instance_id, tick_generation) =>
+          if !timer_tick_is_current(model, instance_id, tick_generation) ||
+            !model.running ||
+            model.finished {
             @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
           } else {
             let remaining = (model.remaining_ms - model.interval_ms).max(0)
             let finished = remaining == 0
+            let next_generation = if finished {
+              model.tick_generation
+            } else {
+              model.tick_generation + 1
+            }
             @pippa.UpdateResult::new(
               model={
                 ..model,
                 remaining_ms: remaining,
                 running: !finished,
                 finished,
+                tick_generation: next_generation,
               },
               cmd=if finished {
                 @pippa.Cmd::none()
               } else {
-                timer_next_tick_cmd(model.interval_ms)
+                timer_next_tick_cmd(
+                  model.interval_ms,
+                  model.instance_id,
+                  next_generation,
+                )
               },
             )
           }
