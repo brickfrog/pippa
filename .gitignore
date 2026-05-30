@@ -5,7 +5,8 @@ _build/
 .claude/
 .moonagent/
 
-# Beads / Dolt files (added by bd init)
+# Beads / Dolt files (added by bd init) — bead state is local-only, not version-controlled
+.beads/
 .dolt/
 *.db
 .beads-credential-key
