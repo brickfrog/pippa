@@ -23,9 +23,9 @@
 pub(all) struct Nothing {} derive(Debug, Eq)
 
 ///|
-/// Typed payload delivered to recurring scheduler callbacks.
+/// Typed payload delivered to scheduler callbacks.
 pub(all) struct TimerTick {
-  /// Milliseconds elapsed since the recurring command was scheduled.
+  /// Milliseconds elapsed since the command was scheduled.
   elapsed_ms : Int64
 } derive(Debug, Eq)
 
@@ -55,7 +55,7 @@ priv enum CmdAction[Msg] {
   Tick(Int)
   // Schedule a one-shot runtime effect after `interval_ms`.
   After(Int, () -> Msg)
-  // Schedule a recurring callback aligned to `interval_ms`.
+  // Schedule a one-shot callback aligned to `interval_ms`.
   Every(Int, (TimerTick) -> Msg)
   // Enter the alternate screen buffer.
   EnterAltScreen

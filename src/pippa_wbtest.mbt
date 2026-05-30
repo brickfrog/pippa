@@ -62,7 +62,7 @@ test "pippa cmd after is lazy until the runtime executes it" {
 }
 
 ///|
-test "pippa cmd every stores a typed recurring callback" {
+test "pippa cmd every stores a typed aligned callback" {
   let cmd : Cmd[Int] = Cmd::every(33, fn(tick) { tick.elapsed_ms.to_int() + 4 })
   assert_eq(cmd.actions.length(), 1)
   match cmd.actions[0] {
@@ -266,26 +266,99 @@ test "pippa sequence waits for immediate effects to settle before next step" {
 
 ///|
 #cfg(any(target="native", target="llvm"))
-test "pippa every command recurs with typed elapsed time" {
+test "pippa every alignment snaps to the next strict interval boundary" {
+  assert_eq(next_aligned_every_deadline(0L, 10), 10L)
+  assert_eq(next_aligned_every_deadline(9L, 10), 10L)
+  assert_eq(next_aligned_every_deadline(10L, 10), 20L)
+  assert_eq(next_aligned_every_deadline(1011L, 10), 1020L)
+
+  let pending = @queue.Queue::new()
+  let sequences = @deque.Deque::new()
+  let timers = []
+  queue_cmd_effects(
+    Cmd::every(10, fn(tick) { tick.elapsed_ms.to_int() }),
+    1011L,
+    pending,
+    timers,
+    sequences,
+  )
+  assert_eq(timers.length(), 1)
+  match timers[0] {
+    EveryAt(deadline, scheduled_at, task) => {
+      assert_eq(deadline, 1020L)
+      assert_eq(scheduled_at, 1011L)
+      assert_eq(task({ elapsed_ms: 9L }), 9)
+    }
+    _ => fail("expected EveryAt timer")
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa every command fires once without runtime recurrence" {
   let seen : Ref[Array[Int64]] = Ref::new([])
+  let started_at = Ref::new(0L)
+  let program : Program[Int, Int64] = Program::new(
+      init=fn() {
+        started_at.val = pippa_now_ms()
+        UpdateResult::new(
+          model=0,
+          cmd=Cmd::every(5, fn(tick) { tick.elapsed_ms }),
+        )
+      },
+      update=fn(model, msg) {
+        seen.val = [..seen.val, msg]
+        UpdateResult::new(model=model + 1, cmd=Cmd::none())
+      },
+      view=fn(_model) { "" },
+      should_quit=fn(_model) { false },
+    )
+    .headless()
+    .with_cancelled(fn() {
+      let elapsed = pippa_now_ms() - started_at.val
+      started_at.val > 0L && (elapsed >= 200L ||
+        (seen.val.length() >= 1 && elapsed >= 40L))
+    })
+  program.run()
+  assert_eq(seen.val.length(), 1)
+  assert_true(seen.val[0] >= 1L)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa every recurrence is app driven by reissuing the command" {
+  let seen : Ref[Array[Int64]] = Ref::new([])
+  let started_at = Ref::new(0L)
   let program : Program[Int, Int64] = Program::new(
     init=fn() {
+      started_at.val = pippa_now_ms()
       UpdateResult::new(
         model=0,
-        cmd=Cmd::every(2, fn(tick) { tick.elapsed_ms }),
+        cmd=Cmd::every(3, fn(tick) { tick.elapsed_ms }),
       )
     },
     update=fn(model, msg) {
       seen.val = [..seen.val, msg]
-      UpdateResult::new(model=model + 1, cmd=Cmd::none())
+      let next = model + 1
+      let cmd = if next < 3 {
+        Cmd::every(3, fn(tick) { tick.elapsed_ms })
+      } else {
+        Cmd::none()
+      }
+      UpdateResult::new(model=next, cmd~)
     },
     view=fn(_model) { "" },
     should_quit=fn(model) { model >= 3 },
-  ).headless()
+  )
+  .headless()
+  .with_cancelled(fn() {
+    started_at.val > 0L && pippa_now_ms() - started_at.val >= 200L
+  })
   program.run()
-  assert_true(seen.val.length() >= 3)
+  assert_eq(seen.val.length(), 3)
   assert_true(seen.val[0] >= 1L)
-  assert_true(seen.val[1] >= seen.val[0])
+  assert_true(seen.val[1] >= 1L)
+  assert_true(seen.val[2] >= 1L)
 }
 
 ///|

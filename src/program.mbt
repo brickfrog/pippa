@@ -555,7 +555,7 @@ fn[Model, Msg] run_internal(
 priv enum RuntimeTimer[Msg] {
   TickAt(Int64)
   AfterAt(Int64, () -> Msg?)
-  EveryAt(Int64, Int, Int64, (TimerTick) -> Msg)
+  EveryAt(Int64, Int64, (TimerTick) -> Msg)
 }
 
 ///|
@@ -596,7 +596,7 @@ fn[Msg] timer_deadline(timer : RuntimeTimer[Msg]) -> Int64 {
   match timer {
     TickAt(deadline) => deadline
     AfterAt(deadline, _) => deadline
-    EveryAt(deadline, _, _, _) => deadline
+    EveryAt(deadline, _, _) => deadline
   }
 }
 
@@ -688,14 +688,10 @@ fn[Model, Msg] apply_screen_command(
 
 ///|
 #cfg(any(target="native", target="llvm"))
-fn next_every_deadline(
-  started_at : Int64,
-  interval_ms : Int,
-  now : Int64,
-) -> Int64 {
+fn next_aligned_every_deadline(now : Int64, interval_ms : Int) -> Int64 {
   let interval = interval_ms.to_int64()
-  let elapsed = (now - started_at).max(0L)
-  started_at + (elapsed / interval + 1L) * interval
+  let elapsed = now.max(0L)
+  (elapsed / interval + 1L) * interval
 }
 
 ///|
@@ -720,7 +716,7 @@ fn[Msg] queue_cmd_effects(
       }
       Every(interval_ms, task) => {
         let ms = if interval_ms > 0 { interval_ms } else { 1 }
-        timers.push(EveryAt(now + ms.to_int64(), ms, now, task))
+        timers.push(EveryAt(next_aligned_every_deadline(now, ms), now, task))
       }
       EnterAltScreen => pending.push(RuntimeScreen(RuntimeEnterAltScreen))
       ExitAltScreen => pending.push(RuntimeScreen(RuntimeExitAltScreen))
@@ -1326,18 +1322,10 @@ fn[Model, Msg] run_internal(
             match timer {
               TickAt(_) => pending.push(RuntimeTask(program.on_tick))
               AfterAt(_, task) => pending.push(RuntimeTask(task))
-              EveryAt(_, interval_ms, started_at, task) => {
-                let elapsed = now - started_at
+              EveryAt(_, scheduled_at, task) => {
+                let elapsed = now - scheduled_at
                 pending.push(
                   RuntimeTask(fn() { Some(task({ elapsed_ms: elapsed })) }),
-                )
-                remaining.push(
-                  EveryAt(
-                    next_every_deadline(started_at, interval_ms, now),
-                    interval_ms,
-                    started_at,
-                    task,
-                  ),
                 )
               }
             }

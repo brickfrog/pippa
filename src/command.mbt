@@ -45,10 +45,12 @@ pub fn[Msg] Cmd::after(interval_ms : Int, f : () -> Msg) -> Cmd[Msg] {
 }
 
 ///|
-/// Schedule `f` on every aligned interval.
+/// Schedule `f` once on the next aligned interval boundary.
 ///
-/// The runtime passes a typed elapsed-time payload to the callback each time
-/// the recurring timer fires.
+/// Alignment is measured against the runtime's monotonic millisecond clock:
+/// the deadline is the next strict multiple of `interval_ms`. The callback
+/// receives a typed elapsed-time payload, and apps that want recurrence should
+/// return another `Cmd::every` from `update`.
 pub fn[Msg] Cmd::every(interval_ms : Int, f : (TimerTick) -> Msg) -> Cmd[Msg] {
   let ms = if interval_ms > 0 { interval_ms } else { 1 }
   { _phantom: [], actions: [Every(ms, f)] }
