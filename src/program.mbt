@@ -348,6 +348,8 @@ fn[Model, Msg] program_enter_sequence(program : Program[Model, Msg]) -> String {
     program,
     program.alt_screen,
     program.hide_cursor,
+    program.read_stdin && program.focus_reporting,
+    program.read_stdin && program.bracketed_paste,
   )
 }
 
@@ -357,6 +359,8 @@ fn[Model, Msg] program_enter_sequence_with_modes(
   program : Program[Model, Msg],
   alt_screen : Bool,
   cursor_hidden : Bool,
+  focus_reporting : Bool,
+  bracketed_paste : Bool,
 ) -> String {
   let buf = StringBuilder::new()
   if program.rendering {
@@ -369,10 +373,10 @@ fn[Model, Msg] program_enter_sequence_with_modes(
     buf.write_string(clear_screen())
     buf.write_string(move_cursor(1, 1))
   }
-  if program.read_stdin && program.focus_reporting {
+  if focus_reporting {
     buf.write_string(enable_focus_reporting())
   }
-  if program.read_stdin && program.bracketed_paste {
+  if bracketed_paste {
     buf.write_string(enable_bracketed_paste())
   }
   buf.to_string()
@@ -385,6 +389,8 @@ fn[Model, Msg] program_exit_sequence(program : Program[Model, Msg]) -> String {
     program,
     program.alt_screen,
     program.hide_cursor,
+    program.read_stdin && program.focus_reporting,
+    program.read_stdin && program.bracketed_paste,
   )
 }
 
@@ -394,12 +400,14 @@ fn[Model, Msg] program_exit_sequence_with_modes(
   program : Program[Model, Msg],
   alt_screen : Bool,
   cursor_hidden : Bool,
+  focus_reporting : Bool,
+  bracketed_paste : Bool,
 ) -> String {
   let buf = StringBuilder::new()
-  if program.read_stdin && program.focus_reporting {
+  if focus_reporting {
     buf.write_string(disable_focus_reporting())
   }
-  if program.read_stdin && program.bracketed_paste {
+  if bracketed_paste {
     buf.write_string(disable_bracketed_paste())
   }
   if program.rendering {
@@ -432,12 +440,14 @@ fn[Model, Msg] activate_terminal_with_modes(
   program : Program[Model, Msg],
   alt_screen : Bool,
   cursor_hidden : Bool,
+  focus_reporting : Bool,
+  bracketed_paste : Bool,
 ) -> Unit {
   if program.read_stdin {
     pippa_enter_raw_mode()
   }
   let enter_seq = program_enter_sequence_with_modes(
-    program, alt_screen, cursor_hidden,
+    program, alt_screen, cursor_hidden, focus_reporting, bracketed_paste,
   )
   emit_output(program, enter_seq)
   if program.rendering && program.read_stdin && program.mouse {
@@ -464,12 +474,14 @@ fn[Model, Msg] deactivate_terminal_with_modes(
   program : Program[Model, Msg],
   alt_screen : Bool,
   cursor_hidden : Bool,
+  focus_reporting : Bool,
+  bracketed_paste : Bool,
 ) -> Unit {
   if program.rendering && program.read_stdin && program.mouse {
     emit_output(program, disable_mouse())
   }
   let exit_seq = program_exit_sequence_with_modes(
-    program, alt_screen, cursor_hidden,
+    program, alt_screen, cursor_hidden, focus_reporting, bracketed_paste,
   )
   emit_output(program, exit_seq)
   if program.read_stdin {
@@ -572,9 +584,24 @@ priv enum RuntimeScreenCommand {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+priv enum RuntimeTerminalCommand {
+  RuntimeRequestDeviceAttributes
+  RuntimeRequestSecondaryDeviceAttributes
+  RuntimeRequestCursorPosition
+  RuntimeRequestForegroundColor
+  RuntimeRequestBackgroundColor
+  RuntimeRequestCapability(String)
+  RuntimeRequestClipboard(ClipboardSelection)
+  RuntimeSetFocusReporting(Bool)
+  RuntimeSetBracketedPaste(Bool)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 priv enum RuntimeEffect[Msg] {
   RuntimeTask(() -> Msg?)
   RuntimeScreen(RuntimeScreenCommand)
+  RuntimeTerminal(RuntimeTerminalCommand)
 }
 
 ///|
@@ -583,6 +610,8 @@ priv struct RuntimeRenderState {
   terminal_active : Bool
   alt_screen : Bool
   cursor_hidden : Bool
+  focus_reporting : Bool
+  bracketed_paste : Bool
   rendered : String
   prev_line_count : Int
   last_render_ms : Int64
@@ -610,6 +639,12 @@ fn[Model, Msg] initial_render_state(
     terminal_active,
     alt_screen: program.alt_screen,
     cursor_hidden: program.hide_cursor,
+    focus_reporting: terminal_active &&
+    program.read_stdin &&
+    program.focus_reporting,
+    bracketed_paste: terminal_active &&
+    program.read_stdin &&
+    program.bracketed_paste,
     rendered: "",
     prev_line_count: 0,
     last_render_ms: 0L,
@@ -688,6 +723,42 @@ fn[Model, Msg] apply_screen_command(
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn terminal_command_sequence(command : RuntimeTerminalCommand) -> String {
+  match command {
+    RuntimeRequestDeviceAttributes => request_device_attributes()
+    RuntimeRequestSecondaryDeviceAttributes =>
+      request_secondary_device_attributes()
+    RuntimeRequestCursorPosition => request_cursor_position()
+    RuntimeRequestForegroundColor => request_foreground_color()
+    RuntimeRequestBackgroundColor => request_background_color()
+    RuntimeRequestCapability(name) => request_capability(name)
+    RuntimeRequestClipboard(selection) => request_clipboard(selection)
+    RuntimeSetFocusReporting(true) => enable_focus_reporting()
+    RuntimeSetFocusReporting(false) => disable_focus_reporting()
+    RuntimeSetBracketedPaste(true) => enable_bracketed_paste()
+    RuntimeSetBracketedPaste(false) => disable_bracketed_paste()
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] apply_terminal_command(
+  program : Program[Model, Msg],
+  state : RuntimeRenderState,
+  command : RuntimeTerminalCommand,
+) -> RuntimeRenderState {
+  if state.terminal_active {
+    emit_output(program, terminal_command_sequence(command))
+  }
+  match command {
+    RuntimeSetFocusReporting(enabled) => { ..state, focus_reporting: enabled }
+    RuntimeSetBracketedPaste(enabled) => { ..state, bracketed_paste: enabled }
+    _ => state
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 fn next_aligned_every_deadline(now : Int64, interval_ms : Int) -> Int64 {
   let interval = interval_ms.to_int64()
   let elapsed = now.max(0L)
@@ -727,6 +798,24 @@ fn[Msg] queue_cmd_effects(
       ShowCursor => pending.push(RuntimeScreen(RuntimeShowCursor))
       RequestWindowSize(task) =>
         pending.push(RuntimeTask(fn() { Some(task(current_window_size())) }))
+      RequestDeviceAttributes =>
+        pending.push(RuntimeTerminal(RuntimeRequestDeviceAttributes))
+      RequestSecondaryDeviceAttributes =>
+        pending.push(RuntimeTerminal(RuntimeRequestSecondaryDeviceAttributes))
+      RequestCursorPosition =>
+        pending.push(RuntimeTerminal(RuntimeRequestCursorPosition))
+      RequestForegroundColor =>
+        pending.push(RuntimeTerminal(RuntimeRequestForegroundColor))
+      RequestBackgroundColor =>
+        pending.push(RuntimeTerminal(RuntimeRequestBackgroundColor))
+      RequestCapability(name) =>
+        pending.push(RuntimeTerminal(RuntimeRequestCapability(name)))
+      RequestClipboard(selection) =>
+        pending.push(RuntimeTerminal(RuntimeRequestClipboard(selection)))
+      SetFocusReporting(enabled) =>
+        pending.push(RuntimeTerminal(RuntimeSetFocusReporting(enabled)))
+      SetBracketedPaste(enabled) =>
+        pending.push(RuntimeTerminal(RuntimeSetBracketedPaste(enabled)))
       Sequence(cmds) =>
         match cmds {
           [] => ()
@@ -970,13 +1059,19 @@ fn[Model, Msg] drain_controls(
       Some(ReleaseTerminal) =>
         if next_state.terminal_active {
           if next_state.alt_screen == program.alt_screen &&
-            next_state.cursor_hidden == program.hide_cursor {
+            next_state.cursor_hidden == program.hide_cursor &&
+            next_state.focus_reporting ==
+            (program.read_stdin && program.focus_reporting) &&
+            next_state.bracketed_paste ==
+            (program.read_stdin && program.bracketed_paste) {
             deactivate_terminal(program)
           } else {
             deactivate_terminal_with_modes(
               program,
               next_state.alt_screen,
               next_state.cursor_hidden,
+              next_state.focus_reporting,
+              next_state.bracketed_paste,
             )
           }
           next_state = {
@@ -991,13 +1086,19 @@ fn[Model, Msg] drain_controls(
       Some(RestoreTerminal) =>
         if !next_state.terminal_active {
           if next_state.alt_screen == program.alt_screen &&
-            next_state.cursor_hidden == program.hide_cursor {
+            next_state.cursor_hidden == program.hide_cursor &&
+            next_state.focus_reporting ==
+            (program.read_stdin && program.focus_reporting) &&
+            next_state.bracketed_paste ==
+            (program.read_stdin && program.bracketed_paste) {
             activate_terminal(program)
           } else {
             activate_terminal_with_modes(
               program,
               next_state.alt_screen,
               next_state.cursor_hidden,
+              next_state.focus_reporting,
+              next_state.bracketed_paste,
             )
           }
           next_state = { ..next_state, terminal_active: true }
@@ -1123,6 +1224,10 @@ fn[Model, Msg] drain_runtime(
           }
         RuntimeScreen(command) =>
           current_state = apply_screen_command(program, current_state, command)
+        RuntimeTerminal(command) =>
+          current_state = apply_terminal_command(
+            program, current_state, command,
+          )
       }
     }
 
@@ -1444,13 +1549,19 @@ fn[Model, Msg] run_internal(
 
   if render_state.terminal_active {
     if render_state.alt_screen == program.alt_screen &&
-      render_state.cursor_hidden == program.hide_cursor {
+      render_state.cursor_hidden == program.hide_cursor &&
+      render_state.focus_reporting ==
+      (program.read_stdin && program.focus_reporting) &&
+      render_state.bracketed_paste ==
+      (program.read_stdin && program.bracketed_paste) {
       deactivate_terminal(program)
     } else {
       deactivate_terminal_with_modes(
         program,
         render_state.alt_screen,
         render_state.cursor_hidden,
+        render_state.focus_reporting,
+        render_state.bracketed_paste,
       )
     }
   }

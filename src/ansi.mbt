@@ -14,6 +14,18 @@ pub const ESC : String = "\u001b"
 pub const CSI : String = "\u001b["
 
 ///|
+/// OSC prefix (`ESC ]`).
+pub const OSC : String = "\u001b]"
+
+///|
+/// DCS prefix (`ESC P`).
+pub const DCS : String = "\u001bP"
+
+///|
+/// String terminator (`ESC \`).
+pub const ST : String = "\u001b\\"
+
+///|
 /// Reset all attributes (CSI 0 m).
 pub fn reset() -> String {
   "\{CSI}0m"
@@ -107,6 +119,71 @@ pub fn disable_focus_reporting() -> String {
 /// Disable bracketed paste mode (CSI ?2004l).
 pub fn disable_bracketed_paste() -> String {
   "\{CSI}?2004l"
+}
+
+///|
+/// Request primary device attributes (DA1).
+pub fn request_device_attributes() -> String {
+  "\{CSI}c"
+}
+
+///|
+/// Request secondary device attributes / terminal version (DA2).
+pub fn request_secondary_device_attributes() -> String {
+  "\{CSI}>c"
+}
+
+///|
+/// Request the current cursor position (DSR CPR).
+pub fn request_cursor_position() -> String {
+  "\{CSI}6n"
+}
+
+///|
+/// Request the current default foreground color (OSC 10).
+pub fn request_foreground_color() -> String {
+  "\{OSC}10;?\{ST}"
+}
+
+///|
+/// Request the current default background color (OSC 11).
+pub fn request_background_color() -> String {
+  "\{OSC}11;?\{ST}"
+}
+
+///|
+fn hex_digit(n : Int) -> Char {
+  if n < 10 {
+    (0x30 + n).unsafe_to_char()
+  } else {
+    (0x61 + n - 10).unsafe_to_char()
+  }
+}
+
+///|
+fn hex_encode(input : String) -> String {
+  let bytes = @utf8.encode(input)
+  let buf = StringBuilder::new(size_hint=bytes.length() * 2)
+  let mut i = 0
+  while i < bytes.length() {
+    let b = bytes[i].to_int()
+    buf.write_char(hex_digit((b >> 4) & 0x0F))
+    buf.write_char(hex_digit(b & 0x0F))
+    i = i + 1
+  }
+  buf.to_string()
+}
+
+///|
+/// Request an XTGETTCAP capability by name.
+pub fn request_capability(name : String) -> String {
+  "\{DCS}+q\{hex_encode(name)}\{ST}"
+}
+
+///|
+/// Request clipboard contents from an OSC 52 selection.
+pub fn request_clipboard(selection : ClipboardSelection) -> String {
+  "\{OSC}52;\{clipboard_selection_code(selection)};?\{ST}"
 }
 
 ///|

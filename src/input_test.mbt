@@ -152,6 +152,12 @@ test "parse_input: Alt+] is not shadowed by OSC" {
 }
 
 ///|
+test "parse_input: Alt+P is not shadowed by DCS" {
+  let bare = Bytes::from_array([b'\x1b', b'P'])
+  assert_eq(parse_input(bare[:]), Ok(Key(Modified("alt", "P")), 2))
+}
+
+///|
 test "parse_input: Ctrl+c (0x03)" {
   let bytes = Bytes::from_array([b'\x03'])
   let bv = bytes[0:bytes.length()]

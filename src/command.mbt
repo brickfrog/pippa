@@ -105,6 +105,72 @@ pub fn[Msg] Cmd::request_window_size(f : (WindowSize) -> Msg) -> Cmd[Msg] {
 }
 
 ///|
+/// Request primary device attributes (DA1) from the terminal.
+pub fn[Msg] Cmd::request_device_attributes() -> Cmd[Msg] {
+  { _phantom: [], actions: [RequestDeviceAttributes] }
+}
+
+///|
+/// Request secondary device attributes / terminal version (DA2).
+pub fn[Msg] Cmd::request_secondary_device_attributes() -> Cmd[Msg] {
+  { _phantom: [], actions: [RequestSecondaryDeviceAttributes] }
+}
+
+///|
+/// Request the current cursor position (DSR CPR) from the terminal.
+pub fn[Msg] Cmd::request_cursor_position() -> Cmd[Msg] {
+  { _phantom: [], actions: [RequestCursorPosition] }
+}
+
+///|
+/// Request the current default foreground color (OSC 10).
+pub fn[Msg] Cmd::request_foreground_color() -> Cmd[Msg] {
+  { _phantom: [], actions: [RequestForegroundColor] }
+}
+
+///|
+/// Request the current default background color (OSC 11).
+pub fn[Msg] Cmd::request_background_color() -> Cmd[Msg] {
+  { _phantom: [], actions: [RequestBackgroundColor] }
+}
+
+///|
+/// Request a terminal capability with XTGETTCAP.
+pub fn[Msg] Cmd::request_capability(name : String) -> Cmd[Msg] {
+  { _phantom: [], actions: [RequestCapability(name)] }
+}
+
+///|
+/// Request clipboard contents with OSC 52.
+pub fn[Msg] Cmd::request_clipboard(selection : ClipboardSelection) -> Cmd[Msg] {
+  { _phantom: [], actions: [RequestClipboard(selection)] }
+}
+
+///|
+/// Enable terminal focus reporting at runtime.
+pub fn[Msg] Cmd::enable_focus_reporting() -> Cmd[Msg] {
+  { _phantom: [], actions: [SetFocusReporting(true)] }
+}
+
+///|
+/// Disable terminal focus reporting at runtime.
+pub fn[Msg] Cmd::disable_focus_reporting() -> Cmd[Msg] {
+  { _phantom: [], actions: [SetFocusReporting(false)] }
+}
+
+///|
+/// Enable terminal bracketed paste mode at runtime.
+pub fn[Msg] Cmd::enable_bracketed_paste() -> Cmd[Msg] {
+  { _phantom: [], actions: [SetBracketedPaste(true)] }
+}
+
+///|
+/// Disable terminal bracketed paste mode at runtime.
+pub fn[Msg] Cmd::disable_bracketed_paste() -> Cmd[Msg] {
+  { _phantom: [], actions: [SetBracketedPaste(false)] }
+}
+
+///|
 /// Run commands in order.
 ///
 /// Each command starts only after the prior command's immediate effects have
@@ -153,6 +219,16 @@ pub fn[A, B] Cmd::map(f : (A) -> B, cmd : Cmd[A]) -> Cmd[B] {
       ShowCursor => actions.push(ShowCursor)
       RequestWindowSize(task) =>
         actions.push(RequestWindowSize(fn(size) { f(task(size)) }))
+      RequestDeviceAttributes => actions.push(RequestDeviceAttributes)
+      RequestSecondaryDeviceAttributes =>
+        actions.push(RequestSecondaryDeviceAttributes)
+      RequestCursorPosition => actions.push(RequestCursorPosition)
+      RequestForegroundColor => actions.push(RequestForegroundColor)
+      RequestBackgroundColor => actions.push(RequestBackgroundColor)
+      RequestCapability(name) => actions.push(RequestCapability(name))
+      RequestClipboard(selection) => actions.push(RequestClipboard(selection))
+      SetFocusReporting(enabled) => actions.push(SetFocusReporting(enabled))
+      SetBracketedPaste(enabled) => actions.push(SetBracketedPaste(enabled))
       Sequence(cmds) =>
         actions.push(Sequence(cmds.map(fn(inner) { Cmd::map(f, inner) })))
     }

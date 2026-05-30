@@ -8,7 +8,13 @@ import {
 // Values
 pub const CSI : String = "\x1b["
 
+pub const DCS : String = "\x1bP"
+
 pub const ESC : String = "\x1b"
+
+pub const OSC : String = "\x1b]"
+
+pub const ST : String = "\x1b\\"
 
 pub fn bg_color(Int) -> String
 
@@ -110,6 +116,20 @@ pub fn render_full(String, Int) -> String
 
 pub fn render_patch(Array[PatchOp]) -> String
 
+pub fn request_background_color() -> String
+
+pub fn request_capability(String) -> String
+
+pub fn request_clipboard(ClipboardSelection) -> String
+
+pub fn request_cursor_position() -> String
+
+pub fn request_device_attributes() -> String
+
+pub fn request_foreground_color() -> String
+
+pub fn request_secondary_device_attributes() -> String
+
 pub fn reset() -> String
 
 pub fn reverse() -> String
@@ -155,10 +175,38 @@ pub(all) struct Border {
   vertical : String
 } derive(Eq, @debug.Debug)
 
+pub(all) struct CapabilityReply {
+  name : String
+  value : String?
+  valid : Bool
+} derive(Eq, @debug.Debug)
+
+pub(all) enum ClipboardPayload {
+  DecodedClipboardText(String)
+  RawClipboardData(String)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ClipboardReply {
+  selection : ClipboardSelection
+  payload : ClipboardPayload
+} derive(Eq, @debug.Debug)
+
+pub(all) enum ClipboardSelection {
+  SystemClipboard
+  PrimarySelection
+  SecondarySelection
+  CutBuffer(Int)
+  NamedSelection(String)
+} derive(Eq, @debug.Debug)
+
 type Cmd[Msg]
 pub fn[Msg] Cmd::after(Int, () -> Msg) -> Self[Msg]
 pub fn[Msg] Cmd::batch(Array[Self[Msg]]) -> Self[Msg]
 pub fn[Msg] Cmd::clear_screen() -> Self[Msg]
+pub fn[Msg] Cmd::disable_bracketed_paste() -> Self[Msg]
+pub fn[Msg] Cmd::disable_focus_reporting() -> Self[Msg]
+pub fn[Msg] Cmd::enable_bracketed_paste() -> Self[Msg]
+pub fn[Msg] Cmd::enable_focus_reporting() -> Self[Msg]
 pub fn[Msg] Cmd::enter_alt_screen() -> Self[Msg]
 pub fn[Msg] Cmd::every(Int, (TimerTick) -> Msg) -> Self[Msg]
 pub fn[Msg] Cmd::exit_alt_screen() -> Self[Msg]
@@ -170,6 +218,13 @@ pub fn[Msg] Cmd::msg(Msg) -> Self[Msg]
 pub fn[Msg] Cmd::none() -> Self[Msg]
 pub fn[Msg] Cmd::perform(() -> Msg?) -> Self[Msg]
 pub fn[Msg] Cmd::repaint() -> Self[Msg]
+pub fn[Msg] Cmd::request_background_color() -> Self[Msg]
+pub fn[Msg] Cmd::request_capability(String) -> Self[Msg]
+pub fn[Msg] Cmd::request_clipboard(ClipboardSelection) -> Self[Msg]
+pub fn[Msg] Cmd::request_cursor_position() -> Self[Msg]
+pub fn[Msg] Cmd::request_device_attributes() -> Self[Msg]
+pub fn[Msg] Cmd::request_foreground_color() -> Self[Msg]
+pub fn[Msg] Cmd::request_secondary_device_attributes() -> Self[Msg]
 pub fn[Msg] Cmd::request_window_size((WindowSize) -> Msg) -> Self[Msg]
 pub fn[Msg] Cmd::sequence(Array[Self[Msg]]) -> Self[Msg]
 pub fn[Msg] Cmd::show_cursor() -> Self[Msg]
@@ -417,6 +472,8 @@ pub(all) enum TerminalReplyMsg {
   DeviceAttributes(Array[Int])
   SecondaryDeviceAttributes(Array[Int])
   Color(TerminalColorReply)
+  Capability(CapabilityReply)
+  Clipboard(ClipboardReply)
   UnknownReply(Bytes)
 } derive(Eq, @debug.Debug)
 
