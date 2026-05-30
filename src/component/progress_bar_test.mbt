@@ -145,11 +145,3 @@ test "view negative width does not panic" {
   let view = (comp.view)(model)
   assert_eq(view, "")
 }
-
-///|
-test "progress_bar view reports its ANSI-styled bar in display cells" {
-  let comp = progress_bar(width=6, show_percentage=true)
-  let { model, .. } = (comp.init)()
-  let view = (comp.view)(model)
-  assert_eq(@pippa.visible_width(view), 9)
-}

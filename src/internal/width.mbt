@@ -450,6 +450,47 @@ pub fn grapheme_slice(s : String, start : Int, end_index : Int) -> String {
 }
 
 ///|
+fn push_boundary(boundaries : Array[Int], boundary : Int) -> Unit {
+  if boundaries[boundaries.length() - 1] != boundary {
+    boundaries.push(boundary)
+  }
+}
+
+///|
+pub fn grapheme_boundaries(s : String) -> Array[Int] {
+  let chars = s.to_array()
+  let n = chars.length()
+  let boundaries : Array[Int] = [0]
+  let mut i = 0
+  let mut cluster_open = false
+  while i < n {
+    if chars[i] == '\u001b' {
+      let next = skip_ansi_sequence(chars, i)
+      if cluster_open && is_sgr_reset_sequence(chars, i, next) {
+        i = next
+      } else {
+        if cluster_open {
+          push_boundary(boundaries, i)
+          cluster_open = false
+        }
+        i = next
+      }
+    } else {
+      if cluster_open {
+        push_boundary(boundaries, i)
+        cluster_open = false
+      }
+      cluster_open = true
+      i = next_grapheme_end(chars, i)
+    }
+  }
+  if cluster_open {
+    push_boundary(boundaries, n)
+  }
+  boundaries
+}
+
+///|
 pub fn truncate_width(s : String, max_width : Int) -> String {
   if max_width <= 0 {
     return ""

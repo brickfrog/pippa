@@ -6,6 +6,8 @@ pub fn clamp_non_negative(Int) -> Int
 
 pub fn display_width(String) -> Int
 
+pub fn grapheme_boundaries(String) -> Array[Int]
+
 pub fn grapheme_slice(String, Int, Int) -> String
 
 pub fn join_lines(Array[String]) -> String

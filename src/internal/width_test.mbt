@@ -55,6 +55,15 @@ test "grapheme_slice keeps combining marks and ZWJ clusters intact" {
 }
 
 ///|
+test "grapheme_boundaries keeps ANSI runs out of cursor stops" {
+  let styled = "\u001b[31m界\u001b[0m"
+  assert_eq(grapheme_boundaries(styled), [0, styled.to_array().length()])
+  let mixed = "a\u001b[31m界\u001b[0mb"
+  assert_eq(grapheme_boundaries(mixed), [0, 1, 11, 12])
+  assert_eq(grapheme_boundaries("\u001b[31m"), [0])
+}
+
+///|
 test "truncate_width cuts by cell width without splitting graphemes" {
   let accented = String::from_array(['a', '\u{0301}'])
   let technologist = String::from_array(['👩', '\u{200D}', '💻'])

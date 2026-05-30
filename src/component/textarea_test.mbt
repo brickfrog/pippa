@@ -103,3 +103,12 @@ test "textarea: placeholder pads ANSI-styled wide text by display width" {
   let view = (c.view)(model)
   assert_true(view == "\u001b[2m\u001b[31m界  \u001b[0m\u001b[0m")
 }
+
+///|
+test "textarea: horizontal scroll inside wide glyph preserves cell columns" {
+  let c = textarea(width=2, height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("你x")).model
+  let focused = { ..m1, focused: true, cursor_col: 1, scroll_col: 1 }
+  assert_eq((c.view)(focused), " |")
+}
