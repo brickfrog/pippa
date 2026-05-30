@@ -19,11 +19,43 @@ pub(all) enum KeyMsg {
 
 ///|
 /// Represents a mouse event.
-pub(all) enum MouseMsg {
-  /// Mouse moved to (col, row).
-  Motion(Int, Int)
-  /// Mouse button pressed at (col, row).
-  Press(Int, Int)
-  /// Mouse button released at (col, row).
-  Release(Int, Int)
+pub(all) struct MouseMsg {
+  /// The button or wheel direction reported by the terminal.
+  button : MouseButton
+  /// The kind of mouse event.
+  action : MouseAction
+  /// Active keyboard modifiers when the event was reported.
+  modifiers : Array[MouseModifier]
+  /// 1-based terminal column.
+  col : Int
+  /// 1-based terminal row.
+  row : Int
+} derive(Debug, Eq)
+
+///|
+/// Mouse button or wheel direction.
+pub(all) enum MouseButton {
+  MouseLeft
+  MouseMiddle
+  MouseRight
+  MouseNoButton
+  MouseWheelUp
+  MouseWheelDown
+} derive(Debug, Eq)
+
+///|
+/// Mouse event action.
+pub(all) enum MouseAction {
+  MousePress
+  MouseRelease
+  MouseMotion
+  MouseWheel
+} derive(Debug, Eq)
+
+///|
+/// Keyboard modifiers attached to a mouse event.
+pub(all) enum MouseModifier {
+  MouseShift
+  MouseAlt
+  MouseCtrl
 } derive(Debug, Eq)

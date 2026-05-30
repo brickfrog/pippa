@@ -68,15 +68,15 @@ pub fn enter_alt_screen() -> String {
 }
 
 ///|
-/// Enable normal (VT200/DECSET 1000) mouse reporting (button press/release events: CSI ?1000h).
+/// Enable normal mouse reporting with SGR coordinates (CSI ?1000h CSI ?1006h).
 pub fn enable_mouse() -> String {
-  "\{CSI}?1000h"
+  "\{CSI}?1000h\{CSI}?1006h"
 }
 
 ///|
-/// Enable mouse motion reporting (any mouse event: CSI ?1003h).
+/// Enable mouse motion reporting with SGR coordinates (CSI ?1003h CSI ?1006h).
 pub fn enable_mouse_motion() -> String {
-  "\{CSI}?1003h"
+  "\{CSI}?1003h\{CSI}?1006h"
 }
 
 ///|
@@ -110,9 +110,9 @@ pub fn disable_bracketed_paste() -> String {
 }
 
 ///|
-/// Disable all mouse reporting (CSI ?1000l and CSI ?1003l).
+/// Disable all mouse reporting (CSI ?1000l, CSI ?1003l, and CSI ?1006l).
 pub fn disable_mouse() -> String {
-  "\{CSI}?1000l\{CSI}?1003l"
+  "\{CSI}?1000l\{CSI}?1003l\{CSI}?1006l"
 }
 
 ///|

@@ -181,6 +181,74 @@ test "parse_input: focus and blur events" {
 }
 
 ///|
+fn assert_sgr_mouse(raw : String, expected : MouseMsg) -> Unit raise {
+  let bytes = @utf8.encode(raw)
+  assert_eq(parse_input(bytes[:]), Ok(Mouse(expected), bytes.length()))
+}
+
+///|
+test "parse_input: SGR mouse left press keeps coordinates" {
+  assert_sgr_mouse("\u001b[<0;12;34M", {
+    button: MouseLeft,
+    action: MousePress,
+    modifiers: [],
+    col: 12,
+    row: 34,
+  })
+}
+
+///|
+test "parse_input: SGR mouse release keeps button" {
+  assert_sgr_mouse("\u001b[<0;12;34m", {
+    button: MouseLeft,
+    action: MouseRelease,
+    modifiers: [],
+    col: 12,
+    row: 34,
+  })
+}
+
+///|
+test "parse_input: SGR mouse drag reports motion" {
+  assert_sgr_mouse("\u001b[<32;5;6M", {
+    button: MouseLeft,
+    action: MouseMotion,
+    modifiers: [],
+    col: 5,
+    row: 6,
+  })
+}
+
+///|
+test "parse_input: SGR mouse wheel up and down" {
+  assert_sgr_mouse("\u001b[<64;7;8M", {
+    button: MouseWheelUp,
+    action: MouseWheel,
+    modifiers: [],
+    col: 7,
+    row: 8,
+  })
+  assert_sgr_mouse("\u001b[<65;9;10M", {
+    button: MouseWheelDown,
+    action: MouseWheel,
+    modifiers: [],
+    col: 9,
+    row: 10,
+  })
+}
+
+///|
+test "parse_input: SGR mouse shift alt ctrl modifiers" {
+  assert_sgr_mouse("\u001b[<30;120;45M", {
+    button: MouseRight,
+    action: MousePress,
+    modifiers: [MouseShift, MouseAlt, MouseCtrl],
+    col: 120,
+    row: 45,
+  })
+}
+
+///|
 test "parse_input: bracketed paste" {
   let pasted = Bytes::from_array([
     b'\x1b', b'[', b'2', b'0', b'0', b'~', b'h', b'i', b'\n', b'\x1b', b'[', b'2',
