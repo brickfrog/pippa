@@ -22,6 +22,8 @@ pub(all) enum InputEvent {
   Blur
   /// Bracketed paste payload.
   Paste(String)
+  /// A reply emitted by a terminal query sequence.
+  TerminalReply(TerminalReplyMsg)
   /// Bytes that could not be mapped to a known event.
   Unknown(Bytes)
 } derive(Debug, Eq)
@@ -40,6 +42,11 @@ pub(all) enum ParseResult[T] {
 ///|
 fn unknown_event(bv : BytesView, consumed : Int) -> InputEvent {
   Unknown(Bytes::from_array(bv[0:consumed].to_array()))
+}
+
+///|
+fn unknown_reply_event(bv : BytesView, consumed : Int) -> InputEvent {
+  TerminalReply(UnknownReply(Bytes::from_array(bv[0:consumed].to_array())))
 }
 
 ///|
@@ -393,6 +400,196 @@ fn parse_decimal_segment(bv : BytesView, start : Int, end : Int) -> Int? {
 }
 
 ///|
+fn parse_decimal_params(bv : BytesView, start : Int, end : Int) -> Array[Int]? {
+  if start >= end {
+    return None
+  }
+  let params : Array[Int] = []
+  let mut segment_start = start
+  let mut i = start
+  while i <= end {
+    if i == end || bv[i].to_int() == 0x3B {
+      match parse_decimal_segment(bv, segment_start, i) {
+        Some(value) => params.push(value)
+        None => return None
+      }
+      segment_start = i + 1
+    }
+    i = i + 1
+  }
+  Some(params)
+}
+
+///|
+fn parse_cursor_position_reply(
+  bv : BytesView,
+  final_index : Int,
+) -> CursorPositionReply? {
+  let mut semicolon = -1
+  let mut i = 2
+  while i < final_index {
+    if bv[i].to_int() == 0x3B {
+      if semicolon >= 0 {
+        return None
+      }
+      semicolon = i
+    }
+    i = i + 1
+  }
+  if semicolon < 0 {
+    return None
+  }
+  let row = match parse_decimal_segment(bv, 2, semicolon) {
+    Some(value) => value
+    None => return None
+  }
+  let col = match parse_decimal_segment(bv, semicolon + 1, final_index) {
+    Some(value) => value
+    None => return None
+  }
+  if row <= 0 || col <= 0 {
+    return None
+  }
+  Some({ row, col })
+}
+
+///|
+fn parse_device_attributes_reply(
+  bv : BytesView,
+  final_index : Int,
+) -> TerminalReplyMsg? {
+  if final_index <= 3 {
+    return None
+  }
+  let prefix = bv[2].to_int()
+  if prefix == 0x3F {
+    match parse_decimal_params(bv, 3, final_index) {
+      Some(params) => Some(DeviceAttributes(params))
+      None => None
+    }
+  } else if prefix == 0x3E {
+    match parse_decimal_params(bv, 3, final_index) {
+      Some(params) => Some(SecondaryDeviceAttributes(params))
+      None => None
+    }
+  } else {
+    None
+  }
+}
+
+///|
+fn is_csi_unknown_reply(
+  bv : BytesView,
+  final_index : Int,
+  final_byte : Int,
+) -> Bool {
+  if final_byte == 0x52 || final_byte == 0x63 || final_byte == 0x6E {
+    return true
+  }
+  if final_index > 2 {
+    let first = bv[2].to_int()
+    first == 0x3F || first == 0x3E
+  } else {
+    false
+  }
+}
+
+///|
+fn decode_slice_lossy(bv : BytesView, start : Int, end : Int) -> String {
+  @utf8.decode_lossy(Bytes::from_array(bv[start:end].to_array()))
+}
+
+///|
+fn parse_osc_color_reply(
+  bv : BytesView,
+  payload_start : Int,
+  payload_end : Int,
+) -> TerminalColorReply? {
+  let len = payload_end - payload_start
+  if len >= 3 &&
+    bv[payload_start].to_int() == 0x31 &&
+    bv[payload_start + 1].to_int() == 0x30 &&
+    bv[payload_start + 2].to_int() == 0x3B {
+    return Some(
+      ForegroundColor(decode_slice_lossy(bv, payload_start + 3, payload_end)),
+    )
+  }
+  if len >= 3 &&
+    bv[payload_start].to_int() == 0x31 &&
+    bv[payload_start + 1].to_int() == 0x31 &&
+    bv[payload_start + 2].to_int() == 0x3B {
+    return Some(
+      BackgroundColor(decode_slice_lossy(bv, payload_start + 3, payload_end)),
+    )
+  }
+  if len >= 4 &&
+    bv[payload_start].to_int() == 0x34 &&
+    bv[payload_start + 1].to_int() == 0x3B {
+    let index_start = payload_start + 2
+    let mut separator = -1
+    let mut i = index_start
+    while i < payload_end {
+      if bv[i].to_int() == 0x3B {
+        separator = i
+        break
+      }
+      i = i + 1
+    }
+    if separator > index_start {
+      match parse_decimal_segment(bv, index_start, separator) {
+        Some(index) =>
+          return Some(
+            PaletteColor(
+              index,
+              decode_slice_lossy(bv, separator + 1, payload_end),
+            ),
+          )
+        None => ()
+      }
+    }
+  }
+  None
+}
+
+///|
+fn parse_osc_payload(
+  bv : BytesView,
+  payload_start : Int,
+  payload_end : Int,
+  consumed : Int,
+) -> ParseResult[InputEvent] {
+  match parse_osc_color_reply(bv, payload_start, payload_end) {
+    Some(color) => Ok(TerminalReply(Color(color)), consumed)
+    None => Ok(unknown_reply_event(bv, consumed), consumed)
+  }
+}
+
+///|
+fn parse_osc(bv : BytesView) -> ParseResult[InputEvent] {
+  let n = bv.length()
+  if n < 3 {
+    return Incomplete
+  }
+  let mut i = 2
+  while i < n {
+    let b = bv[i].to_int()
+    if b == 0x07 {
+      return parse_osc_payload(bv, 2, i, i + 1)
+    }
+    if b == 0x1B {
+      if i + 1 >= n {
+        return Incomplete
+      }
+      if bv[i + 1].to_int() == 0x5C {
+        return parse_osc_payload(bv, 2, i, i + 2)
+      }
+    }
+    i = i + 1
+  }
+  Incomplete
+}
+
+///|
 fn parse_key_code_segment(
   bv : BytesView,
   start : Int,
@@ -666,6 +863,22 @@ fn parse_csi(bv : BytesView) -> ParseResult[InputEvent] {
           EnhancedKeyInvalid(message) => return Invalid(message)
         }
       }
+      if b == 0x52 {
+        match parse_cursor_position_reply(bv, i) {
+          Some(reply) =>
+            return Ok(TerminalReply(CursorPosition(reply)), consumed)
+          None => return Ok(unknown_reply_event(bv, consumed), consumed)
+        }
+      }
+      if b == 0x63 {
+        match parse_device_attributes_reply(bv, i) {
+          Some(reply) => return Ok(TerminalReply(reply), consumed)
+          None => return Ok(unknown_reply_event(bv, consumed), consumed)
+        }
+      }
+      if is_csi_unknown_reply(bv, i, b) {
+        return Ok(unknown_reply_event(bv, consumed), consumed)
+      }
       let evt : InputEvent = match (b, params) {
         (0x41, "") => Key(Special("up"))
         (0x42, "") => Key(Special("down"))
@@ -735,6 +948,10 @@ pub fn parse_input(bv : BytesView) -> ParseResult[InputEvent] {
     // ESC [ → CSI sequence
     if b1 == 0x5B {
       return parse_csi(bv)
+    }
+    // ESC ] → OSC reply/control string.
+    if b1 == 0x5D {
+      return parse_osc(bv)
     }
     // ESC ESC → treat first ESC as standalone escape key
     if b1 == 0x1B {
