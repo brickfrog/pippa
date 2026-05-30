@@ -128,8 +128,8 @@ pub fn viewport(
         } else {
           ""
         }
-        let truncated = @pippa.truncate(raw_line, model.width)
-        let padded = @pippa.pad_right(truncated, model.width)
+        let truncated = @internal.truncate_width(raw_line, model.width)
+        let padded = @internal.pad_right_width(truncated, model.width)
         buf.write_string(padded)
         if i < model.height - 1 {
           buf.write_char('\n')

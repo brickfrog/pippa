@@ -7,7 +7,7 @@
 ///|
 /// Model for the animated gradient progress bar.
 pub(all) struct ProgressBarModel {
-  /// Total width of the bar in characters.
+  /// Total width of the bar in terminal cells.
   width : Int
   /// Target fill fraction (0.0–1.0).
   target_percent : Double

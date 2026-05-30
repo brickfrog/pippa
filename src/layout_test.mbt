@@ -29,6 +29,16 @@ test "visible_width with ANSI" {
 }
 
 ///|
+test "visible_width uses terminal cells for Unicode graphemes" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  assert_eq(visible_width("界"), 2)
+  assert_eq(visible_width(accented), 1)
+  assert_eq(visible_width(technologist), 2)
+  assert_eq(visible_width("\u001b[31m界\{accented}\u001b[0m"), 3)
+}
+
+///|
 test "visible_width empty" {
   assert_eq(visible_width(""), 0)
 }
@@ -74,6 +84,12 @@ test "max_line_width with ANSI" {
 }
 
 ///|
+test "max_line_width uses terminal cells" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  assert_eq(max_line_width("a\n界\n\{accented}x"), 2)
+}
+
+///|
 test "center even padding" {
   assert_eq(center("hi", 6), "  hi  ")
 }
@@ -104,6 +120,13 @@ test "pad_right" {
 }
 
 ///|
+test "pad_right pads by display width and preserves trailing reset" {
+  assert_eq(pad_right("界", 3), "界 ")
+  let padded = pad_right("\u001b[31m界\u001b[0m", 4)
+  assert_true(padded == "\u001b[31m界  \u001b[0m")
+}
+
+///|
 test "truncate basic" {
   assert_eq(truncate("hello", 3), "hel")
   assert_eq(truncate("hello", 10), "hello")
@@ -116,12 +139,20 @@ test "truncate zero" {
 }
 
 ///|
+test "truncate cuts by display width without splitting graphemes" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  assert_eq(truncate("a界b", 3), "a界")
+  assert_eq(truncate("\{accented}xy", 1), accented)
+  assert_eq(truncate("a\{technologist}b", 2), "a")
+}
+
+///|
 test "truncate preserves ANSI sequences before limit" {
-  // ESC prefix is before the visible chars — it is copied.
-  // The trailing reset comes after all visible chars (width already at max),
-  // so it is excluded to avoid leaking terminal state.
+  // ESC prefix is before the visible chars, and the trailing reset is preserved
+  // when it is the only suffix after a display-width cut.
   let s = "\u001b[1mhi\u001b[0m"
-  assert_eq(truncate(s, 2), "\u001b[1mhi")
+  assert_true(truncate(s, 2) == "\u001b[1mhi\u001b[0m")
 }
 
 ///|
@@ -141,4 +172,10 @@ test "truncate does not copy ANSI sequences after truncation point" {
 test "truncate escape at exact boundary excluded" {
   // Visible budget exhausted after "ab"; the ESC right after must not leak.
   assert_eq(truncate("ab\u001b[0mc", 2), "ab")
+}
+
+///|
+test "truncate preserves ANSI reset when cutting styled wide text" {
+  let truncated = truncate("\u001b[31m你好x\u001b[0m", 4)
+  assert_true(truncated == "\u001b[31m你好\u001b[0m")
 }

@@ -97,11 +97,13 @@ fn textarea_normalize(
 ) -> TextareaModel {
   let lines = textarea_lines(value)
   let row = textarea_clamp(cursor_row, 0, lines.length() - 1)
-  let col = textarea_clamp(cursor_col, 0, textarea_line_len(lines, row))
+  let raw_col = textarea_clamp(cursor_col, 0, textarea_line_len(lines, row))
+  let col = component_clamp_grapheme_boundary(lines[row], raw_col)
   let safe_width = width.max(0)
   let safe_height = height.max(0)
   let mut next_scroll_row = scroll_row.max(0)
   let mut next_scroll_col = scroll_col.max(0)
+  let cursor_cells = component_prefix_display_width(lines[row], col)
 
   if safe_height > 0 {
     if row < next_scroll_row {
@@ -114,10 +116,10 @@ fn textarea_normalize(
   }
 
   if safe_width > 0 {
-    if col < next_scroll_col {
-      next_scroll_col = col
-    } else if col >= next_scroll_col + safe_width {
-      next_scroll_col = col - safe_width + 1
+    if cursor_cells < next_scroll_col {
+      next_scroll_col = cursor_cells
+    } else if cursor_cells >= next_scroll_col + safe_width {
+      next_scroll_col = cursor_cells - safe_width + 1
     }
   } else {
     next_scroll_col = 0
@@ -143,17 +145,10 @@ fn textarea_insert_char(
   col : Int,
   ch : Char,
 ) -> (Array[String], Int, Int) {
-  let chars = lines[row].to_array()
-  let next_chars : Array[Char] = []
-  for i in 0..<col {
-    next_chars.push(chars[i])
-  }
-  next_chars.push(ch)
-  for i in col..<chars.length() {
-    next_chars.push(chars[i])
-  }
-  lines[row] = textarea_chars_to_string(next_chars)
-  (lines, row, col + 1)
+  let cursor = component_clamp_grapheme_boundary(lines[row], col)
+  let next_line = component_insert_char_at(lines[row], cursor, ch)
+  lines[row] = next_line
+  (lines, row, component_next_grapheme_boundary(next_line, cursor))
 }
 
 ///|
@@ -164,32 +159,33 @@ fn textarea_insert_text(
   text : String,
 ) -> (Array[String], Int, Int) {
   let parts = textarea_lines(text)
+  let cursor = component_clamp_grapheme_boundary(lines[row], col)
   match parts {
     [] => (lines, row, col)
     [single] => {
       let single_chars = single.to_array()
       let base_chars = lines[row].to_array()
       let next_chars : Array[Char] = []
-      for i in 0..<col {
+      for i in 0..<cursor {
         next_chars.push(base_chars[i])
       }
       for ch in single_chars {
         next_chars.push(ch)
       }
-      for i in col..<base_chars.length() {
+      for i in cursor..<base_chars.length() {
         next_chars.push(base_chars[i])
       }
       lines[row] = textarea_chars_to_string(next_chars)
-      (lines, row, col + single_chars.length())
+      (lines, row, cursor + single_chars.length())
     }
     [first, .. rest] => {
       let base_chars = lines[row].to_array()
       let before_chars : Array[Char] = []
       let after_chars : Array[Char] = []
-      for i in 0..<col {
+      for i in 0..<cursor {
         before_chars.push(base_chars[i])
       }
-      for i in col..<base_chars.length() {
+      for i in cursor..<base_chars.length() {
         after_chars.push(base_chars[i])
       }
       lines[row] = textarea_chars_to_string(
@@ -218,12 +214,13 @@ fn textarea_insert_newline(
   col : Int,
 ) -> (Array[String], Int, Int) {
   let chars = lines[row].to_array()
+  let cursor = component_clamp_grapheme_boundary(lines[row], col)
   let before_chars : Array[Char] = []
   let after_chars : Array[Char] = []
-  for i in 0..<col {
+  for i in 0..<cursor {
     before_chars.push(chars[i])
   }
-  for i in col..<chars.length() {
+  for i in cursor..<chars.length() {
     after_chars.push(chars[i])
   }
   lines[row] = textarea_chars_to_string(before_chars)
@@ -237,17 +234,16 @@ fn textarea_delete_before(
   row : Int,
   col : Int,
 ) -> (Array[String], Int, Int) {
-  if col > 0 {
-    let chars = lines[row].to_array()
-    let next_chars : Array[Char] = []
-    for i in 0..<(col - 1) {
-      next_chars.push(chars[i])
-    }
-    for i in col..<chars.length() {
-      next_chars.push(chars[i])
-    }
-    lines[row] = textarea_chars_to_string(next_chars)
-    (lines, row, col - 1)
+  let line = lines[row]
+  let end = if component_is_grapheme_boundary(line, col) {
+    textarea_clamp(col, 0, component_char_len(line))
+  } else {
+    component_next_grapheme_boundary(line, col)
+  }
+  if end > 0 {
+    let start = component_previous_grapheme_boundary(line, end)
+    lines[row] = component_remove_char_range(line, start, end)
+    (lines, row, start)
   } else if row > 0 {
     let prev = lines[row - 1]
     let prev_len = prev.to_array().length()
@@ -265,17 +261,12 @@ fn textarea_delete_after(
   row : Int,
   col : Int,
 ) -> (Array[String], Int, Int) {
-  let chars = lines[row].to_array()
-  if col < chars.length() {
-    let next_chars : Array[Char] = []
-    for i in 0..<col {
-      next_chars.push(chars[i])
-    }
-    for i in (col + 1)..<chars.length() {
-      next_chars.push(chars[i])
-    }
-    lines[row] = textarea_chars_to_string(next_chars)
-    (lines, row, col)
+  let line = lines[row]
+  let start = component_clamp_grapheme_boundary(line, col)
+  if start < component_char_len(line) {
+    let end = component_next_grapheme_boundary(line, start)
+    lines[row] = component_remove_char_range(line, start, end)
+    (lines, row, start)
   } else if row + 1 < lines.length() {
     lines[row] = lines[row] + lines[row + 1]
     ignore(lines.remove(row + 1))
@@ -392,7 +383,7 @@ fn textarea_update(
         textarea_normalize(
           model.value,
           row,
-          col - 1,
+          component_previous_grapheme_boundary(lines[row], col),
           model.width,
           model.height,
           model.scroll_row,
@@ -420,7 +411,7 @@ fn textarea_update(
         textarea_normalize(
           model.value,
           row,
-          col + 1,
+          component_next_grapheme_boundary(lines[row], col),
           model.width,
           model.height,
           model.scroll_row,
@@ -582,17 +573,7 @@ fn textarea_update(
 
 ///|
 fn textarea_visible_slice(line : String, start : Int, width : Int) -> String {
-  if width <= 0 {
-    return ""
-  }
-  let chars = line.to_array()
-  let from = start.max(0).min(chars.length())
-  let to = (from + width).min(chars.length())
-  let visible : Array[Char] = []
-  for i in from..<to {
-    visible.push(chars[i])
-  }
-  textarea_chars_to_string(visible)
+  component_visible_cell_slice(line, start, width)
 }
 
 ///|
@@ -600,23 +581,10 @@ fn textarea_cursor_line(model : TextareaModel, line : String) -> String {
   if !model.focused {
     return line
   }
-  let chars = line.to_array()
-  let start = model.scroll_col
-  let cursor = textarea_clamp(model.cursor_col, 0, chars.length())
-  let rendered : Array[Char] = []
-  for i in start..<chars.length() {
-    if i == cursor {
-      rendered.push('|')
-    }
-    rendered.push(chars[i])
-    if rendered.length() >= model.width + 1 {
-      break
-    }
-  }
-  if cursor == chars.length() {
-    rendered.push('|')
-  }
-  textarea_chars_to_string(rendered)
+  let cursor = component_clamp_grapheme_boundary(line, model.cursor_col)
+  component_char_slice(line, 0, cursor) +
+  "|" +
+  component_char_slice(line, cursor, component_char_len(line))
 }
 
 ///|
@@ -626,8 +594,8 @@ fn textarea_view(model : TextareaModel) -> String {
   }
 
   if model.value == "" && !model.focused {
-    let first_line = @pippa.pad_right(
-      @pippa.truncate(
+    let first_line = @internal.pad_right_width(
+      @internal.truncate_width(
         @pippa.dim() + model.placeholder + @pippa.reset(),
         model.width,
       ),
@@ -635,7 +603,7 @@ fn textarea_view(model : TextareaModel) -> String {
     )
     let rows : Array[String] = [first_line]
     for _ in 1..<model.height {
-      rows.push(@pippa.pad_right("", model.width))
+      rows.push(@internal.pad_right_width("", model.width))
     }
     return rows.join("\n")
   }
@@ -650,7 +618,12 @@ fn textarea_view(model : TextareaModel) -> String {
     } else {
       textarea_visible_slice(line, model.scroll_col, model.width)
     }
-    rows.push(@pippa.pad_right(@pippa.truncate(raw, model.width), model.width))
+    let clipped = if model.focused && line_index == model.cursor_row {
+      textarea_visible_slice(raw, model.scroll_col, model.width)
+    } else {
+      raw
+    }
+    rows.push(component_fit_width(clipped, model.width))
   }
   rows.join("\n")
 }

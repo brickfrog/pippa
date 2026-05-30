@@ -84,3 +84,31 @@ test "viewport truncation" {
   let v = (vp.view)(m)
   assert_eq(v, "lon")
 }
+
+///|
+test "viewport truncates wide text by display width" {
+  let vp = viewport(width=4, height=1)
+  let mut m = (vp.init)().model
+  m = (vp.update)(m, SetContent("你好x")).model
+  let v = (vp.view)(m)
+  assert_eq(v, "你好")
+}
+
+///|
+test "viewport does not split emoji ZWJ clusters" {
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  let vp = viewport(width=2, height=1)
+  let mut m = (vp.init)().model
+  m = (vp.update)(m, SetContent("\{technologist}x")).model
+  let v = (vp.view)(m)
+  assert_eq(v, technologist)
+}
+
+///|
+test "viewport pads ANSI-styled wide content before trailing reset" {
+  let vp = viewport(width=4, height=1)
+  let mut m = (vp.init)().model
+  m = (vp.update)(m, SetContent("\u001b[1m界\u001b[0m")).model
+  let v = (vp.view)(m)
+  assert_true(v == "\u001b[1m界  \u001b[0m")
+}

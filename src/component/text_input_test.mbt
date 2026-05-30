@@ -177,3 +177,35 @@ test "text_input: view shows empty cursor when focused and empty" {
   let m1 = (comp.update)(m0, Focus).model
   assert_eq((comp.view)(m1), "|")
 }
+
+///|
+test "text_input: cursor movement stays on grapheme boundaries" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let comp = text_input(placeholder="")
+  let model : TextInputModel = {
+    value: "\{accented}x",
+    cursor: 3,
+    placeholder: "",
+    focused: true,
+  }
+  let m1 = (comp.update)(model, MoveCursorLeft).model
+  let m2 = (comp.update)(m1, MoveCursorLeft).model
+  assert_eq((comp.view)(m1), "\{accented}|x")
+  assert_eq((comp.view)(m2), "|\{accented}x")
+}
+
+///|
+test "text_input: delete before removes a whole grapheme cluster" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let comp = text_input(placeholder="")
+  let model : TextInputModel = {
+    value: "\{accented}x",
+    cursor: 2,
+    placeholder: "",
+    focused: true,
+  }
+  let next = (comp.update)(model, DeleteBefore).model
+  assert_eq(next.value, "x")
+  assert_eq(next.cursor, 0)
+  assert_eq((comp.view)(next), "|x")
+}

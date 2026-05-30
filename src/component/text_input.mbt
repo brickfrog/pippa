@@ -43,15 +43,6 @@ pub(all) enum TextInputMsg {
 } derive(Debug, Eq)
 
 ///|
-fn text_input_chars_to_string(chars : Array[Char]) -> String {
-  let buf = StringBuilder::new(size_hint=chars.length() + 4)
-  for ch in chars {
-    buf.write_char(ch)
-  }
-  buf.to_string()
-}
-
-///|
 // Clamp `v` to the closed interval [lo, hi].
 fn clamp(v : Int, lo : Int, hi : Int) -> Int {
   if v < lo {
@@ -72,73 +63,56 @@ fn text_input_update(
   // Focus/Blur/MoveCursorLeft/MoveToStart never allocate.
   let new_model : TextInputModel = match msg {
     InsertChar(c) => {
-      let chars = model.value.to_array()
-      let n = chars.length()
-      let cursor = clamp(model.cursor, 0, n)
-      let new_chars : Array[Char] = []
-      for i in 0..<cursor {
-        new_chars.push(chars[i])
-      }
-      new_chars.push(c)
-      for i in cursor..<n {
-        new_chars.push(chars[i])
-      }
+      let cursor = component_clamp_grapheme_boundary(model.value, model.cursor)
+      let value = component_insert_char_at(model.value, cursor, c)
       {
         ..model,
-        value: text_input_chars_to_string(new_chars),
-        cursor: cursor + 1,
+        value,
+        cursor: component_next_grapheme_boundary(value, cursor),
       }
     }
     DeleteBefore => {
-      let chars = model.value.to_array()
-      let n = chars.length()
+      let n = component_char_len(model.value)
       let cursor = clamp(model.cursor, 0, n)
-      if cursor > 0 {
-        let new_chars : Array[Char] = []
-        for i in 0..<(cursor - 1) {
-          new_chars.push(chars[i])
-        }
-        for i in cursor..<n {
-          new_chars.push(chars[i])
-        }
+      let end = if component_is_grapheme_boundary(model.value, cursor) {
+        cursor
+      } else {
+        component_next_grapheme_boundary(model.value, cursor)
+      }
+      if end > 0 {
+        let start = component_previous_grapheme_boundary(model.value, end)
         {
           ..model,
-          value: text_input_chars_to_string(new_chars),
-          cursor: cursor - 1,
+          value: component_remove_char_range(model.value, start, end),
+          cursor: start,
         }
       } else {
         model
       }
     }
     DeleteAfter => {
-      let chars = model.value.to_array()
-      let n = chars.length()
+      let n = component_char_len(model.value)
       let cursor = clamp(model.cursor, 0, n)
       if cursor < n {
-        let new_chars : Array[Char] = []
-        for i in 0..<cursor {
-          new_chars.push(chars[i])
-        }
-        for i in (cursor + 1)..<n {
-          new_chars.push(chars[i])
-        }
-        { ..model, value: text_input_chars_to_string(new_chars) }
+        let start = component_clamp_grapheme_boundary(model.value, cursor)
+        let end = component_next_grapheme_boundary(model.value, start)
+        { ..model, value: component_remove_char_range(model.value, start, end) }
       } else {
         model
       }
     }
     MoveCursorLeft =>
-      { ..model, cursor: if model.cursor > 0 { model.cursor - 1 } else { 0 } }
-    MoveCursorRight => {
-      let n = model.value.to_array().length()
-      let cursor = clamp(model.cursor, 0, n)
-      { ..model, cursor: if cursor < n { cursor + 1 } else { n } }
-    }
+      {
+        ..model,
+        cursor: component_previous_grapheme_boundary(model.value, model.cursor),
+      }
+    MoveCursorRight =>
+      {
+        ..model,
+        cursor: component_next_grapheme_boundary(model.value, model.cursor),
+      }
     MoveToStart => { ..model, cursor: 0 }
-    MoveToEnd => {
-      let n = model.value.to_array().length()
-      { ..model, cursor: n }
-    }
+    MoveToEnd => { ..model, cursor: component_char_len(model.value) }
     Focus => { ..model, focused: true }
     Blur => { ..model, focused: false }
   }
@@ -157,13 +131,7 @@ fn text_input_view(model : TextInputModel) -> String {
     // Show value with '|' cursor marker at cursor position
     let chars = model.value.to_array()
     let n = chars.length()
-    let cursor = if model.cursor < 0 {
-      0
-    } else if model.cursor > n {
-      n
-    } else {
-      model.cursor
-    }
+    let cursor = component_clamp_grapheme_boundary(model.value, model.cursor)
     for i in 0..<n {
       if i == cursor {
         buf.write_char('|')
