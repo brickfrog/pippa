@@ -637,6 +637,19 @@ fn decode_base64_slice(bv : BytesView, start : Int, end : Int) -> Bytes? {
 }
 
 ///|
+fn decode_utf8_strict(bytes : Bytes) -> String? {
+  let bv = bytes[:]
+  let mut offset = 0
+  while offset < bv.length() {
+    match decode_utf8_scalar(bv[offset:bv.length()]) {
+      Utf8Ok(_, consumed) => offset = offset + consumed
+      Utf8Incomplete | Utf8Invalid(_) => return None
+    }
+  }
+  Some(@utf8.decode_lossy(bytes))
+}
+
+///|
 fn parse_osc_clipboard_reply(
   bv : BytesView,
   payload_start : Int,
@@ -667,7 +680,11 @@ fn parse_osc_clipboard_reply(
   )
   let raw = decode_slice_lossy(bv, separator + 1, payload_end)
   let payload = match decode_base64_slice(bv, separator + 1, payload_end) {
-    Some(decoded) => DecodedClipboardText(@utf8.decode_lossy(decoded))
+    Some(decoded) =>
+      match decode_utf8_strict(decoded) {
+        Some(text) => DecodedClipboardText(text)
+        None => RawClipboardData(raw)
+      }
     None => RawClipboardData(raw)
   }
   Some({ selection, payload })
@@ -751,6 +768,17 @@ fn decode_hex_slice(bv : BytesView, start : Int, end : Int) -> Bytes? {
 }
 
 ///|
+fn decode_hex_text(bv : BytesView, start : Int, end : Int) -> String? {
+  if start >= end {
+    return None
+  }
+  match decode_hex_slice(bv, start, end) {
+    Some(bytes) => Some(@utf8.decode_lossy(bytes))
+    None => None
+  }
+}
+
+///|
 fn parse_capability_reply(
   bv : BytesView,
   payload_start : Int,
@@ -771,28 +799,40 @@ fn parse_capability_reply(
     return None
   }
   let data_start = payload_start + 3
-  let data = match decode_hex_slice(bv, data_start, payload_end) {
-    Some(bytes) => bytes
-    None => return None
-  }
-  let data_view = data[:]
+  let mut item_end = payload_end
   let mut separator = -1
-  let mut i = 0
-  while i < data_view.length() {
-    if data_view[i].to_int() == 0x3D {
-      separator = i
+  let mut i = data_start
+  while i < payload_end {
+    let b = bv[i].to_int()
+    if b == 0x3B {
+      item_end = i
       break
+    }
+    if b == 0x3D {
+      if separator >= 0 {
+        return None
+      }
+      separator = i
     }
     i = i + 1
   }
-  let name_end = if separator >= 0 { separator } else { data_view.length() }
-  if name_end <= 0 {
-    return None
+  let name_end = if separator >= 0 { separator } else { item_end }
+  let name = match decode_hex_text(bv, data_start, name_end) {
+    Some(decoded) => decoded
+    None => return None
   }
-  let name = decode_slice_lossy(data_view, 0, name_end)
-  let value = if separator >= 0 {
-    Some(decode_slice_lossy(data_view, separator + 1, data_view.length()))
+  let value = if valid {
+    if separator < 0 || separator + 1 >= item_end {
+      return None
+    }
+    match decode_hex_text(bv, separator + 1, item_end) {
+      Some(decoded) => Some(decoded)
+      None => return None
+    }
   } else {
+    if separator >= 0 {
+      return None
+    }
     None
   }
   Some({ name, value, valid })
@@ -1201,8 +1241,10 @@ pub fn parse_input(bv : BytesView) -> ParseResult[InputEvent] {
     // ESC P plus a capability reply status starts a DCS reply; bare ESC P
     // remains available for the Alt+P key path below.
     if b1 == 0x50 &&
-      n > 2 &&
-      (bv[2].to_int() == 0x30 || bv[2].to_int() == 0x31) {
+      n > 4 &&
+      (bv[2].to_int() == 0x30 || bv[2].to_int() == 0x31) &&
+      bv[3].to_int() == 0x2B &&
+      (bv[4].to_int() == 0x71 || bv[4].to_int() == 0x72) {
       return parse_dcs(bv)
     }
     // ESC ESC → treat first ESC as standalone escape key

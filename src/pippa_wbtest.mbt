@@ -181,13 +181,22 @@ test "pippa terminal query commands round-trip through typed replies" {
   assert_terminal_query_round_trip(
     Cmd::request_capability("Co"),
     "\u001bP+q436f\u001b\\",
-    "\u001bP1+r436f3d323536\u001b\\",
+    "\u001bP1+r436f=323536\u001b\\",
     Capability({ name: "Co", value: Some("256"), valid: true }),
   )
   assert_terminal_query_round_trip(
     Cmd::request_clipboard(SystemClipboard),
     "\u001b]52;c;?\u001b\\",
     "\u001b]52;c;aGk=\u001b\\",
+    Clipboard({
+      selection: SystemClipboard,
+      payload: DecodedClipboardText("hi"),
+    }),
+  )
+  assert_terminal_query_round_trip(
+    Cmd::request_clipboard(SystemClipboard),
+    "\u001b]52;c;?\u001b\\",
+    "\u001b]52;c;aGk=\u0007",
     Clipboard({
       selection: SystemClipboard,
       payload: DecodedClipboardText("hi"),
@@ -214,12 +223,31 @@ test "parse_input: capability replies handle invalid and partial payloads" {
       invalid.length(),
     ),
   )
-  let partial = @utf8.encode("\u001bP1+r436f3d323536")
+  let partial = @utf8.encode("\u001bP1+r436f=323536")
   @test.assert_eq(parse_input(partial[:]), Incomplete)
-  let malformed = @utf8.encode("\u001bP1+r3d323536\u001b\\")
+  let valid_without_value = @utf8.encode("\u001bP1+r436f\u001b\\")
   @test.assert_eq(
-    parse_input(malformed[:]),
-    Ok(TerminalReply(UnknownReply(malformed)), malformed.length()),
+    parse_input(valid_without_value[:]),
+    Ok(
+      TerminalReply(UnknownReply(valid_without_value)),
+      valid_without_value.length(),
+    ),
+  )
+  let invalid_with_value = @utf8.encode("\u001bP0+r436f=323536\u001b\\")
+  @test.assert_eq(
+    parse_input(invalid_with_value[:]),
+    Ok(
+      TerminalReply(UnknownReply(invalid_with_value)),
+      invalid_with_value.length(),
+    ),
+  )
+  let valid_empty_value = @utf8.encode("\u001bP1+r436f=\u001b\\")
+  @test.assert_eq(
+    parse_input(valid_empty_value[:]),
+    Ok(
+      TerminalReply(UnknownReply(valid_empty_value)),
+      valid_empty_value.length(),
+    ),
   )
 }
 
@@ -236,6 +264,19 @@ test "parse_input: clipboard replies decode text and keep malformed payloads typ
         }),
       ),
       raw.length(),
+    ),
+  )
+  let binary = @utf8.encode("\u001b]52;c;/w==\u001b\\")
+  @test.assert_eq(
+    parse_input(binary[:]),
+    Ok(
+      TerminalReply(
+        Clipboard({
+          selection: SystemClipboard,
+          payload: RawClipboardData("/w=="),
+        }),
+      ),
+      binary.length(),
     ),
   )
   let partial = @utf8.encode("\u001b]52;c;aGk=")
