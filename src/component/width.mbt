@@ -77,12 +77,7 @@ fn component_is_sgr_reset_sequence(
   start : Int,
   end_index : Int,
 ) -> Bool {
-  if end_index < start + 3 ||
-    chars[start] != '\u001b' ||
-    chars[start + 1] != '[' {
-    return false
-  }
-  if chars[end_index - 1] != 'm' {
+  if !component_is_sgr_sequence(chars, start, end_index) {
     return false
   }
   if end_index == start + 3 {
@@ -106,11 +101,53 @@ fn component_is_sgr_reset_sequence(
 }
 
 ///|
+fn component_is_sgr_sequence(
+  chars : Array[Char],
+  start : Int,
+  end_index : Int,
+) -> Bool {
+  end_index >= start + 3 &&
+  chars[start] == '\u001b' &&
+  chars[start + 1] == '[' &&
+  chars[end_index - 1] == 'm'
+}
+
+///|
+fn component_sgr_state_after_range(
+  chars : Array[Char],
+  start : Int,
+  end_index : Int,
+  state : String,
+) -> String {
+  let limit = end_index.max(0).min(chars.length())
+  let mut active = state
+  let mut i = start.max(0).min(limit)
+  while i < limit {
+    if chars[i] == '\u001b' {
+      let seq_start = i
+      let next = component_skip_ansi_sequence(chars, i).min(limit)
+      if component_is_sgr_sequence(chars, seq_start, next) {
+        if component_is_sgr_reset_sequence(chars, seq_start, next) {
+          active = ""
+        } else {
+          active = active +
+            component_char_slice_from_chars(chars, seq_start, next)
+        }
+      }
+      i = next
+    } else {
+      i = i + 1
+    }
+  }
+  active
+}
+
+///|
 fn component_write_first_sgr_reset_after(
   buf : StringBuilder,
   chars : Array[Char],
   from : Int,
-) -> Unit {
+) -> Bool {
   let n = chars.length()
   let mut i = from.max(0).min(n)
   while i < n {
@@ -119,12 +156,25 @@ fn component_write_first_sgr_reset_after(
       let next = component_skip_ansi_sequence(chars, i)
       if component_is_sgr_reset_sequence(chars, start, next) {
         component_write_chars(buf, chars, start, next)
-        return
+        return true
       }
       i = next
     } else {
       i = i + 1
     }
+  }
+  false
+}
+
+///|
+fn component_close_sgr_state(
+  buf : StringBuilder,
+  chars : Array[Char],
+  from : Int,
+  state : String,
+) -> Unit {
+  if state != "" && !component_write_first_sgr_reset_after(buf, chars, from) {
+    buf.write_string("\u001b[0m")
   }
 }
 
@@ -207,6 +257,29 @@ fn component_insert_char_at(s : String, cursor : Int, ch : Char) -> String {
 }
 
 ///|
+fn component_insert_string_at(
+  s : String,
+  cursor : Int,
+  text : String,
+) -> String {
+  let chars = s.to_array()
+  let text_chars = text.to_array()
+  let n = chars.length()
+  let pos = cursor.max(0).min(n)
+  let out : Array[Char] = []
+  for i in 0..<pos {
+    out.push(chars[i])
+  }
+  for ch in text_chars {
+    out.push(ch)
+  }
+  for i in pos..<n {
+    out.push(chars[i])
+  }
+  component_chars_to_string(out)
+}
+
+///|
 fn component_remove_char_range(
   s : String,
   start : Int,
@@ -276,9 +349,10 @@ fn component_truncate_width(s : String, width : Int) -> String {
   let boundaries = @internal.grapheme_boundaries(s)
   let buf = StringBuilder::new(size_hint=chars.length())
   let mut used = 0
+  let mut emitted_style = ""
   for i in 0..<(boundaries.length() - 1) {
     if used >= width {
-      component_write_first_sgr_reset_after(buf, chars, boundaries[i])
+      component_close_sgr_state(buf, chars, boundaries[i], emitted_style)
       return buf.to_string()
     }
     let cluster = component_char_slice_from_chars(
@@ -288,12 +362,19 @@ fn component_truncate_width(s : String, width : Int) -> String {
     )
     let cluster_width = @internal.display_width(cluster)
     if used + cluster_width > width {
-      component_write_first_sgr_reset_after(buf, chars, boundaries[i])
+      component_close_sgr_state(buf, chars, boundaries[i], emitted_style)
       return buf.to_string()
     }
     component_write_chars(buf, chars, boundaries[i], boundaries[i + 1])
+    emitted_style = component_sgr_state_after_range(
+      chars,
+      boundaries[i],
+      boundaries[i + 1],
+      emitted_style,
+    )
     used = used + cluster_width
   }
+  component_close_sgr_state(buf, chars, chars.length(), emitted_style)
   buf.to_string()
 }
 
@@ -315,9 +396,12 @@ fn component_visible_cell_slice(
   let buf = StringBuilder::new(size_hint=chars.length())
   let mut cell = 0
   let mut used = 0
+  let mut active_style = ""
+  let mut emitted_style = ""
+  let mut slice_started = false
   for i in 0..<(boundaries.length() - 1) {
     if used >= width {
-      component_write_first_sgr_reset_after(buf, chars, boundaries[i])
+      component_close_sgr_state(buf, chars, boundaries[i], emitted_style)
       return buf.to_string()
     }
     let cluster = component_char_slice_from_chars(
@@ -327,8 +411,21 @@ fn component_visible_cell_slice(
     )
     let cluster_width = @internal.display_width(cluster)
     if cell + cluster_width <= start {
+      active_style = component_sgr_state_after_range(
+        chars,
+        boundaries[i],
+        boundaries[i + 1],
+        active_style,
+      )
       cell = cell + cluster_width
     } else if cell < start {
+      if !slice_started {
+        if active_style != "" {
+          buf.write_string(active_style)
+          emitted_style = active_style
+        }
+        slice_started = true
+      }
       let visible_tail = cluster_width - (start - cell)
       let spaces = visible_tail.min(width - used)
       for _ in 0..<spaces {
@@ -337,14 +434,28 @@ fn component_visible_cell_slice(
       used = used + spaces
       cell = cell + cluster_width
     } else if used + cluster_width <= width {
+      if !slice_started {
+        if active_style != "" {
+          buf.write_string(active_style)
+          emitted_style = active_style
+        }
+        slice_started = true
+      }
       component_write_chars(buf, chars, boundaries[i], boundaries[i + 1])
+      emitted_style = component_sgr_state_after_range(
+        chars,
+        boundaries[i],
+        boundaries[i + 1],
+        emitted_style,
+      )
       used = used + cluster_width
       cell = cell + cluster_width
     } else {
-      component_write_first_sgr_reset_after(buf, chars, boundaries[i])
+      component_close_sgr_state(buf, chars, boundaries[i], emitted_style)
       return buf.to_string()
     }
   }
+  component_close_sgr_state(buf, chars, chars.length(), emitted_style)
   buf.to_string()
 }
 

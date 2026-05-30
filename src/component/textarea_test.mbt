@@ -165,6 +165,16 @@ test "textarea: horizontal scroll inside wide glyph preserves following cells" {
 }
 
 ///|
+test "textarea: horizontal scroll reopens active ANSI span" {
+  let styled = "\u001b[31mabc\u001b[0m"
+  let c = textarea(width=2, height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue(styled)).model
+  let scrolled = { ..m1, scroll_col: 1 }
+  assert_true((c.view)(scrolled) == "\u001b[31mbc\u001b[0m")
+}
+
+///|
 test "textarea: truncation keeps styled combining cluster and reset intact" {
   let accented = String::from_array(['e', '\u{0301}'])
   let styled = "\u001b[31m\{accented}\u001b[0m"

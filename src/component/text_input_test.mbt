@@ -213,6 +213,25 @@ test "text_input: cursor right steps over base combining cluster once" {
 }
 
 ///|
+test "text_input: insert text accepts multi-scalar grapheme clusters" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  let comp = text_input(placeholder="")
+  let m0 = (comp.init)().model
+  let m1 = (comp.update)(m0, InsertText(accented)).model
+  let m2 = (comp.update)(m1, InsertText(technologist)).model
+  let moved = (comp.update)(m2, MoveCursorLeft).model
+  assert_eq(m1.value, accented)
+  assert_eq(m1.cursor, accented.to_array().length())
+  assert_eq(m2.value, "\{accented}\{technologist}")
+  assert_eq(
+    m2.cursor,
+    accented.to_array().length() + technologist.to_array().length(),
+  )
+  assert_eq(moved.cursor, accented.to_array().length())
+}
+
+///|
 test "text_input: delete before removes a whole grapheme cluster" {
   let accented = String::from_array(['e', '\u{0301}'])
   let comp = text_input(placeholder="")
@@ -242,6 +261,26 @@ test "text_input: delete before removes emoji ZWJ cluster as one unit" {
   assert_eq(next.value, "x")
   assert_eq(next.cursor, 0)
   assert_eq((comp.view)(next), "|x")
+}
+
+///|
+test "text_input: delete after removes whole combining and ZWJ clusters" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  let comp = text_input(placeholder="")
+  let model : TextInputModel = {
+    value: "\{accented}\{technologist}x",
+    cursor: 0,
+    placeholder: "",
+    focused: true,
+  }
+  let m1 = (comp.update)(model, DeleteAfter).model
+  let m2 = (comp.update)(m1, DeleteAfter).model
+  assert_eq(m1.value, "\{technologist}x")
+  assert_eq(m1.cursor, 0)
+  assert_eq(m2.value, "x")
+  assert_eq(m2.cursor, 0)
+  assert_eq((comp.view)(m2), "|x")
 }
 
 ///|
