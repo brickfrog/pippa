@@ -98,3 +98,39 @@ test "showcase non-progress UI events do not schedule extra progress ticks" {
   )
   assert_true(scrolled.cmd.is_none())
 }
+
+///|
+fn showcase_apply_input_event(
+  model : Model,
+  event : @pippa.InputEvent,
+) -> Model raise {
+  match showcase_sub(event) {
+    Some(msg) => showcase_update(model, msg).model
+    None => {
+      assert_true(false)
+      model
+    }
+  }
+}
+
+///|
+test "showcase maps Key(Text) clusters into text input insertion" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  let { model, .. } = showcase_init()
+  let active_input = { ..model, tab: 1 }
+  let m1 = showcase_apply_input_event(
+    active_input,
+    @pippa.Key(@pippa.Text(accented)),
+  )
+  let m2 = showcase_apply_input_event(m1, @pippa.Key(@pippa.Text(technologist)))
+  let moved = showcase_update(m2, TextInputMsg(@component.MoveCursorLeft)).model
+  assert_eq(m1.text_input.value, accented)
+  assert_eq(m1.text_input.cursor, accented.to_array().length())
+  assert_eq(m2.text_input.value, "\{accented}\{technologist}")
+  assert_eq(
+    m2.text_input.cursor,
+    accented.to_array().length() + technologist.to_array().length(),
+  )
+  assert_eq(moved.text_input.cursor, accented.to_array().length())
+}

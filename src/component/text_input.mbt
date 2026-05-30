@@ -24,6 +24,8 @@ pub(all) struct TextInputModel {
 pub(all) enum TextInputMsg {
   /// Insert a character at the current cursor position.
   InsertChar(Char)
+  /// Insert text at the current cursor position.
+  InsertText(String)
   /// Delete the character immediately before the cursor (backspace).
   DeleteBefore
   /// Delete the character immediately after the cursor (delete key).
@@ -69,6 +71,18 @@ fn text_input_update(
         ..model,
         value,
         cursor: component_next_grapheme_boundary(value, cursor),
+      }
+    }
+    InsertText(text) => {
+      let cursor = component_clamp_grapheme_boundary(model.value, model.cursor)
+      let value = component_insert_string_at(model.value, cursor, text)
+      {
+        ..model,
+        value,
+        cursor: component_clamp_grapheme_boundary(
+          value,
+          cursor + component_char_len(text),
+        ),
       }
     }
     DeleteBefore => {

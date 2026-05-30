@@ -97,6 +97,48 @@ test "textarea: cursor movement stays on grapheme boundaries" {
 }
 
 ///|
+test "textarea: backspace removes emoji ZWJ cluster as one unit" {
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  let c = textarea(width=6, height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("\{technologist}x")).model
+  let focused = {
+    ..m1,
+    focused: true,
+    cursor_col: technologist.to_array().length(),
+  }
+  let next = (c.update)(focused, DeleteBefore).model
+  assert_eq(next.value, "x")
+  assert_eq(next.cursor_row, 0)
+  assert_eq(next.cursor_col, 0)
+  assert_eq((c.view)(next), "|x    ")
+}
+
+///|
+test "textarea: vertical movement preserves display cells from wide to ASCII" {
+  let c = textarea(width=4, height=2)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("你\nab")).model
+  let focused = { ..m1, focused: true, cursor_row: 0, cursor_col: 1 }
+  let moved = (c.update)(focused, MoveCursorDown).model
+  assert_eq(moved.cursor_row, 1)
+  assert_eq(moved.cursor_col, 2)
+  assert_eq((c.view)(moved), "你  \nab| ")
+}
+
+///|
+test "textarea: vertical movement snaps display cells onto wide boundary" {
+  let c = textarea(width=4, height=2)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("ab\n你x")).model
+  let focused = { ..m1, focused: true, cursor_row: 0, cursor_col: 2 }
+  let moved = (c.update)(focused, MoveCursorDown).model
+  assert_eq(moved.cursor_row, 1)
+  assert_eq(moved.cursor_col, 1)
+  assert_eq((c.view)(moved), "ab  \n你|x")
+}
+
+///|
 test "textarea: placeholder pads ANSI-styled wide text by display width" {
   let c = textarea(width=4, height=1, placeholder="\u001b[31m界\u001b[0m")
   let model = (c.init)().model
@@ -111,4 +153,33 @@ test "textarea: horizontal scroll inside wide glyph preserves cell columns" {
   let m1 = (c.update)(m0, SetValue("你x")).model
   let focused = { ..m1, focused: true, cursor_col: 1, scroll_col: 1 }
   assert_eq((c.view)(focused), " |")
+}
+
+///|
+test "textarea: horizontal scroll inside wide glyph preserves following cells" {
+  let c = textarea(width=3, height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("你ab")).model
+  let focused = { ..m1, focused: true, cursor_col: 1, scroll_col: 1 }
+  assert_eq((c.view)(focused), " |a")
+}
+
+///|
+test "textarea: horizontal scroll reopens active ANSI span" {
+  let styled = "\u001b[31mabc\u001b[0m"
+  let c = textarea(width=2, height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue(styled)).model
+  let scrolled = { ..m1, scroll_col: 1 }
+  assert_true((c.view)(scrolled) == "\u001b[31mbc\u001b[0m")
+}
+
+///|
+test "textarea: truncation keeps styled combining cluster and reset intact" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let styled = "\u001b[31m\{accented}\u001b[0m"
+  let c = textarea(width=1, height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("\{styled}x")).model
+  assert_eq((c.view)(m1), styled)
 }

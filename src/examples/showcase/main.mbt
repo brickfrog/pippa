@@ -438,6 +438,8 @@ fn showcase_sub(event : @pippa.InputEvent) -> Msg? {
     @pippa.Key(@pippa.Special("pagedown")) =>
       Some(ViewportMsg(@component.PageDown))
     @pippa.Key(@pippa.Char(ch)) => Some(TextInputMsg(@component.InsertChar(ch)))
+    @pippa.Key(@pippa.Text(text)) =>
+      Some(TextInputMsg(@component.InsertText(text)))
     _ => None
   }
 }

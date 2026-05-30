@@ -277,6 +277,34 @@ fn textarea_delete_after(
 }
 
 ///|
+fn textarea_move_to_display_cell_row(
+  model : TextareaModel,
+  lines : Array[String],
+  row : Int,
+  col : Int,
+  next_row : Int,
+  next_scroll_row : Int,
+) -> TextareaModel {
+  let source_col = component_clamp_grapheme_boundary(lines[row], col)
+  let target_cell = component_prefix_display_width(lines[row], source_col)
+  let target_col = component_cell_to_grapheme_boundary(
+    lines[next_row],
+    target_cell,
+  )
+  textarea_normalize(
+    model.value,
+    next_row,
+    target_col,
+    model.width,
+    model.height,
+    next_scroll_row,
+    model.scroll_col,
+    model.placeholder,
+    model.focused,
+  )
+}
+
+///|
 fn textarea_update(
   model : TextareaModel,
   msg : TextareaMsg,
@@ -436,32 +464,26 @@ fn textarea_update(
       }
     MoveCursorUp =>
       if row > 0 {
-        textarea_normalize(
-          model.value,
-          row - 1,
+        textarea_move_to_display_cell_row(
+          model,
+          lines,
+          row,
           col,
-          model.width,
-          model.height,
+          row - 1,
           model.scroll_row,
-          model.scroll_col,
-          model.placeholder,
-          model.focused,
         )
       } else {
         model
       }
     MoveCursorDown =>
       if row + 1 < lines.length() {
-        textarea_normalize(
-          model.value,
-          row + 1,
+        textarea_move_to_display_cell_row(
+          model,
+          lines,
+          row,
           col,
-          model.width,
-          model.height,
+          row + 1,
           model.scroll_row,
-          model.scroll_col,
-          model.placeholder,
-          model.focused,
         )
       } else {
         model
@@ -517,28 +539,22 @@ fn textarea_update(
       )
     }
     PageUp =>
-      textarea_normalize(
-        model.value,
-        (row - model.height.max(1)).max(0),
+      textarea_move_to_display_cell_row(
+        model,
+        lines,
+        row,
         col,
-        model.width,
-        model.height,
+        (row - model.height.max(1)).max(0),
         model.scroll_row - model.height.max(1),
-        model.scroll_col,
-        model.placeholder,
-        model.focused,
       )
     PageDown =>
-      textarea_normalize(
-        model.value,
-        (row + model.height.max(1)).min(lines.length() - 1),
+      textarea_move_to_display_cell_row(
+        model,
+        lines,
+        row,
         col,
-        model.width,
-        model.height,
+        (row + model.height.max(1)).min(lines.length() - 1),
         model.scroll_row + model.height.max(1),
-        model.scroll_col,
-        model.placeholder,
-        model.focused,
       )
     SetValue(value) =>
       textarea_normalize(

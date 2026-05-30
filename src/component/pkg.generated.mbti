@@ -210,6 +210,7 @@ pub(all) struct TextInputModel {
 
 pub(all) enum TextInputMsg {
   InsertChar(Char)
+  InsertText(String)
   DeleteBefore
   DeleteAfter
   MoveCursorLeft
