@@ -522,7 +522,7 @@ fn parse_enhanced_key_modifiers(
   end : Int,
 ) -> (Array[EnhancedKeyModifier], EnhancedKeyEventType)? {
   if start >= end {
-    return Some(([], KeyPress))
+    return None
   }
   let mut colon_index = -1
   let mut i = start
@@ -537,7 +537,7 @@ fn parse_enhanced_key_modifiers(
   }
   let modifiers_end = if colon_index >= 0 { colon_index } else { end }
   let modifiers = if start == modifiers_end {
-    []
+    return None
   } else {
     match parse_decimal_segment(bv, start, modifiers_end) {
       Some(value) =>

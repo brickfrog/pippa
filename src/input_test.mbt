@@ -187,6 +187,17 @@ fn assert_enhanced_key(raw : String, expected : EnhancedKeyMsg) -> Unit raise {
 }
 
 ///|
+fn assert_enhanced_invalid(raw : String) -> Unit raise {
+  let bytes = @utf8.encode(raw)
+  match parse_input(bytes[:]) {
+    Invalid(_) => ()
+    Ok(EnhancedKey(_), _) =>
+      fail("\{raw}: malformed CSI-u decoded as EnhancedKey")
+    _ => fail("\{raw}: expected Invalid")
+  }
+}
+
+///|
 test "parse_input: Kitty CSI-u press defaults to press with no modifiers" {
   assert_enhanced_key("\u001b[97u", {
     code: UnicodeKey(97),
@@ -196,6 +207,12 @@ test "parse_input: Kitty CSI-u press defaults to press with no modifiers" {
     event_type: KeyPress,
     text_codepoints: [],
   })
+}
+
+///|
+test "parse_input: Kitty CSI-u rejects empty modifiers field" {
+  assert_enhanced_invalid("\u001b[97;u")
+  assert_enhanced_invalid("\u001b[97;:3u")
 }
 
 ///|
