@@ -171,13 +171,20 @@ pub(all) struct StopwatchModel {
   elapsed_ms : Int
   interval_ms : Int
   running : Bool
+  instance_id : Int64
+  tick_generation : Int64
 } derive(Eq, @debug.Debug)
 
 pub(all) enum StopwatchMsg {
   Start
   Pause
   Reset
-  Tick
+  Tick(StopwatchTickToken)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct StopwatchTickToken {
+  instance_id : Int64
+  generation : Int64
 } derive(Eq, @debug.Debug)
 
 pub(all) struct TableModel {
@@ -253,13 +260,20 @@ pub(all) struct TimerModel {
   interval_ms : Int
   running : Bool
   finished : Bool
+  instance_id : Int64
+  tick_generation : Int64
 } derive(Eq, @debug.Debug)
 
 pub(all) enum TimerMsg {
   Start
   Pause
   Reset
-  Tick
+  Tick(TimerTickToken)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct TimerTickToken {
+  instance_id : Int64
+  generation : Int64
 } derive(Eq, @debug.Debug)
 
 pub(all) struct ViewportModel {
