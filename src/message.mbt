@@ -18,6 +18,53 @@ pub(all) enum KeyMsg {
 } derive(Debug, Eq)
 
 ///|
+/// Numeric key identity reported by enhanced terminal keyboard protocols.
+pub(all) enum EnhancedKeyCode {
+  /// A Unicode code point key number.
+  UnicodeKey(Int)
+  /// A functional key number from the protocol's private key range.
+  FunctionalKey(Int)
+} derive(Debug, Eq)
+
+///|
+/// Canonical modifiers reported by enhanced terminal keyboard protocols.
+pub(all) enum EnhancedKeyModifier {
+  KeyShift
+  KeyAlt
+  KeyCtrl
+  KeySuper
+  KeyHyper
+  KeyMeta
+  KeyCapsLock
+  KeyNumLock
+} derive(Debug, Eq)
+
+///|
+/// Press, repeat, or release phase for an enhanced keyboard event.
+pub(all) enum EnhancedKeyEventType {
+  KeyPress
+  KeyRepeat
+  KeyRelease
+} derive(Debug, Eq)
+
+///|
+/// Keyboard event data from Kitty / CSI-u enhanced keyboard reports.
+pub(all) struct EnhancedKeyMsg {
+  /// The primary numeric key identity.
+  code : EnhancedKeyCode
+  /// Shifted-key alternate from the code:shifted:base triple, when present.
+  shifted : EnhancedKeyCode?
+  /// Base-layout alternate from the code:shifted:base triple, when present.
+  base_layout : EnhancedKeyCode?
+  /// Decoded canonical modifiers from the protocol's bitfield-plus-one value.
+  modifiers : Array[EnhancedKeyModifier]
+  /// Whether this is a key press, repeat, or release event.
+  event_type : EnhancedKeyEventType
+  /// Associated text from the trailing codepoint list.
+  text_codepoints : Array[Int]
+} derive(Debug, Eq)
+
+///|
 /// Represents a mouse event.
 pub(all) struct MouseMsg {
   /// The button or wheel direction reported by the terminal.

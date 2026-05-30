@@ -173,6 +173,37 @@ pub(all) enum Color {
   Hex(String)
 } derive(Eq, @debug.Debug)
 
+pub(all) enum EnhancedKeyCode {
+  UnicodeKey(Int)
+  FunctionalKey(Int)
+} derive(Eq, @debug.Debug)
+
+pub(all) enum EnhancedKeyEventType {
+  KeyPress
+  KeyRepeat
+  KeyRelease
+} derive(Eq, @debug.Debug)
+
+pub(all) enum EnhancedKeyModifier {
+  KeyShift
+  KeyAlt
+  KeyCtrl
+  KeySuper
+  KeyHyper
+  KeyMeta
+  KeyCapsLock
+  KeyNumLock
+} derive(Eq, @debug.Debug)
+
+pub(all) struct EnhancedKeyMsg {
+  code : EnhancedKeyCode
+  shifted : EnhancedKeyCode?
+  base_layout : EnhancedKeyCode?
+  modifiers : Array[EnhancedKeyModifier]
+  event_type : EnhancedKeyEventType
+  text_codepoints : Array[Int]
+} derive(Eq, @debug.Debug)
+
 pub(all) struct HelpModel {
   bindings : Array[Binding]
   show_full : Bool
@@ -180,6 +211,7 @@ pub(all) struct HelpModel {
 
 pub(all) enum InputEvent {
   Key(KeyMsg)
+  EnhancedKey(EnhancedKeyMsg)
   Mouse(MouseMsg)
   Focus
   Blur
