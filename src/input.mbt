@@ -270,7 +270,8 @@ fn mouse_button(cb : Int) -> MouseButton? {
     match low {
       0 => Some(MouseWheelUp)
       1 => Some(MouseWheelDown)
-      _ => None
+      2 => Some(MouseWheelLeft)
+      _ => Some(MouseWheelRight)
     }
   } else {
     match low {

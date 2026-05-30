@@ -238,6 +238,43 @@ test "parse_input: SGR mouse wheel up and down" {
 }
 
 ///|
+test "parse_input: SGR mouse horizontal wheel reports" {
+  assert_sgr_mouse("\u001b[<66;11;12M", {
+    button: MouseWheelLeft,
+    action: MouseWheel,
+    modifiers: [],
+    col: 11,
+    row: 12,
+  })
+  assert_sgr_mouse("\u001b[<67;13;14M", {
+    button: MouseWheelRight,
+    action: MouseWheel,
+    modifiers: [],
+    col: 13,
+    row: 14,
+  })
+}
+
+///|
+test "parse_all: SGR horizontal wheel is consumed as one event" {
+  let bytes = @utf8.encode("\u001b[<66;11;12Mx")
+  let (events, leftover) = parse_all(bytes[:])
+  assert_eq(events.length(), 2)
+  assert_eq(
+    events[0],
+    Mouse({
+      button: MouseWheelLeft,
+      action: MouseWheel,
+      modifiers: [],
+      col: 11,
+      row: 12,
+    }),
+  )
+  assert_eq(events[1], Key(Char('x')))
+  assert_eq(leftover.length(), 0)
+}
+
+///|
 test "parse_input: SGR mouse shift alt ctrl modifiers" {
   assert_sgr_mouse("\u001b[<30;120;45M", {
     button: MouseRight,

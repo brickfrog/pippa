@@ -41,6 +41,8 @@ pub(all) enum MouseButton {
   MouseNoButton
   MouseWheelUp
   MouseWheelDown
+  MouseWheelLeft
+  MouseWheelRight
 } derive(Debug, Eq)
 
 ///|

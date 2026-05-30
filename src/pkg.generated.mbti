@@ -214,6 +214,8 @@ pub(all) enum MouseButton {
   MouseNoButton
   MouseWheelUp
   MouseWheelDown
+  MouseWheelLeft
+  MouseWheelRight
 } derive(Eq, @debug.Debug)
 
 pub(all) enum MouseModifier {
