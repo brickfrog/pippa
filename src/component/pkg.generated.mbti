@@ -31,7 +31,7 @@ pub fn text_input(placeholder~ : String, prompt? : String, width? : Int, echo_mo
 
 pub fn text_input_msg_from_input_event(@pippa.InputEvent, keymap? : TextInputKeymap) -> TextInputMsg?
 
-pub fn textarea(width~ : Int, height~ : Int, placeholder? : String) -> Component[TextareaModel, TextareaMsg]
+pub fn textarea(width~ : Int, height~ : Int, placeholder? : String, min_height? : Int, max_height? : Int, prompt? : String, line_numbers? : Bool, char_limit? : Int?, line_limit? : Int?, disabled? : Bool) -> Component[TextareaModel, TextareaMsg]
 
 pub fn timer(duration_ms~ : Int, interval_ms? : Int) -> Component[TimerModel, TimerMsg]
 
@@ -289,10 +289,18 @@ pub(all) struct TextareaModel {
   cursor_col : Int
   width : Int
   height : Int
+  min_height : Int
+  max_height : Int
   scroll_row : Int
   scroll_col : Int
+  cursor_visual_row : Int
+  prompt : String
+  line_numbers : Bool
+  char_limit : Int?
+  line_limit : Int?
   placeholder : String
   focused : Bool
+  disabled : Bool
 } derive(Eq, @debug.Debug)
 
 pub(all) enum TextareaMsg {

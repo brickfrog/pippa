@@ -62,7 +62,7 @@ test "textarea: cursor stays visible by scrolling" {
   let m2 = { ..m1, focused: true, cursor_row: 2, cursor_col: 4 }
   let m3 = (c.update)(m2, MoveToLineEnd).model
   assert_eq(m3.scroll_row, 1)
-  assert_eq(m3.scroll_col, 1)
+  assert_eq(m3.scroll_col, 0)
   let view = (c.view)(m3)
   assert_true(view.contains("|"))
 }
@@ -147,31 +147,34 @@ test "textarea: placeholder pads ANSI-styled wide text by display width" {
 }
 
 ///|
-test "textarea: horizontal scroll inside wide glyph preserves cell columns" {
+test "textarea: soft wrap moves cursor after wide glyph to continuation row" {
   let c = textarea(width=2, height=1)
   let m0 = (c.init)().model
   let m1 = (c.update)(m0, SetValue("你x")).model
-  let focused = { ..m1, focused: true, cursor_col: 1, scroll_col: 1 }
-  assert_eq((c.view)(focused), " |")
+  let m2 = (c.update)(m1, Focus).model
+  let moved = (c.update)(m2, MoveCursorRight).model
+  assert_eq(moved.cursor_visual_row, 1)
+  assert_eq(moved.scroll_col, 0)
+  assert_eq((c.view)(moved), "|x")
 }
 
 ///|
-test "textarea: horizontal scroll inside wide glyph preserves following cells" {
+test "textarea: soft wrap ignores manual horizontal scroll" {
   let c = textarea(width=3, height=1)
   let m0 = (c.init)().model
   let m1 = (c.update)(m0, SetValue("你ab")).model
-  let focused = { ..m1, focused: true, cursor_col: 1, scroll_col: 1 }
-  assert_eq((c.view)(focused), " |a")
+  let scrolled = { ..m1, scroll_col: 1 }
+  assert_eq((c.view)(scrolled), "你a")
 }
 
 ///|
-test "textarea: horizontal scroll reopens active ANSI span" {
+test "textarea: soft wrap ignores manual horizontal scroll in ANSI span" {
   let styled = "\u001b[31mabc\u001b[0m"
   let c = textarea(width=2, height=1)
   let m0 = (c.init)().model
   let m1 = (c.update)(m0, SetValue(styled)).model
   let scrolled = { ..m1, scroll_col: 1 }
-  assert_true((c.view)(scrolled) == "\u001b[31mbc\u001b[0m")
+  assert_true((c.view)(scrolled) == "\u001b[31mab\u001b[0m")
 }
 
 ///|
@@ -182,4 +185,209 @@ test "textarea: truncation keeps styled combining cluster and reset intact" {
   let m0 = (c.init)().model
   let m1 = (c.update)(m0, SetValue("\{styled}x")).model
   assert_eq((c.view)(m1), styled)
+}
+
+///|
+test "textarea: soft wrap keeps grapheme clusters and wide glyphs whole" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let c1 = textarea(width=1, height=2, min_height=1)
+  let m0 = (c1.init)().model
+  let m1 = (c1.update)(m0, SetValue("\{accented}x")).model
+  assert_eq((c1.view)(m1), "\{accented}\nx")
+
+  let c2 = textarea(width=3, height=2, min_height=1)
+  let n0 = (c2.init)().model
+  let n1 = (c2.update)(n0, SetValue("ab你z")).model
+  assert_eq((c2.view)(n1), "ab \n你z")
+}
+
+///|
+test "textarea: soft wrap reopens active ANSI span on continuation rows" {
+  let styled = "\u001b[31mabcd\u001b[0m"
+  let c = textarea(width=2, height=2, min_height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue(styled)).model
+  assert_eq((c.view)(m1), "\u001b[31mab\u001b[0m\n\u001b[31mcd\u001b[0m")
+}
+
+///|
+test "textarea: soft wrap prefers words and falls back for unbreakable runs" {
+  let words = textarea(width=7, height=2, min_height=1)
+  let w0 = (words.init)().model
+  let w1 = (words.update)(w0, SetValue("alpha beta")).model
+  assert_eq((words.view)(w1), "alpha  \nbeta   ")
+
+  let hard = textarea(width=4, height=2, min_height=1)
+  let h0 = (hard.init)().model
+  let h1 = (hard.update)(h0, SetValue("abcdef")).model
+  assert_eq((hard.view)(h1), "abcd\nef  ")
+}
+
+///|
+test "textarea: dynamic height grows to max and scrolls by visual rows" {
+  let c = textarea(width=10, height=3, min_height=1)
+  let m0 = (c.init)().model
+  assert_eq(m0.height, 1)
+  let m1 = (c.update)(m0, SetValue("one")).model
+  assert_eq(m1.height, 1)
+  let m2 = (c.update)(m1, SetValue("one\ntwo")).model
+  assert_eq(m2.height, 2)
+  let m3 = (c.update)(m2, SetValue("one\ntwo\nthree\nfour")).model
+  let focused = { ..m3, focused: true, cursor_row: 3, cursor_col: 4 }
+  let m4 = (c.update)(focused, MoveToLineEnd).model
+  assert_eq(m4.height, 3)
+  assert_eq(m4.scroll_row, 1)
+  assert_eq((c.view)(m4), "two       \nthree     \nfour|     ")
+}
+
+///|
+test "textarea: dynamic height shrinks back toward min height" {
+  let c = textarea(width=10, height=4, min_height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("one\ntwo\nthree")).model
+  assert_eq(m1.height, 3)
+  let m2 = (c.update)(m1, SetValue("one")).model
+  assert_eq(m2.height, 1)
+  assert_eq((c.view)(m2), "one       ")
+}
+
+///|
+test "textarea: min height clamps to max height" {
+  let c = textarea(width=8, height=2, min_height=5)
+  let model = (c.init)().model
+  assert_eq(model.min_height, 2)
+  assert_eq(model.max_height, 2)
+  assert_eq(model.height, 2)
+}
+
+///|
+test "textarea: line number gutter reduces content viewport width" {
+  let c = textarea(width=5, height=2, min_height=1, line_numbers=true)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("abcd")).model
+  assert_eq((c.view)(m1), "1 abc\n  d  ")
+}
+
+///|
+test "textarea: line number gutter widens at ten logical lines" {
+  let c9 = textarea(width=7, height=2, min_height=2, line_numbers=true)
+  let m90 = (c9.init)().model
+  let m91 = (c9.update)(m90, SetValue("abcde\nx\nx\nx\nx\nx\nx\nx\nx")).model
+  assert_eq((c9.view)(m91), "1 abcde\n2 x    ")
+
+  let c10 = textarea(width=7, height=2, min_height=2, line_numbers=true)
+  let m100 = (c10.init)().model
+  let m101 = (c10.update)(m100, SetValue("abcde\nx\nx\nx\nx\nx\nx\nx\nx\nx")).model
+  assert_eq((c10.view)(m101), "1  abcd\n   e   ")
+}
+
+///|
+test "textarea: prompt prefix reduces content viewport width" {
+  let c = textarea(width=5, height=2, min_height=1, prompt="> ")
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("abcd")).model
+  assert_eq((c.view)(m1), "> abc\n> d  ")
+}
+
+///|
+test "textarea: line numbers and prompt both reduce content wrap width" {
+  let c = textarea(
+    width=6,
+    height=2,
+    min_height=1,
+    line_numbers=true,
+    prompt="> ",
+  )
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("abcd")).model
+  assert_eq((c.view)(m1), "1 > ab\n  > cd")
+}
+
+///|
+test "textarea: content width floors at one when prefixes eat total width" {
+  let c = textarea(
+    width=3,
+    height=3,
+    min_height=1,
+    line_numbers=true,
+    prompt="> ",
+  )
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("abc")).model
+  assert_eq(m1.height, 3)
+  assert_eq(m1.cursor_visual_row, 0)
+}
+
+///|
+test "textarea: content limits stop at grapheme and line boundaries" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let technologist = String::from_array(['👩', '\u{200D}', '💻'])
+  let limited = textarea(width=10, height=2, min_height=1, char_limit=Some(2))
+  let l0 = (limited.init)().model
+  let l1 = (limited.update)(l0, InsertText("\{accented}\{technologist}x")).model
+  assert_eq(l1.value, "\{accented}\{technologist}")
+  assert_eq(l1.cursor_col, l1.value.to_array().length())
+
+  let lines = textarea(width=10, height=3, min_height=1, line_limit=Some(2))
+  let n0 = (lines.init)().model
+  let n1 = (lines.update)(n0, InsertText("a\nb\nc")).model
+  assert_eq(n1.value, "a\nb")
+  assert_eq(n1.cursor_row, 1)
+  assert_eq(n1.cursor_col, 1)
+}
+
+///|
+test "textarea: insert newline is rejected at line limit" {
+  let c = textarea(width=10, height=2, min_height=1, line_limit=Some(2))
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, InsertText("a\nb")).model
+  let m2 = (c.update)(m1, InsertNewline).model
+  assert_eq(m2.value, "a\nb")
+  assert_eq(m2.cursor_row, 1)
+  assert_eq(m2.cursor_col, 1)
+}
+
+///|
+test "textarea: cursor visual row tracking keeps cursor visible" {
+  let c = textarea(width=4, height=2, min_height=2)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("abcdefghijkl")).model
+  let focused = { ..m1, focused: true, cursor_row: 0, cursor_col: 12 }
+  let m2 = (c.update)(focused, MoveToLineEnd).model
+  assert_eq(m2.cursor_row, 0)
+  assert_eq(m2.cursor_col, 12)
+  assert_eq(m2.cursor_visual_row, 2)
+  assert_eq(m2.scroll_row, 1)
+  assert_eq((c.view)(m2), "efgh\nijk|")
+}
+
+///|
+test "textarea: cursor at soft wrap boundary belongs to continuation row" {
+  let c = textarea(width=4, height=2, min_height=2)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, SetValue("abcdef")).model
+  let m2 = (c.update)(m1, Focus).model
+  let m3 = (c.update)(m2, MoveCursorRight).model
+  let m4 = (c.update)(m3, MoveCursorRight).model
+  let m5 = (c.update)(m4, MoveCursorRight).model
+  let m6 = (c.update)(m5, MoveCursorRight).model
+  assert_eq(m6.cursor_col, 4)
+  assert_eq(m6.cursor_visual_row, 1)
+  assert_eq(m6.scroll_col, 0)
+  assert_eq((c.view)(m6), "abcd\n|ef ")
+}
+
+///|
+test "textarea: blur focus cursor and disabled input behavior" {
+  let c = textarea(width=6, height=1)
+  let m0 = (c.init)().model
+  let m1 = (c.update)(m0, InsertText("ab")).model
+  let m2 = (c.update)(m1, Focus).model
+  assert_eq((c.view)(m2), "ab|   ")
+  let m3 = (c.update)(m2, Blur).model
+  assert_eq((c.view)(m3), "ab    ")
+  let disabled = { ..m2, disabled: true }
+  let ignored = (c.update)(disabled, InsertChar('c')).model
+  assert_eq(ignored.value, "ab")
+  assert_eq((c.view)(ignored), "ab    ")
 }
