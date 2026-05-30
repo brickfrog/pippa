@@ -10,6 +10,7 @@ pub(all) struct Binding {
 pub fn matches(binding : Binding, key : KeyMsg) -> Bool {
   let key_str = match key {
     Char(c) => c.to_string()
+    Text(s) => s
     Special(s) => s
     Modified(mod, k) => mod + "+" + k
   }

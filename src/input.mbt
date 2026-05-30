@@ -2,7 +2,7 @@
 /// ANSI escape-sequence parser for keyboard and mouse input events.
 ///
 /// Translates raw bytes from the terminal into typed `InputEvent` values.
-/// The parser handles printable ASCII, control characters, ANSI CSI
+/// The parser handles printable UTF-8 text, control characters, ANSI CSI
 /// sequences (arrow keys, mouse reports), Ctrl-modified keys, and Alt-prefixed
 /// keys. Pass a `BytesView` to `parse_input` for a single event, or
 /// `parse_all` to drain all complete events at once.
@@ -38,6 +38,192 @@ pub(all) enum ParseResult[T] {
 ///|
 fn unknown_event(bv : BytesView, consumed : Int) -> InputEvent {
   Unknown(Bytes::from_array(bv[0:consumed].to_array()))
+}
+
+///|
+priv enum Utf8Scalar {
+  Utf8Ok(Char, Int)
+  Utf8Incomplete
+  Utf8Invalid(String)
+}
+
+///|
+fn is_utf8_continuation(b : Int) -> Bool {
+  b >= 0x80 && b <= 0xBF
+}
+
+///|
+fn in_byte_range(b : Int, first : Int, last : Int) -> Bool {
+  b >= first && b <= last
+}
+
+///|
+fn utf8_invalid(message : String) -> Utf8Scalar {
+  Utf8Invalid(message)
+}
+
+///|
+fn decode_utf8_scalar(bv : BytesView) -> Utf8Scalar {
+  let n = bv.length()
+  if n == 0 {
+    return Utf8Incomplete
+  }
+  let b0 = bv[0].to_int()
+  if b0 <= 0x7F {
+    return Utf8Ok(b0.unsafe_to_char(), 1)
+  }
+  if b0 >= 0xC2 && b0 <= 0xDF {
+    if n < 2 {
+      return Utf8Incomplete
+    }
+    let b1 = bv[1].to_int()
+    if !is_utf8_continuation(b1) {
+      return utf8_invalid("invalid UTF-8 continuation byte \{b1}")
+    }
+    let code = ((b0 & 0x1F) << 6) | (b1 & 0x3F)
+    return Utf8Ok(code.unsafe_to_char(), 2)
+  }
+  if b0 >= 0xE0 && b0 <= 0xEF {
+    if n < 2 {
+      return Utf8Incomplete
+    }
+    let b1 = bv[1].to_int()
+    let b1_ok = if b0 == 0xE0 {
+      in_byte_range(b1, 0xA0, 0xBF)
+    } else if b0 == 0xED {
+      in_byte_range(b1, 0x80, 0x9F)
+    } else {
+      is_utf8_continuation(b1)
+    }
+    if !b1_ok {
+      return utf8_invalid("invalid UTF-8 continuation byte \{b1}")
+    }
+    if n < 3 {
+      return Utf8Incomplete
+    }
+    let b2 = bv[2].to_int()
+    if !is_utf8_continuation(b2) {
+      return utf8_invalid("invalid UTF-8 continuation byte \{b2}")
+    }
+    let code = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)
+    return Utf8Ok(code.unsafe_to_char(), 3)
+  }
+  if b0 >= 0xF0 && b0 <= 0xF4 {
+    if n < 2 {
+      return Utf8Incomplete
+    }
+    let b1 = bv[1].to_int()
+    let b1_ok = if b0 == 0xF0 {
+      in_byte_range(b1, 0x90, 0xBF)
+    } else if b0 == 0xF4 {
+      in_byte_range(b1, 0x80, 0x8F)
+    } else {
+      is_utf8_continuation(b1)
+    }
+    if !b1_ok {
+      return utf8_invalid("invalid UTF-8 continuation byte \{b1}")
+    }
+    if n < 3 {
+      return Utf8Incomplete
+    }
+    let b2 = bv[2].to_int()
+    if !is_utf8_continuation(b2) {
+      return utf8_invalid("invalid UTF-8 continuation byte \{b2}")
+    }
+    if n < 4 {
+      return Utf8Incomplete
+    }
+    let b3 = bv[3].to_int()
+    if !is_utf8_continuation(b3) {
+      return utf8_invalid("invalid UTF-8 continuation byte \{b3}")
+    }
+    let code = ((b0 & 0x07) << 18) |
+      ((b1 & 0x3F) << 12) |
+      ((b2 & 0x3F) << 6) |
+      (b3 & 0x3F)
+    return Utf8Ok(code.unsafe_to_char(), 4)
+  }
+  utf8_invalid("invalid UTF-8 leading byte \{b0}")
+}
+
+///|
+fn is_text_scalar(ch : Char) -> Bool {
+  ch != '\u001b' && !ch.is_control()
+}
+
+///|
+fn key_text_event(text : String) -> InputEvent {
+  let cluster = @internal.grapheme_slice(text, 0, 1)
+  let chars = cluster.to_array()
+  let boundaries = @internal.grapheme_boundaries(cluster)
+  let _width = @internal.display_width(cluster)
+  if chars.length() == 1 && boundaries.length() == 2 {
+    Key(Char(chars[0]))
+  } else {
+    Key(Text(cluster))
+  }
+}
+
+///|
+fn emit_text_event(
+  chars : Array[Char],
+  byte_offsets : Array[Int],
+) -> ParseResult[InputEvent] {
+  let text = String::from_array(chars)
+  let boundaries = @internal.grapheme_boundaries(text)
+  let cluster_chars = if boundaries.length() > 1 {
+    boundaries[1]
+  } else {
+    chars.length()
+  }
+  let cluster = @internal.grapheme_slice(text, 0, 1)
+  let consumed = byte_offsets[cluster_chars]
+  Ok(key_text_event(cluster), consumed)
+}
+
+///|
+fn parse_text_event(bv : BytesView) -> ParseResult[InputEvent] {
+  let chars : Array[Char] = []
+  let byte_offsets : Array[Int] = [0]
+  let total = bv.length()
+  let mut offset = 0
+  while offset < total {
+    match decode_utf8_scalar(bv[offset:total]) {
+      Utf8Ok(ch, consumed) => {
+        if !is_text_scalar(ch) {
+          if chars.is_empty() {
+            return Ok(unknown_event(bv, consumed), consumed)
+          }
+          return emit_text_event(chars, byte_offsets)
+        }
+        chars.push(ch)
+        offset = offset + consumed
+        byte_offsets.push(offset)
+        let text = String::from_array(chars)
+        let boundaries = @internal.grapheme_boundaries(text)
+        if boundaries.length() > 2 {
+          return emit_text_event(chars, byte_offsets)
+        }
+      }
+      Utf8Incomplete => {
+        if chars.is_empty() {
+          return Incomplete
+        }
+        return emit_text_event(chars, byte_offsets)
+      }
+      Utf8Invalid(message) => {
+        if chars.is_empty() {
+          return Invalid(message)
+        }
+        return emit_text_event(chars, byte_offsets)
+      }
+    }
+  }
+  if chars.is_empty() {
+    Incomplete
+  } else {
+    emit_text_event(chars, byte_offsets)
+  }
 }
 
 ///|
@@ -139,9 +325,9 @@ pub fn parse_input(bv : BytesView) -> ParseResult[InputEvent] {
     return Incomplete
   }
   let b0 = bv[0].to_int()
-  // Printable ASCII (space through tilde)
-  if b0 >= 0x20 && b0 <= 0x7E {
-    return Ok(Key(Char(b0.unsafe_to_char())), 1)
+  // Printable UTF-8 text, including ASCII space through tilde.
+  if (b0 >= 0x20 && b0 <= 0x7E) || b0 >= 0x80 {
+    return parse_text_event(bv)
   }
   // DEL (0x7F) and BS (0x08) → backspace
   if b0 == 0x7F || b0 == 0x08 {

@@ -9,6 +9,8 @@
 pub(all) enum KeyMsg {
   /// A printable character was received.
   Char(Char)
+  /// A printable grapheme cluster with multiple Unicode scalars was received.
+  Text(String)
   /// A control / special key (arrow keys, escape, enter, etc.).
   Special(String)
   /// A key with modifiers (Ctrl+key, Alt+key, etc.).

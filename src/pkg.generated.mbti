@@ -195,6 +195,7 @@ pub(all) enum InternalMsg {
 
 pub(all) enum KeyMsg {
   Char(Char)
+  Text(String)
   Special(String)
   Modified(String, String)
 } derive(Eq, @debug.Debug)
