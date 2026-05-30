@@ -73,6 +73,24 @@ priv enum CmdAction[Msg] {
   ShowCursor
   // Ask the runtime to report the current terminal size.
   RequestWindowSize((WindowSize) -> Msg)
+  // Request primary device attributes from the terminal.
+  RequestDeviceAttributes
+  // Request secondary device attributes / terminal version from the terminal.
+  RequestSecondaryDeviceAttributes
+  // Request the current cursor position from the terminal.
+  RequestCursorPosition
+  // Request the current default foreground color.
+  RequestForegroundColor
+  // Request the current default background color.
+  RequestBackgroundColor
+  // Request a terminal capability with XTGETTCAP.
+  RequestCapability(String)
+  // Request clipboard contents with OSC 52.
+  RequestClipboard(ClipboardSelection)
+  // Enable or disable focus reporting.
+  SetFocusReporting(Bool)
+  // Enable or disable bracketed paste mode.
+  SetBracketedPaste(Bool)
   // Run commands in order, waiting for immediate effects from each step to settle
   // before starting the next one.
   Sequence(Array[Cmd[Msg]])
@@ -86,6 +104,7 @@ pub impl[Msg] Debug for Cmd[Msg] with fn to_repr(self) {
   let mut every_count = 0
   let mut screen_count = 0
   let mut window_size_count = 0
+  let mut terminal_count = 0
   let mut sequence_count = 0
   for action in self.actions {
     match action {
@@ -101,6 +120,15 @@ pub impl[Msg] Debug for Cmd[Msg] with fn to_repr(self) {
       | HideCursor
       | ShowCursor => screen_count = screen_count + 1
       RequestWindowSize(_) => window_size_count = window_size_count + 1
+      RequestDeviceAttributes
+      | RequestSecondaryDeviceAttributes
+      | RequestCursorPosition
+      | RequestForegroundColor
+      | RequestBackgroundColor
+      | RequestCapability(_)
+      | RequestClipboard(_)
+      | SetFocusReporting(_)
+      | SetBracketedPaste(_) => terminal_count = terminal_count + 1
       Sequence(_) => sequence_count = sequence_count + 1
     }
   }
@@ -130,6 +158,10 @@ pub impl[Msg] Debug for Cmd[Msg] with fn to_repr(self) {
   if window_size_count > 0 {
     buf.write_string(", window_size=")
     buf.write_string(window_size_count.to_string())
+  }
+  if terminal_count > 0 {
+    buf.write_string(", terminal=")
+    buf.write_string(terminal_count.to_string())
   }
   if sequence_count > 0 {
     buf.write_string(", sequence=")

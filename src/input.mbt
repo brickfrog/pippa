@@ -560,15 +560,150 @@ fn parse_osc_color_reply(
 }
 
 ///|
+fn base64_value(b : Int) -> Int? {
+  if b >= 0x41 && b <= 0x5A {
+    Some(b - 0x41)
+  } else if b >= 0x61 && b <= 0x7A {
+    Some(b - 0x61 + 26)
+  } else if b >= 0x30 && b <= 0x39 {
+    Some(b - 0x30 + 52)
+  } else if b == 0x2B {
+    Some(62)
+  } else if b == 0x2F {
+    Some(63)
+  } else {
+    None
+  }
+}
+
+///|
+fn decode_base64_slice(bv : BytesView, start : Int, end : Int) -> Bytes? {
+  let values : Array[Int] = []
+  let mut saw_padding = false
+  let mut i = start
+  while i < end {
+    let b = bv[i].to_int()
+    if b == 0x3D {
+      saw_padding = true
+      values.push(-1)
+    } else {
+      if saw_padding {
+        return None
+      }
+      match base64_value(b) {
+        Some(value) => values.push(value)
+        None => return None
+      }
+    }
+    i = i + 1
+  }
+  if values.length() == 0 {
+    return Some(Bytes::new(0))
+  }
+  match values.length() % 4 {
+    0 => ()
+    2 => {
+      values.push(-1)
+      values.push(-1)
+    }
+    3 => values.push(-1)
+    _ => return None
+  }
+  let decoded : Array[Byte] = []
+  let mut index = 0
+  while index < values.length() {
+    let a = values[index]
+    let b = values[index + 1]
+    let c = values[index + 2]
+    let d = values[index + 3]
+    if a < 0 || b < 0 {
+      return None
+    }
+    if (c < 0 || d < 0) && index + 4 != values.length() {
+      return None
+    }
+    decoded.push((((a << 2) | (b >> 4)) & 0xFF).to_byte())
+    if c >= 0 {
+      decoded.push(((((b & 0x0F) << 4) | (c >> 2)) & 0xFF).to_byte())
+    }
+    if c >= 0 && d >= 0 {
+      decoded.push(((((c & 0x03) << 6) | d) & 0xFF).to_byte())
+    } else if c < 0 && d >= 0 {
+      return None
+    }
+    index = index + 4
+  }
+  Some(Bytes::from_array(decoded))
+}
+
+///|
+fn decode_utf8_strict(bytes : Bytes) -> String? {
+  let bv = bytes[:]
+  let mut offset = 0
+  while offset < bv.length() {
+    match decode_utf8_scalar(bv[offset:bv.length()]) {
+      Utf8Ok(_, consumed) => offset = offset + consumed
+      Utf8Incomplete | Utf8Invalid(_) => return None
+    }
+  }
+  Some(@utf8.decode_lossy(bytes))
+}
+
+///|
+fn parse_osc_clipboard_reply(
+  bv : BytesView,
+  payload_start : Int,
+  payload_end : Int,
+) -> ClipboardReply? {
+  let len = payload_end - payload_start
+  if len < 4 ||
+    bv[payload_start].to_int() != 0x35 ||
+    bv[payload_start + 1].to_int() != 0x32 ||
+    bv[payload_start + 2].to_int() != 0x3B {
+    return None
+  }
+  let selection_start = payload_start + 3
+  let mut separator = -1
+  let mut i = selection_start
+  while i < payload_end {
+    if bv[i].to_int() == 0x3B {
+      separator = i
+      break
+    }
+    i = i + 1
+  }
+  if separator < 0 {
+    return None
+  }
+  let selection = parse_clipboard_selection_code(
+    decode_slice_lossy(bv, selection_start, separator),
+  )
+  let raw = decode_slice_lossy(bv, separator + 1, payload_end)
+  let payload = match decode_base64_slice(bv, separator + 1, payload_end) {
+    Some(decoded) =>
+      match decode_utf8_strict(decoded) {
+        Some(text) => DecodedClipboardText(text)
+        None => RawClipboardData(raw)
+      }
+    None => RawClipboardData(raw)
+  }
+  Some({ selection, payload })
+}
+
+///|
 fn parse_osc_payload(
   bv : BytesView,
   payload_start : Int,
   payload_end : Int,
   consumed : Int,
 ) -> ParseResult[InputEvent] {
-  match parse_osc_color_reply(bv, payload_start, payload_end) {
-    Some(color) => Ok(TerminalReply(Color(color)), consumed)
-    None => Ok(unknown_reply_event(bv, consumed), consumed)
+  match parse_osc_clipboard_reply(bv, payload_start, payload_end) {
+    Some(reply) => Ok(TerminalReply(Clipboard(reply)), consumed)
+    None =>
+      match parse_osc_color_reply(bv, payload_start, payload_end) {
+        Some(color) => Ok(TerminalReply(Color(color)), consumed)
+        None => Ok(unknown_reply_event(bv, consumed), consumed)
+      }
   }
 }
 
@@ -590,6 +725,147 @@ fn parse_osc(bv : BytesView) -> ParseResult[InputEvent] {
       }
       if bv[i + 1].to_int() == 0x5C {
         return parse_osc_payload(bv, 2, i, i + 2)
+      }
+    }
+    i = i + 1
+  }
+  Incomplete
+}
+
+///|
+fn hex_value(b : Int) -> Int? {
+  if b >= 0x30 && b <= 0x39 {
+    Some(b - 0x30)
+  } else if b >= 0x41 && b <= 0x46 {
+    Some(b - 0x41 + 10)
+  } else if b >= 0x61 && b <= 0x66 {
+    Some(b - 0x61 + 10)
+  } else {
+    None
+  }
+}
+
+///|
+fn decode_hex_slice(bv : BytesView, start : Int, end : Int) -> Bytes? {
+  if (end - start) % 2 != 0 {
+    return None
+  }
+  let decoded : Array[Byte] = []
+  let mut i = start
+  while i < end {
+    let high = match hex_value(bv[i].to_int()) {
+      Some(value) => value
+      None => return None
+    }
+    let low = match hex_value(bv[i + 1].to_int()) {
+      Some(value) => value
+      None => return None
+    }
+    decoded.push(((high << 4) | low).to_byte())
+    i = i + 2
+  }
+  Some(Bytes::from_array(decoded))
+}
+
+///|
+fn decode_hex_text(bv : BytesView, start : Int, end : Int) -> String? {
+  if start >= end {
+    return None
+  }
+  match decode_hex_slice(bv, start, end) {
+    Some(bytes) => Some(@utf8.decode_lossy(bytes))
+    None => None
+  }
+}
+
+///|
+fn parse_capability_reply(
+  bv : BytesView,
+  payload_start : Int,
+  payload_end : Int,
+) -> CapabilityReply? {
+  let len = payload_end - payload_start
+  if len < 4 ||
+    bv[payload_start + 1].to_int() != 0x2B ||
+    bv[payload_start + 2].to_int() != 0x72 {
+    return None
+  }
+  let status = bv[payload_start].to_int()
+  let valid = if status == 0x31 {
+    true
+  } else if status == 0x30 {
+    false
+  } else {
+    return None
+  }
+  let data_start = payload_start + 3
+  let mut item_end = payload_end
+  let mut separator = -1
+  let mut i = data_start
+  while i < payload_end {
+    let b = bv[i].to_int()
+    if b == 0x3B {
+      item_end = i
+      break
+    }
+    if b == 0x3D {
+      if separator >= 0 {
+        return None
+      }
+      separator = i
+    }
+    i = i + 1
+  }
+  let name_end = if separator >= 0 { separator } else { item_end }
+  let name = match decode_hex_text(bv, data_start, name_end) {
+    Some(decoded) => decoded
+    None => return None
+  }
+  let value = if valid {
+    if separator < 0 || separator + 1 >= item_end {
+      return None
+    }
+    match decode_hex_text(bv, separator + 1, item_end) {
+      Some(decoded) => Some(decoded)
+      None => return None
+    }
+  } else {
+    if separator >= 0 {
+      return None
+    }
+    None
+  }
+  Some({ name, value, valid })
+}
+
+///|
+fn parse_dcs_payload(
+  bv : BytesView,
+  payload_start : Int,
+  payload_end : Int,
+  consumed : Int,
+) -> ParseResult[InputEvent] {
+  match parse_capability_reply(bv, payload_start, payload_end) {
+    Some(reply) => Ok(TerminalReply(Capability(reply)), consumed)
+    None => Ok(unknown_reply_event(bv, consumed), consumed)
+  }
+}
+
+///|
+fn parse_dcs(bv : BytesView) -> ParseResult[InputEvent] {
+  let n = bv.length()
+  if n < 3 {
+    return Incomplete
+  }
+  let mut i = 2
+  while i < n {
+    let b = bv[i].to_int()
+    if b == 0x1B {
+      if i + 1 >= n {
+        return Incomplete
+      }
+      if bv[i + 1].to_int() == 0x5C {
+        return parse_dcs_payload(bv, 2, i, i + 2)
       }
     }
     i = i + 1
@@ -961,6 +1237,15 @@ pub fn parse_input(bv : BytesView) -> ParseResult[InputEvent] {
     // stays available for the Alt+] key path below.
     if b1 == 0x5D && n > 2 && is_osc_command_start(bv[2].to_int()) {
       return parse_osc(bv)
+    }
+    // ESC P plus a capability reply status starts a DCS reply; bare ESC P
+    // remains available for the Alt+P key path below.
+    if b1 == 0x50 &&
+      n > 4 &&
+      (bv[2].to_int() == 0x30 || bv[2].to_int() == 0x31) &&
+      bv[3].to_int() == 0x2B &&
+      (bv[4].to_int() == 0x71 || bv[4].to_int() == 0x72) {
+      return parse_dcs(bv)
     }
     // ESC ESC → treat first ESC as standalone escape key
     if b1 == 0x1B {

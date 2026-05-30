@@ -108,6 +108,187 @@ test "pippa request window size command stores typed callback" {
 }
 
 ///|
+#cfg(any(target="native", target="llvm"))
+fn assert_terminal_cmd_emits(cmd : Cmd[Int], expected : String) -> Unit raise {
+  let chunks : Ref[Array[String]] = Ref::new([])
+  let program : Program[Int, Int] = Program::new(
+    init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+    update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+    view=fn(_model) { "" },
+    output=fn(output) { chunks.val = [..chunks.val, output] },
+  )
+  let sent_msgs = @queue.Queue::new()
+  let pending = @queue.Queue::new()
+  let sequences = @deque.Deque::new()
+  let timers = []
+  let state = initial_render_state(program, true)
+  queue_cmd_effects(cmd, 0L, pending, timers, sequences)
+  ignore(
+    drain_runtime(program, 0, state, sent_msgs, pending, timers, sequences),
+  )
+  assert_eq(chunks.val.join(""), expected)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn assert_terminal_query_round_trip(
+  cmd : Cmd[Int],
+  expected_query : String,
+  reply : String,
+  expected_reply : TerminalReplyMsg,
+) -> Unit raise {
+  assert_terminal_cmd_emits(cmd, expected_query)
+  let bytes = @utf8.encode(reply)
+  @test.assert_eq(
+    parse_input(bytes[:]),
+    Ok(TerminalReply(expected_reply), bytes.length()),
+  )
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa terminal query commands round-trip through typed replies" {
+  assert_terminal_query_round_trip(
+    Cmd::request_device_attributes(),
+    "\u001b[c",
+    "\u001b[?1;2c",
+    DeviceAttributes([1, 2]),
+  )
+  assert_terminal_query_round_trip(
+    Cmd::request_secondary_device_attributes(),
+    "\u001b[>c",
+    "\u001b[>0;95;0c",
+    SecondaryDeviceAttributes([0, 95, 0]),
+  )
+  assert_terminal_query_round_trip(
+    Cmd::request_cursor_position(),
+    "\u001b[6n",
+    "\u001b[12;34R",
+    CursorPosition({ row: 12, col: 34 }),
+  )
+  assert_terminal_query_round_trip(
+    Cmd::request_foreground_color(),
+    "\u001b]10;?\u001b\\",
+    "\u001b]10;rgb:ffff/eeee/dddd\u001b\\",
+    Color(ForegroundColor("rgb:ffff/eeee/dddd")),
+  )
+  assert_terminal_query_round_trip(
+    Cmd::request_background_color(),
+    "\u001b]11;?\u001b\\",
+    "\u001b]11;rgb:0000/1111/2222\u0007",
+    Color(BackgroundColor("rgb:0000/1111/2222")),
+  )
+  assert_terminal_query_round_trip(
+    Cmd::request_capability("Co"),
+    "\u001bP+q436f\u001b\\",
+    "\u001bP1+r436f=323536\u001b\\",
+    Capability({ name: "Co", value: Some("256"), valid: true }),
+  )
+  assert_terminal_query_round_trip(
+    Cmd::request_clipboard(SystemClipboard),
+    "\u001b]52;c;?\u001b\\",
+    "\u001b]52;c;aGk=\u001b\\",
+    Clipboard({
+      selection: SystemClipboard,
+      payload: DecodedClipboardText("hi"),
+    }),
+  )
+  assert_terminal_query_round_trip(
+    Cmd::request_clipboard(SystemClipboard),
+    "\u001b]52;c;?\u001b\\",
+    "\u001b]52;c;aGk=\u0007",
+    Clipboard({
+      selection: SystemClipboard,
+      payload: DecodedClipboardText("hi"),
+    }),
+  )
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa terminal mode commands emit focus and paste control sequences" {
+  assert_terminal_cmd_emits(Cmd::enable_focus_reporting(), "\u001b[?1004h")
+  assert_terminal_cmd_emits(Cmd::disable_focus_reporting(), "\u001b[?1004l")
+  assert_terminal_cmd_emits(Cmd::enable_bracketed_paste(), "\u001b[?2004h")
+  assert_terminal_cmd_emits(Cmd::disable_bracketed_paste(), "\u001b[?2004l")
+}
+
+///|
+test "parse_input: capability replies handle invalid and partial payloads" {
+  let invalid = @utf8.encode("\u001bP0+r436f\u001b\\")
+  @test.assert_eq(
+    parse_input(invalid[:]),
+    Ok(
+      TerminalReply(Capability({ name: "Co", value: None, valid: false })),
+      invalid.length(),
+    ),
+  )
+  let partial = @utf8.encode("\u001bP1+r436f=323536")
+  @test.assert_eq(parse_input(partial[:]), Incomplete)
+  let valid_without_value = @utf8.encode("\u001bP1+r436f\u001b\\")
+  @test.assert_eq(
+    parse_input(valid_without_value[:]),
+    Ok(
+      TerminalReply(UnknownReply(valid_without_value)),
+      valid_without_value.length(),
+    ),
+  )
+  let invalid_with_value = @utf8.encode("\u001bP0+r436f=323536\u001b\\")
+  @test.assert_eq(
+    parse_input(invalid_with_value[:]),
+    Ok(
+      TerminalReply(UnknownReply(invalid_with_value)),
+      invalid_with_value.length(),
+    ),
+  )
+  let valid_empty_value = @utf8.encode("\u001bP1+r436f=\u001b\\")
+  @test.assert_eq(
+    parse_input(valid_empty_value[:]),
+    Ok(
+      TerminalReply(UnknownReply(valid_empty_value)),
+      valid_empty_value.length(),
+    ),
+  )
+}
+
+///|
+test "parse_input: clipboard replies decode text and keep malformed payloads typed" {
+  let raw = @utf8.encode("\u001b]52;c;not@@base64\u001b\\")
+  @test.assert_eq(
+    parse_input(raw[:]),
+    Ok(
+      TerminalReply(
+        Clipboard({
+          selection: SystemClipboard,
+          payload: RawClipboardData("not@@base64"),
+        }),
+      ),
+      raw.length(),
+    ),
+  )
+  let binary = @utf8.encode("\u001b]52;c;/w==\u001b\\")
+  @test.assert_eq(
+    parse_input(binary[:]),
+    Ok(
+      TerminalReply(
+        Clipboard({
+          selection: SystemClipboard,
+          payload: RawClipboardData("/w=="),
+        }),
+      ),
+      binary.length(),
+    ),
+  )
+  let partial = @utf8.encode("\u001b]52;c;aGk=")
+  @test.assert_eq(parse_input(partial[:]), Incomplete)
+  let malformed = @utf8.encode("\u001b]52;c\u001b\\")
+  @test.assert_eq(
+    parse_input(malformed[:]),
+    Ok(TerminalReply(UnknownReply(malformed)), malformed.length()),
+  )
+}
+
+///|
 test "pippa cmd map transforms perform and after results lazily" {
   let mut value = 5
   let mapped = Cmd::map(

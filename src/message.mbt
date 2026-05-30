@@ -85,6 +85,50 @@ pub(all) enum TerminalColorReply {
 } derive(Debug, Eq)
 
 ///|
+/// Selection target used by OSC 52 clipboard queries and replies.
+pub(all) enum ClipboardSelection {
+  /// The terminal's system clipboard selection (`c`).
+  SystemClipboard
+  /// The primary selection (`p`).
+  PrimarySelection
+  /// The secondary selection (`s`).
+  SecondarySelection
+  /// Numbered cut buffer selection (`0` through `7` in xterm).
+  CutBuffer(Int)
+  /// A terminal-specific selection code.
+  NamedSelection(String)
+} derive(Debug, Eq)
+
+///|
+/// Payload returned by an OSC 52 clipboard reply.
+pub(all) enum ClipboardPayload {
+  /// Base64 decoded text payload.
+  DecodedClipboardText(String)
+  /// Payload kept as raw base64 text because it was malformed.
+  RawClipboardData(String)
+} derive(Debug, Eq)
+
+///|
+/// OSC 52 clipboard reply payload.
+pub(all) struct ClipboardReply {
+  /// Clipboard selection reported by the terminal.
+  selection : ClipboardSelection
+  /// Decoded text when possible, otherwise the raw base64 payload.
+  payload : ClipboardPayload
+} derive(Debug, Eq)
+
+///|
+/// XTGETTCAP terminal capability reply payload.
+pub(all) struct CapabilityReply {
+  /// Capability name returned by the terminal.
+  name : String
+  /// Capability value when the terminal returned one.
+  value : String?
+  /// Whether the terminal marked the capability lookup as valid.
+  valid : Bool
+} derive(Debug, Eq)
+
+///|
 /// Replies emitted by terminal query sequences.
 pub(all) enum TerminalReplyMsg {
   /// Cursor position report: CSI row ; col R.
@@ -95,9 +139,44 @@ pub(all) enum TerminalReplyMsg {
   SecondaryDeviceAttributes(Array[Int])
   /// OSC color query reply.
   Color(TerminalColorReply)
+  /// XTGETTCAP DCS capability reply.
+  Capability(CapabilityReply)
+  /// OSC 52 clipboard reply.
+  Clipboard(ClipboardReply)
   /// A structurally complete reply that Pippa does not decode yet.
   UnknownReply(Bytes)
 } derive(Debug, Eq)
+
+///|
+fn clipboard_selection_code(selection : ClipboardSelection) -> String {
+  match selection {
+    SystemClipboard => "c"
+    PrimarySelection => "p"
+    SecondarySelection => "s"
+    CutBuffer(index) => index.to_string()
+    NamedSelection(name) => name
+  }
+}
+
+///|
+fn parse_clipboard_selection_code(code : String) -> ClipboardSelection {
+  match code {
+    "c" => SystemClipboard
+    "p" => PrimarySelection
+    "s" => SecondarySelection
+    _ =>
+      if code.length() == 1 {
+        let b = code[:][0].to_int()
+        if b >= 0x30 && b <= 0x37 {
+          CutBuffer(b - 0x30)
+        } else {
+          NamedSelection(code)
+        }
+      } else {
+        NamedSelection(code)
+      }
+  }
+}
 
 ///|
 /// Represents a mouse event.
