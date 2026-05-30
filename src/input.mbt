@@ -264,21 +264,21 @@ fn mouse_modifiers(cb : Int) -> Array[MouseModifier] {
 }
 
 ///|
-fn mouse_button(cb : Int) -> MouseButton? {
+fn mouse_button(cb : Int) -> MouseButton {
   let low = cb & 0x03
   if (cb & 0x40) != 0 {
     match low {
-      0 => Some(MouseWheelUp)
-      1 => Some(MouseWheelDown)
-      2 => Some(MouseWheelLeft)
-      _ => Some(MouseWheelRight)
+      0 => MouseWheelUp
+      1 => MouseWheelDown
+      2 => MouseWheelLeft
+      _ => MouseWheelRight
     }
   } else {
     match low {
-      0 => Some(MouseLeft)
-      1 => Some(MouseMiddle)
-      2 => Some(MouseRight)
-      _ => Some(MouseNoButton)
+      0 => MouseLeft
+      1 => MouseMiddle
+      2 => MouseRight
+      _ => MouseNoButton
     }
   }
 }
@@ -334,14 +334,11 @@ fn parse_sgr_mouse(bv : BytesView) -> ParseResult[InputEvent] {
       } else {
         MousePress
       }
-      match mouse_button(cb) {
-        Some(button) =>
-          return Ok(
-            Mouse({ button, action, modifiers: mouse_modifiers(cb), col, row }),
-            final_index + 1,
-          )
-        None => return Invalid("unsupported SGR mouse wheel button")
-      }
+      let button = mouse_button(cb)
+      return Ok(
+        Mouse({ button, action, modifiers: mouse_modifiers(cb), col, row }),
+        final_index + 1,
+      )
     } else if (b >= 0x30 && b <= 0x39) || b == 0x3B {
       final_index = final_index + 1
     } else {
