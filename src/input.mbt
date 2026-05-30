@@ -483,7 +483,10 @@ fn is_csi_unknown_reply(
   final_index : Int,
   final_byte : Int,
 ) -> Bool {
-  if final_byte == 0x52 || final_byte == 0x63 || final_byte == 0x6E {
+  if final_byte == 0x52 ||
+    final_byte == 0x63 ||
+    final_byte == 0x6E ||
+    final_byte == 0x74 {
     return true
   }
   if final_index > 2 {
@@ -497,6 +500,11 @@ fn is_csi_unknown_reply(
 ///|
 fn decode_slice_lossy(bv : BytesView, start : Int, end : Int) -> String {
   @utf8.decode_lossy(Bytes::from_array(bv[start:end].to_array()))
+}
+
+///|
+fn is_osc_command_start(b : Int) -> Bool {
+  b >= 0x30 && b <= 0x39
 }
 
 ///|
@@ -949,8 +957,9 @@ pub fn parse_input(bv : BytesView) -> ParseResult[InputEvent] {
     if b1 == 0x5B {
       return parse_csi(bv)
     }
-    // ESC ] → OSC reply/control string.
-    if b1 == 0x5D {
+    // ESC ] plus a digit starts an OSC reply/control string; bare ESC ]
+    // stays available for the Alt+] key path below.
+    if b1 == 0x5D && n > 2 && is_osc_command_start(bv[2].to_int()) {
       return parse_osc(bv)
     }
     // ESC ESC → treat first ESC as standalone escape key

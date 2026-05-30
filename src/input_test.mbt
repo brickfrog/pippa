@@ -144,6 +144,14 @@ test "parse_input: Alt+a" {
 }
 
 ///|
+test "parse_input: Alt+] is not shadowed by OSC" {
+  let bare = Bytes::from_array([b'\x1b', b']'])
+  assert_eq(parse_input(bare[:]), Ok(Key(Modified("alt", "]")), 2))
+  let followed = Bytes::from_array([b'\x1b', b']', b'x'])
+  assert_eq(parse_input(followed[:]), Ok(Key(Modified("alt", "]")), 2))
+}
+
+///|
 test "parse_input: Ctrl+c (0x03)" {
   let bytes = Bytes::from_array([b'\x03'])
   let bv = bytes[0:bytes.length()]
@@ -524,11 +532,22 @@ test "parse_input: OSC color replies are typed" {
 }
 
 ///|
+test "parse_input: unterminated OSC color reply is incomplete" {
+  let bytes = @utf8.encode("\u001b]11;")
+  assert_eq(parse_input(bytes[:]), Incomplete)
+}
+
+///|
 test "parse_input: unknown well-formed reply is typed" {
   let bytes = @utf8.encode("\u001b[?2026n")
   assert_eq(
     parse_input(bytes[:]),
     Ok(TerminalReply(UnknownReply(bytes)), bytes.length()),
+  )
+  let window_size = @utf8.encode("\u001b[8;24;80t")
+  assert_eq(
+    parse_input(window_size[:]),
+    Ok(TerminalReply(UnknownReply(window_size)), window_size.length()),
   )
 }
 
