@@ -470,13 +470,11 @@ test "text_input: word movement follows grapheme safe mixed boundaries" {
   let m3 = (comp.update)(m2, MoveWordLeft).model
   let m4 = (comp.update)(m3, MoveWordLeft).model
   let m5 = (comp.update)(m4, MoveWordLeft).model
-  let m6 = (comp.update)(m5, MoveWordLeft).model
-  assert_eq(m1.cursor, 14)
-  assert_eq(m2.cursor, 9)
-  assert_eq(m3.cursor, 8)
-  assert_eq(m4.cursor, 5)
-  assert_eq(m5.cursor, 3)
-  assert_eq(m6.cursor, 0)
+  assert_eq(m1.cursor, 9)
+  assert_eq(m2.cursor, 8)
+  assert_eq(m3.cursor, 5)
+  assert_eq(m4.cursor, 3)
+  assert_eq(m5.cursor, 0)
 
   let start = { ..model, cursor: 0 }
   let r1 = (comp.update)(start, MoveWordRight).model
@@ -484,13 +482,11 @@ test "text_input: word movement follows grapheme safe mixed boundaries" {
   let r3 = (comp.update)(r2, MoveWordRight).model
   let r4 = (comp.update)(r3, MoveWordRight).model
   let r5 = (comp.update)(r4, MoveWordRight).model
-  let r6 = (comp.update)(r5, MoveWordRight).model
   assert_eq(r1.cursor, 3)
   assert_eq(r2.cursor, 5)
   assert_eq(r3.cursor, 8)
   assert_eq(r4.cursor, 9)
-  assert_eq(r5.cursor, 14)
-  assert_eq(r6.cursor, end)
+  assert_eq(r5.cursor, end)
 }
 
 ///|
@@ -503,12 +499,12 @@ test "text_input: word delete removes mixed runs without splitting clusters" {
   let m1 = (comp.update)(model, DeleteWordBackward).model
   let m2 = (comp.update)(m1, DeleteWordBackward).model
   let m3 = (comp.update)(m2, DeleteWordBackward).model
-  assert_eq(m1.value, "foo  bar.baz\{accented}")
-  assert_eq(m1.cursor, 14)
-  assert_eq(m2.value, "foo  bar.")
-  assert_eq(m2.cursor, 9)
-  assert_eq(m3.value, "foo  bar")
-  assert_eq(m3.cursor, 8)
+  assert_eq(m1.value, "foo  bar.")
+  assert_eq(m1.cursor, 9)
+  assert_eq(m2.value, "foo  bar")
+  assert_eq(m2.cursor, 8)
+  assert_eq(m3.value, "foo  ")
+  assert_eq(m3.cursor, 5)
 
   let f1 = (comp.update)({ ..model, cursor: 0 }, DeleteWordForward).model
   let f2 = (comp.update)(f1, DeleteWordForward).model
@@ -516,6 +512,94 @@ test "text_input: word delete removes mixed runs without splitting clusters" {
   assert_eq(f1.cursor, 0)
   assert_eq(f2.value, "bar.baz\{accented}界字")
   assert_eq(f2.cursor, 0)
+}
+
+///|
+test "text_input: word classifier treats non ASCII letters as words" {
+  let comp = text_input(placeholder="")
+  let value = "café!"
+  let end = value.to_array().length()
+  let model = text_input_test_model(value~, cursor=end, focused=true)
+  let left_punctuation = (comp.update)(model, MoveWordLeft).model
+  let left_word = (comp.update)(left_punctuation, MoveWordLeft).model
+  let right_word = (comp.update)({ ..model, cursor: 0 }, MoveWordRight).model
+  let delete_punctuation = (comp.update)(model, DeleteWordBackward).model
+  let delete_word = (comp.update)(delete_punctuation, DeleteWordBackward).model
+  assert_eq(left_punctuation.cursor, 4)
+  assert_eq(left_word.cursor, 0)
+  assert_eq(right_word.cursor, 4)
+  assert_eq(delete_punctuation.value, "café")
+  assert_eq(delete_punctuation.cursor, 4)
+  assert_eq(delete_word.value, "")
+  assert_eq(delete_word.cursor, 0)
+}
+
+///|
+test "text_input: word classifier separates fullwidth punctuation" {
+  let comp = text_input(placeholder="")
+  let value = "界，字"
+  let model = text_input_test_model(
+    value~,
+    cursor=value.to_array().length(),
+    focused=true,
+  )
+  let left_word = (comp.update)(model, MoveWordLeft).model
+  let left_punctuation = (comp.update)(left_word, MoveWordLeft).model
+  let left_first_word = (comp.update)(left_punctuation, MoveWordLeft).model
+  let delete_word = (comp.update)(model, DeleteWordBackward).model
+  let delete_punctuation = (comp.update)(delete_word, DeleteWordBackward).model
+  assert_eq(left_word.cursor, 2)
+  assert_eq(left_punctuation.cursor, 1)
+  assert_eq(left_first_word.cursor, 0)
+  assert_eq(delete_word.value, "界，")
+  assert_eq(delete_word.cursor, 2)
+  assert_eq(delete_punctuation.value, "界")
+  assert_eq(delete_punctuation.cursor, 1)
+}
+
+///|
+test "text_input: word classifier keeps Greek and Cyrillic letters as words" {
+  let comp = text_input(placeholder="")
+  let value = "αβ.ЖЗ"
+  let model = text_input_test_model(
+    value~,
+    cursor=value.to_array().length(),
+    focused=true,
+  )
+  let left_cyrillic = (comp.update)(model, MoveWordLeft).model
+  let left_dot = (comp.update)(left_cyrillic, MoveWordLeft).model
+  let left_greek = (comp.update)(left_dot, MoveWordLeft).model
+  let delete_greek = (comp.update)({ ..model, cursor: 0 }, DeleteWordForward).model
+  let delete_dot = (comp.update)(delete_greek, DeleteWordForward).model
+  assert_eq(left_cyrillic.cursor, 3)
+  assert_eq(left_dot.cursor, 2)
+  assert_eq(left_greek.cursor, 0)
+  assert_eq(delete_greek.value, ".ЖЗ")
+  assert_eq(delete_greek.cursor, 0)
+  assert_eq(delete_dot.value, "ЖЗ")
+  assert_eq(delete_dot.cursor, 0)
+}
+
+///|
+test "text_input: word classifier keeps combining mark clusters with base word" {
+  let accented = String::from_array(['e', '\u{0301}'])
+  let comp = text_input(placeholder="")
+  let value = "\{accented}!"
+  let model = text_input_test_model(
+    value~,
+    cursor=value.to_array().length(),
+    focused=true,
+  )
+  let right_word = (comp.update)({ ..model, cursor: 0 }, MoveWordRight).model
+  let right_punctuation = (comp.update)(right_word, MoveWordRight).model
+  let delete_punctuation = (comp.update)(model, DeleteWordBackward).model
+  let delete_word = (comp.update)(delete_punctuation, DeleteWordBackward).model
+  assert_eq(right_word.cursor, accented.to_array().length())
+  assert_eq(right_punctuation.cursor, value.to_array().length())
+  assert_eq(delete_punctuation.value, accented)
+  assert_eq(delete_punctuation.cursor, accented.to_array().length())
+  assert_eq(delete_word.value, "")
+  assert_eq(delete_word.cursor, 0)
 }
 
 ///|
@@ -541,6 +625,33 @@ test "text_input: paste input event inserts once and truncates at grapheme limit
 }
 
 ///|
+test "text_input: input event dispatch lets keymap override printable keys" {
+  let keymap : TextInputKeymap = {
+    bindings: [
+      {
+        binding: { keys: ["x"], help: "start" },
+        action: TextInputActionMoveToStart,
+      },
+    ],
+  }
+  assert_true(
+    text_input_msg_from_input_event(@pippa.Key(@pippa.Char('x')), keymap~)
+    is Some(MoveToStart),
+  )
+  assert_true(
+    text_input_msg_from_input_event(@pippa.Key(@pippa.Char('x')))
+    is Some(InsertChar('x')),
+  )
+  assert_true(
+    text_input_msg_from_input_event(@pippa.Key(@pippa.Text("é")))
+    is Some(InsertText("é")),
+  )
+  assert_true(
+    text_input_msg_from_input_event(@pippa.Key(@pippa.Special("f13"))) is None,
+  )
+}
+
+///|
 test "text_input: suggestions render ghost hint cycle and accept current" {
   let comp = text_input(placeholder="", suggestions=["apple", "apricot"])
   let m0 = (comp.init)().model
@@ -554,6 +665,60 @@ test "text_input: suggestions render ghost hint cycle and accept current" {
   assert_eq(m4.value, "apricot")
   assert_eq(m4.cursor, 7)
   assert_eq((comp.view)(m4), "apricot|")
+}
+
+///|
+test "text_input: suggestion cycling wraps in both directions" {
+  let comp = text_input(placeholder="", suggestions=["alpha", "beta", "gamma"])
+  let m0 = (comp.init)().model
+  let prev_wrap = (comp.update)(m0, CycleSuggestionPrev).model
+  let next_to_start = (comp.update)(prev_wrap, CycleSuggestionNext).model
+  let next_one = (comp.update)(next_to_start, CycleSuggestionNext).model
+  let next_two = (comp.update)(next_one, CycleSuggestionNext).model
+  let next_wrap = (comp.update)(next_two, CycleSuggestionNext).model
+  assert_eq(m0.suggestions.selected, 0)
+  assert_eq(prev_wrap.suggestions.selected, 2)
+  assert_eq(next_to_start.suggestions.selected, 0)
+  assert_eq(next_one.suggestions.selected, 1)
+  assert_eq(next_two.suggestions.selected, 2)
+  assert_eq(next_wrap.suggestions.selected, 0)
+}
+
+///|
+test "text_input: suggestion cycling handles empty and single item lists" {
+  let empty_comp = text_input(placeholder="")
+  let empty0 = (empty_comp.init)().model
+  let empty_next = (empty_comp.update)(empty0, CycleSuggestionNext).model
+  let empty_prev = (empty_comp.update)(empty_next, CycleSuggestionPrev).model
+  assert_true(empty_next.suggestions.items == [])
+  assert_eq(empty_next.suggestions.selected, 0)
+  assert_true(empty_prev.suggestions.items == [])
+  assert_eq(empty_prev.suggestions.selected, 0)
+
+  let one_comp = text_input(placeholder="", suggestions=["solo"])
+  let one0 = (one_comp.init)().model
+  let one_next = (one_comp.update)(one0, CycleSuggestionNext).model
+  let one_prev = (one_comp.update)(one_next, CycleSuggestionPrev).model
+  assert_true(one_next.suggestions.items == ["solo"])
+  assert_eq(one_next.suggestions.selected, 0)
+  assert_true(one_prev.suggestions.items == ["solo"])
+  assert_eq(one_prev.suggestions.selected, 0)
+}
+
+///|
+test "text_input: set suggestions replaces items and resets selection" {
+  let comp = text_input(placeholder="", suggestions=["old", "stale"])
+  let m0 = (comp.init)().model
+  let cycled = (comp.update)(m0, CycleSuggestionNext).model
+  let replaced = (comp.update)(cycled, SetSuggestions(["new", "fresh"])).model
+  let wrapped = (comp.update)(replaced, CycleSuggestionPrev).model
+  let single = (comp.update)(wrapped, SetSuggestions(["solo"])).model
+  assert_eq(cycled.suggestions.selected, 1)
+  assert_true(replaced.suggestions.items == ["new", "fresh"])
+  assert_eq(replaced.suggestions.selected, 0)
+  assert_eq(wrapped.suggestions.selected, 1)
+  assert_true(single.suggestions.items == ["solo"])
+  assert_eq(single.suggestions.selected, 0)
 }
 
 ///|

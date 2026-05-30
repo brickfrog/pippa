@@ -411,23 +411,46 @@ fn text_input_normalize_model_validated(
 
 ///|
 priv enum TextInputClusterClass {
-  TextInputClusterAsciiWord
+  TextInputClusterWord
   TextInputClusterWhitespace
-  TextInputClusterWide
   TextInputClusterPunctuation
 } derive(Eq)
 
 ///|
-fn text_input_is_ascii_word_char(ch : Char) -> Bool {
-  (ch >= 'A' && ch <= 'Z') ||
-  (ch >= 'a' && ch <= 'z') ||
-  (ch >= '0' && ch <= '9') ||
-  ch == '_'
+fn text_input_is_ascii_punctuation(ch : Char) -> Bool {
+  (ch >= '!' && ch <= '/') ||
+  (ch >= ':' && ch <= '@') ||
+  (ch >= '[' && ch <= '`') ||
+  (ch >= '{' && ch <= '~')
 }
 
 ///|
 fn text_input_is_whitespace_char(ch : Char) -> Bool {
-  ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\u{3000}'
+  let code = ch.to_int()
+  ch == ' ' ||
+  ch == '\t' ||
+  ch == '\n' ||
+  ch == '\r' ||
+  code == 0x00A0 ||
+  code == 0x1680 ||
+  (code >= 0x2000 && code <= 0x200A) ||
+  code == 0x2028 ||
+  code == 0x2029 ||
+  code == 0x202F ||
+  code == 0x205F ||
+  code == 0x3000
+}
+
+///|
+fn text_input_is_unicode_punctuation(ch : Char) -> Bool {
+  let code = ch.to_int()
+  text_input_is_ascii_punctuation(ch) ||
+  (code >= 0x2000 && code <= 0x206F) ||
+  (code >= 0x3000 && code <= 0x303F) ||
+  (code >= 0xFF01 && code <= 0xFF0F) ||
+  (code >= 0xFF1A && code <= 0xFF20) ||
+  (code >= 0xFF3B && code <= 0xFF40) ||
+  (code >= 0xFF5B && code <= 0xFF65)
 }
 
 ///|
@@ -451,12 +474,10 @@ fn text_input_cluster_class(cluster : String) -> TextInputClusterClass {
     Some(ch) =>
       if text_input_is_whitespace_char(ch) {
         TextInputClusterWhitespace
-      } else if text_input_is_ascii_word_char(ch) {
-        TextInputClusterAsciiWord
-      } else if @internal.display_width(cluster) > 1 {
-        TextInputClusterWide
-      } else {
+      } else if text_input_is_unicode_punctuation(ch) {
         TextInputClusterPunctuation
+      } else {
+        TextInputClusterWord
       }
   }
 }
@@ -710,12 +731,15 @@ pub fn text_input_msg_from_input_event(
 ) -> TextInputMsg? {
   match event {
     @pippa.Paste(text) => Some(InsertText(text))
-    @pippa.Key(@pippa.Char(ch)) => Some(InsertChar(ch))
-    @pippa.Key(@pippa.Text(text)) => Some(InsertText(text))
     @pippa.Key(key) =>
       match text_input_keymap_action(keymap, key) {
         Some(action) => Some(text_input_msg_from_action(action))
-        None => None
+        None =>
+          match key {
+            @pippa.Char(ch) => Some(InsertChar(ch))
+            @pippa.Text(text) => Some(InsertText(text))
+            _ => None
+          }
       }
     _ => None
   }
