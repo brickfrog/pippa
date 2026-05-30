@@ -25,7 +25,7 @@ pub fn stopwatch(interval_ms? : Int) -> Component[StopwatchModel, StopwatchMsg]
 
 pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg]
 
-pub fn text_input(placeholder~ : String) -> Component[TextInputModel, TextInputMsg]
+pub fn text_input(placeholder~ : String, prompt? : String, width? : Int, echo_mode? : TextInputEchoMode, char_limit? : Int?, disabled? : Bool, validator? : (String) -> Result[Unit, String]) -> Component[TextInputModel, TextInputMsg]
 
 pub fn textarea(width~ : Int, height~ : Int, placeholder? : String) -> Component[TextareaModel, TextareaMsg]
 
@@ -201,11 +201,24 @@ pub(all) enum TableMsg {
   SetRows(Array[Array[String]])
 } derive(@debug.Debug)
 
+pub(all) enum TextInputEchoMode {
+  Normal
+  Password(Char)
+  Hidden
+} derive(Eq, @debug.Debug)
+
 pub(all) struct TextInputModel {
   value : String
   cursor : Int
+  width : Int
+  scroll_col : Int
+  prompt : String
   placeholder : String
+  echo_mode : TextInputEchoMode
+  char_limit : Int?
+  validation : TextInputValidation
   focused : Bool
+  disabled : Bool
 } derive(Eq, @debug.Debug)
 
 pub(all) enum TextInputMsg {
@@ -219,6 +232,11 @@ pub(all) enum TextInputMsg {
   MoveToEnd
   Focus
   Blur
+} derive(Eq, @debug.Debug)
+
+pub(all) enum TextInputValidation {
+  Valid
+  Invalid(String)
 } derive(Eq, @debug.Debug)
 
 pub(all) struct TextareaModel {
