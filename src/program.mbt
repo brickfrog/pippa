@@ -52,6 +52,8 @@ pub(all) struct Program[Model, Msg] {
   window_height : Int
   /// Write rendered output and terminal control sequences.
   output : (String) -> Unit
+  /// Produce a message when the terminal size changes using a typed payload.
+  on_window_size : (WindowSize) -> Msg?
   /// Produce a message when the terminal size changes. Return None to ignore it.
   on_resize : (Int, Int) -> Msg?
   /// Return true to exit the event loop after an update.
@@ -159,6 +161,7 @@ pub fn[Model, Msg] Program::new(
   on_resize? : (Int, Int) -> Msg? = fn(_cols, _rows) { None },
   should_quit? : (Model) -> Bool = fn(_model) { false },
   catch_interrupt? : Bool = true,
+  on_window_size? : (WindowSize) -> Msg? = fn(_size) { None },
 ) -> Program[Model, Msg] {
   {
     init,
@@ -180,6 +183,7 @@ pub fn[Model, Msg] Program::new(
     window_width,
     window_height,
     output,
+    on_window_size,
     on_resize,
     should_quit,
     catch_interrupt,
@@ -340,12 +344,26 @@ fn[Model, Msg] emit_output(
 ///|
 #cfg(any(target="native", target="llvm"))
 fn[Model, Msg] program_enter_sequence(program : Program[Model, Msg]) -> String {
+  program_enter_sequence_with_modes(
+    program,
+    program.alt_screen,
+    program.hide_cursor,
+  )
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] program_enter_sequence_with_modes(
+  program : Program[Model, Msg],
+  alt_screen : Bool,
+  cursor_hidden : Bool,
+) -> String {
   let buf = StringBuilder::new()
   if program.rendering {
-    if program.alt_screen {
+    if alt_screen {
       buf.write_string(enter_alt_screen())
     }
-    if program.hide_cursor {
+    if cursor_hidden {
       buf.write_string(hide_cursor())
     }
     buf.write_string(clear_screen())
@@ -363,6 +381,20 @@ fn[Model, Msg] program_enter_sequence(program : Program[Model, Msg]) -> String {
 ///|
 #cfg(any(target="native", target="llvm"))
 fn[Model, Msg] program_exit_sequence(program : Program[Model, Msg]) -> String {
+  program_exit_sequence_with_modes(
+    program,
+    program.alt_screen,
+    program.hide_cursor,
+  )
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] program_exit_sequence_with_modes(
+  program : Program[Model, Msg],
+  alt_screen : Bool,
+  cursor_hidden : Bool,
+) -> String {
   let buf = StringBuilder::new()
   if program.read_stdin && program.focus_reporting {
     buf.write_string(disable_focus_reporting())
@@ -371,10 +403,10 @@ fn[Model, Msg] program_exit_sequence(program : Program[Model, Msg]) -> String {
     buf.write_string(disable_bracketed_paste())
   }
   if program.rendering {
-    if program.alt_screen {
+    if alt_screen {
       buf.write_string(exit_alt_screen())
     }
-    if program.hide_cursor {
+    if cursor_hidden {
       buf.write_string(show_cursor())
     }
   }
@@ -396,11 +428,49 @@ fn[Model, Msg] activate_terminal(program : Program[Model, Msg]) -> Unit {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn[Model, Msg] activate_terminal_with_modes(
+  program : Program[Model, Msg],
+  alt_screen : Bool,
+  cursor_hidden : Bool,
+) -> Unit {
+  if program.read_stdin {
+    pippa_enter_raw_mode()
+  }
+  let enter_seq = program_enter_sequence_with_modes(
+    program, alt_screen, cursor_hidden,
+  )
+  emit_output(program, enter_seq)
+  if program.rendering && program.read_stdin && program.mouse {
+    emit_output(program, enable_mouse())
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 fn[Model, Msg] deactivate_terminal(program : Program[Model, Msg]) -> Unit {
   if program.rendering && program.read_stdin && program.mouse {
     emit_output(program, disable_mouse())
   }
   let exit_seq = program_exit_sequence(program)
+  emit_output(program, exit_seq)
+  if program.read_stdin {
+    pippa_exit_raw_mode()
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] deactivate_terminal_with_modes(
+  program : Program[Model, Msg],
+  alt_screen : Bool,
+  cursor_hidden : Bool,
+) -> Unit {
+  if program.rendering && program.read_stdin && program.mouse {
+    emit_output(program, disable_mouse())
+  }
+  let exit_seq = program_exit_sequence_with_modes(
+    program, alt_screen, cursor_hidden,
+  )
   emit_output(program, exit_seq)
   if program.read_stdin {
     pippa_exit_raw_mode()
@@ -436,6 +506,12 @@ fn[Model, Msg] maybe_initial_window_size(
       },
     })
   }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn current_window_size() -> WindowSize {
+  { width: pippa_get_cols(), height: pippa_get_rows() }
 }
 
 ///|
@@ -479,6 +555,39 @@ fn[Model, Msg] run_internal(
 priv enum RuntimeTimer[Msg] {
   TickAt(Int64)
   AfterAt(Int64, () -> Msg?)
+  EveryAt(Int64, Int, Int64, (TimerTick) -> Msg)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+priv enum RuntimeScreenCommand {
+  RuntimeEnterAltScreen
+  RuntimeExitAltScreen
+  RuntimeClearScreen
+  RuntimeRepaint
+  RuntimeForceRedraw
+  RuntimeHideCursor
+  RuntimeShowCursor
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+priv enum RuntimeEffect[Msg] {
+  RuntimeTask(() -> Msg?)
+  RuntimeScreen(RuntimeScreenCommand)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+priv struct RuntimeRenderState {
+  terminal_active : Bool
+  alt_screen : Bool
+  cursor_hidden : Bool
+  rendered : String
+  prev_line_count : Int
+  last_render_ms : Int64
+  render_due_at : Int64?
+  force_full_repaint : Bool
 }
 
 ///|
@@ -487,7 +596,106 @@ fn[Msg] timer_deadline(timer : RuntimeTimer[Msg]) -> Int64 {
   match timer {
     TickAt(deadline) => deadline
     AfterAt(deadline, _) => deadline
+    EveryAt(deadline, _, _, _) => deadline
   }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] initial_render_state(
+  program : Program[Model, Msg],
+  terminal_active : Bool,
+) -> RuntimeRenderState {
+  {
+    terminal_active,
+    alt_screen: program.alt_screen,
+    cursor_hidden: program.hide_cursor,
+    rendered: "",
+    prev_line_count: 0,
+    last_render_ms: 0L,
+    render_due_at: None,
+    force_full_repaint: false,
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] apply_screen_command(
+  program : Program[Model, Msg],
+  state : RuntimeRenderState,
+  command : RuntimeScreenCommand,
+) -> RuntimeRenderState {
+  match command {
+    RuntimeEnterAltScreen =>
+      if state.alt_screen {
+        state
+      } else {
+        if state.terminal_active && program.rendering {
+          emit_output(program, enter_alt_screen())
+        }
+        {
+          ..state,
+          alt_screen: true,
+          rendered: "",
+          prev_line_count: 0,
+          render_due_at: None,
+        }
+      }
+    RuntimeExitAltScreen =>
+      if !state.alt_screen {
+        state
+      } else {
+        if state.terminal_active && program.rendering {
+          emit_output(program, exit_alt_screen())
+        }
+        {
+          ..state,
+          alt_screen: false,
+          rendered: "",
+          prev_line_count: 0,
+          render_due_at: None,
+        }
+      }
+    RuntimeClearScreen => {
+      if state.terminal_active && program.rendering {
+        emit_output(program, clear_screen() + move_cursor(1, 1))
+      }
+      { ..state, rendered: "", prev_line_count: 0, render_due_at: None }
+    }
+    RuntimeRepaint => { ..state, force_full_repaint: true, render_due_at: None }
+    RuntimeForceRedraw =>
+      { ..state, force_full_repaint: true, render_due_at: None }
+    RuntimeHideCursor =>
+      if state.cursor_hidden {
+        state
+      } else {
+        if state.terminal_active && program.rendering {
+          emit_output(program, hide_cursor())
+        }
+        { ..state, cursor_hidden: true }
+      }
+    RuntimeShowCursor =>
+      if !state.cursor_hidden {
+        state
+      } else {
+        if state.terminal_active && program.rendering {
+          emit_output(program, show_cursor())
+        }
+        { ..state, cursor_hidden: false }
+      }
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn next_every_deadline(
+  started_at : Int64,
+  interval_ms : Int,
+  now : Int64,
+) -> Int64 {
+  let interval = interval_ms.to_int64()
+  let elapsed = (now - started_at).max(0L)
+  started_at + (elapsed / interval + 1L) * interval
 }
 
 ///|
@@ -495,13 +703,13 @@ fn[Msg] timer_deadline(timer : RuntimeTimer[Msg]) -> Int64 {
 fn[Msg] queue_cmd_effects(
   cmd : Cmd[Msg],
   now : Int64,
-  pending : @queue.Queue[() -> Msg?],
+  pending : @queue.Queue[RuntimeEffect[Msg]],
   timers : Array[RuntimeTimer[Msg]],
   sequences : @deque.Deque[Array[Cmd[Msg]]],
 ) -> Unit {
   for action in cmd.actions {
     match action {
-      Perform(task) => pending.push(task)
+      Perform(task) => pending.push(RuntimeTask(task))
       Tick(interval_ms) =>
         if interval_ms > 0 {
           timers.push(TickAt(now + interval_ms.to_int64()))
@@ -510,6 +718,19 @@ fn[Msg] queue_cmd_effects(
         let ms = if interval_ms > 0 { interval_ms } else { 1 }
         timers.push(AfterAt(now + ms.to_int64(), fn() { Some(task()) }))
       }
+      Every(interval_ms, task) => {
+        let ms = if interval_ms > 0 { interval_ms } else { 1 }
+        timers.push(EveryAt(now + ms.to_int64(), ms, now, task))
+      }
+      EnterAltScreen => pending.push(RuntimeScreen(RuntimeEnterAltScreen))
+      ExitAltScreen => pending.push(RuntimeScreen(RuntimeExitAltScreen))
+      ClearScreen => pending.push(RuntimeScreen(RuntimeClearScreen))
+      Repaint => pending.push(RuntimeScreen(RuntimeRepaint))
+      ForceRedraw => pending.push(RuntimeScreen(RuntimeForceRedraw))
+      HideCursor => pending.push(RuntimeScreen(RuntimeHideCursor))
+      ShowCursor => pending.push(RuntimeScreen(RuntimeShowCursor))
+      RequestWindowSize(task) =>
+        pending.push(RuntimeTask(fn() { Some(task(current_window_size())) }))
       Sequence(cmds) =>
         match cmds {
           [] => ()
@@ -629,24 +850,61 @@ fn[Model, Msg] is_cancelled(program : Program[Model, Msg]) -> Bool {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn[Model, Msg] apply_window_size(
+  program : Program[Model, Msg],
+  model : Model,
+  size : WindowSize,
+  pending : @queue.Queue[RuntimeEffect[Msg]],
+  timers : Array[RuntimeTimer[Msg]],
+  sequences : @deque.Deque[Array[Cmd[Msg]]],
+) -> (Model, Bool, Bool) {
+  let mut current_model = model
+  let mut quit = false
+  let mut updated = false
+  match (program.on_window_size)(size) {
+    Some(msg) => {
+      let (next_model, should_quit, cmd) = apply_msg(
+        program, current_model, msg,
+      )
+      current_model = next_model
+      queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+      updated = true
+      if should_quit {
+        quit = true
+      }
+    }
+    None => ()
+  }
+  match (program.on_resize)(size.width, size.height) {
+    Some(msg) => {
+      let (next_model, should_quit, cmd) = apply_msg(
+        program, current_model, msg,
+      )
+      current_model = next_model
+      queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+      updated = true
+      if should_quit {
+        quit = true
+      }
+    }
+    None => ()
+  }
+  (current_model, quit, updated)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 fn[Model, Msg] apply_initial_window_size(
   program : Program[Model, Msg],
   model : Model,
-  pending : @queue.Queue[() -> Msg?],
+  pending : @queue.Queue[RuntimeEffect[Msg]],
   timers : Array[RuntimeTimer[Msg]],
   sequences : @deque.Deque[Array[Cmd[Msg]]],
-) -> (Model, Bool) {
+) -> (Model, Bool, Bool) {
   match maybe_initial_window_size(program) {
     Some(size) =>
-      match (program.on_resize)(size.width, size.height) {
-        Some(msg) => {
-          let (next_model, should_quit, cmd) = apply_msg(program, model, msg)
-          queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
-          (next_model, should_quit)
-        }
-        None => (model, false)
-      }
-    None => (model, false)
+      apply_window_size(program, model, size, pending, timers, sequences)
+    None => (model, false, false)
   }
 }
 
@@ -667,7 +925,7 @@ fn[Model, Msg] apply_input_events(
   program : Program[Model, Msg],
   model : Model,
   events : Array[InputEvent],
-  pending : @queue.Queue[() -> Msg?],
+  pending : @queue.Queue[RuntimeEffect[Msg]],
   timers : Array[RuntimeTimer[Msg]],
   sequences : @deque.Deque[Array[Cmd[Msg]]],
 ) -> (Model, Bool, Bool) {
@@ -707,38 +965,62 @@ fn[Model, Msg] apply_input_events(
 fn[Model, Msg] drain_controls(
   program : Program[Model, Msg],
   pending_controls : @queue.Queue[RuntimeControl],
-  terminal_active : Bool,
+  state : RuntimeRenderState,
   current_view : String,
-) -> (Bool, Int, Bool) {
-  let mut active = terminal_active
-  let mut line_count_after = if active && program.rendering {
-    line_count(current_view)
-  } else {
-    0
-  }
-  let mut rendered = false
+) -> RuntimeRenderState {
+  let mut next_state = state
   while !pending_controls.is_empty() {
     match pending_controls.pop() {
       Some(ReleaseTerminal) =>
-        if active {
-          deactivate_terminal(program)
-          active = false
-          line_count_after = 0
+        if next_state.terminal_active {
+          if next_state.alt_screen == program.alt_screen &&
+            next_state.cursor_hidden == program.hide_cursor {
+            deactivate_terminal(program)
+          } else {
+            deactivate_terminal_with_modes(
+              program,
+              next_state.alt_screen,
+              next_state.cursor_hidden,
+            )
+          }
+          next_state = {
+            ..next_state,
+            terminal_active: false,
+            rendered: "",
+            prev_line_count: 0,
+            render_due_at: None,
+            force_full_repaint: false,
+          }
         }
       Some(RestoreTerminal) =>
-        if !active {
-          activate_terminal(program)
-          active = true
+        if !next_state.terminal_active {
+          if next_state.alt_screen == program.alt_screen &&
+            next_state.cursor_hidden == program.hide_cursor {
+            activate_terminal(program)
+          } else {
+            activate_terminal_with_modes(
+              program,
+              next_state.alt_screen,
+              next_state.cursor_hidden,
+            )
+          }
+          next_state = { ..next_state, terminal_active: true }
           if program.rendering {
             emit_output(program, render_full(current_view, 0))
-            line_count_after = line_count(current_view)
-            rendered = true
+            next_state = {
+              ..next_state,
+              rendered: current_view,
+              prev_line_count: line_count(current_view),
+              last_render_ms: pippa_now_ms(),
+              render_due_at: None,
+              force_full_repaint: false,
+            }
           }
         }
       None => ()
     }
   }
-  (active, line_count_after, rendered)
+  next_state
 }
 
 ///|
@@ -764,14 +1046,17 @@ fn[Model, Msg] flush_view(
   terminal_active : Bool,
   last_render_ms : Int64,
   force : Bool,
+  full_repaint : Bool,
 ) -> (String, Int, Int64, Int64?) {
-  if !program.rendering || !terminal_active || next_view == rendered_view {
+  if !program.rendering ||
+    !terminal_active ||
+    (!full_repaint && next_view == rendered_view) {
     (rendered_view, prev_line_count, last_render_ms, None)
   } else {
     let now = pippa_now_ms()
     if force || now - last_render_ms >= render_interval_ms(program) {
       let ops = diff_views(rendered_view, next_view)
-      let output = if ops.is_empty() {
+      let output = if full_repaint || ops.is_empty() {
         render_full(next_view, prev_line_count)
       } else {
         render_patch(ops)
@@ -794,12 +1079,14 @@ fn[Model, Msg] flush_view(
 fn[Model, Msg] drain_runtime(
   program : Program[Model, Msg],
   model : Model,
+  state : RuntimeRenderState,
   sent_msgs : @queue.Queue[Msg],
-  pending : @queue.Queue[() -> Msg?],
+  pending : @queue.Queue[RuntimeEffect[Msg]],
   timers : Array[RuntimeTimer[Msg]],
   sequences : @deque.Deque[Array[Cmd[Msg]]],
-) -> (Model, Bool, Bool) {
+) -> (Model, Bool, Bool, RuntimeRenderState) {
   let mut current_model = model
+  let mut current_state = state
   let mut quit = false
   let mut updated = false
   while !quit {
@@ -820,21 +1107,26 @@ fn[Model, Msg] drain_runtime(
     }
 
     while !quit && !pending.is_empty() {
-      let task = pending.pop().unwrap()
+      let effect = pending.pop().unwrap()
       progressed = true
-      match task() {
-        Some(msg) => {
-          let (next_model, should_quit, cmd) = apply_msg(
-            program, current_model, msg,
-          )
-          current_model = next_model
-          updated = true
-          queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
-          if should_quit {
-            quit = true
+      match effect {
+        RuntimeTask(task) =>
+          match task() {
+            Some(msg) => {
+              let (next_model, should_quit, cmd) = apply_msg(
+                program, current_model, msg,
+              )
+              current_model = next_model
+              updated = true
+              queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+              if should_quit {
+                quit = true
+              }
+            }
+            None => ()
           }
-        }
-        None => ()
+        RuntimeScreen(command) =>
+          current_state = apply_screen_command(program, current_state, command)
       }
     }
 
@@ -860,7 +1152,7 @@ fn[Model, Msg] drain_runtime(
       break
     }
   }
-  (current_model, quit, updated)
+  (current_model, quit, updated, current_state)
 }
 
 ///|
@@ -885,43 +1177,48 @@ fn[Model, Msg] run_internal(
   let mut timers : Array[RuntimeTimer[Msg]] = []
   queue_cmd_effects(init_res.cmd, pippa_now_ms(), pending, timers, sequences)
 
-  let mut terminal_active = program.rendering || program.read_stdin
-  if terminal_active {
+  let terminal_active = program.rendering || program.read_stdin
+  let mut render_state = initial_render_state(program, terminal_active)
+  if render_state.terminal_active {
     activate_terminal(program)
   }
 
-  let (initial_model, initial_quit) = apply_initial_window_size(
+  let (initial_model, initial_quit, _initial_updated) = apply_initial_window_size(
     program, model, pending, timers, sequences,
   )
   model = initial_model
-  let (boot_model, boot_quit, _boot_updated) = drain_runtime(
-    program, model, sent_msgs, pending, timers, sequences,
+  let (boot_model, boot_quit, _boot_updated, boot_state) = drain_runtime(
+    program, model, render_state, sent_msgs, pending, timers, sequences,
   )
   model = boot_model
+  render_state = boot_state
 
   let mut desired = desired_view(program, model)
-  let mut rendered = ""
-  let mut prev_line_count = 0
-  let mut last_render_ms = 0L
-  let mut render_due_at : Int64? = None
-  let (initial_active, initial_lines, initial_rendered) = drain_controls(
-    program, pending_controls, terminal_active, desired,
+  render_state = drain_controls(
+    program, pending_controls, render_state, desired,
   )
-  terminal_active = initial_active
-  if initial_rendered {
-    rendered = desired
-    prev_line_count = initial_lines
-    last_render_ms = pippa_now_ms()
-  } else {
-    let (next_rendered, next_line_count, next_last_render_ms, next_render_due_at
-    ) = flush_view(
-      program, rendered, desired, prev_line_count, terminal_active, last_render_ms,
-      true,
-    )
-    rendered = next_rendered
-    prev_line_count = next_line_count
-    last_render_ms = next_last_render_ms
-    render_due_at = next_render_due_at
+  let (
+    initial_rendered,
+    initial_line_count,
+    initial_last_render_ms,
+    initial_render_due_at,
+  ) = flush_view(
+    program,
+    render_state.rendered,
+    desired,
+    render_state.prev_line_count,
+    render_state.terminal_active,
+    render_state.last_render_ms,
+    true,
+    true,
+  )
+  render_state = {
+    ..render_state,
+    rendered: initial_rendered,
+    prev_line_count: initial_line_count,
+    last_render_ms: initial_last_render_ms,
+    render_due_at: initial_render_due_at,
+    force_full_repaint: false,
   }
   on_start(handle)
 
@@ -930,33 +1227,23 @@ fn[Model, Msg] run_internal(
   let mut quit = initial_quit || boot_quit
 
   while !quit {
-    let (next_active, control_line_count, control_rendered) = drain_controls(
-      program, pending_controls, terminal_active, desired,
+    render_state = drain_controls(
+      program, pending_controls, render_state, desired,
     )
-    terminal_active = next_active
-    if control_rendered {
-      rendered = desired
-      prev_line_count = control_line_count
-      last_render_ms = pippa_now_ms()
-      render_due_at = None
-    } else if !terminal_active {
-      rendered = ""
-      prev_line_count = 0
-      render_due_at = None
-    }
     if is_cancelled(program) {
       quit = true
       break
     }
 
-    let (drained_model, drained_quit, drained_updated) = drain_runtime(
-      program, model, sent_msgs, pending, timers, sequences,
+    let (drained_model, drained_quit, drained_updated, drained_render_state) = drain_runtime(
+      program, model, render_state, sent_msgs, pending, timers, sequences,
     )
     model = drained_model
+    render_state = drained_render_state
     if drained_quit {
       quit = true
     }
-    if drained_updated {
+    if drained_updated || render_state.force_full_repaint {
       desired = desired_view(program, model)
       let (
         next_rendered,
@@ -964,13 +1251,23 @@ fn[Model, Msg] run_internal(
         next_last_render_ms,
         next_render_due_at,
       ) = flush_view(
-        program, rendered, desired, prev_line_count, terminal_active, last_render_ms,
-        quit,
+        program,
+        render_state.rendered,
+        desired,
+        render_state.prev_line_count,
+        render_state.terminal_active,
+        render_state.last_render_ms,
+        quit || render_state.force_full_repaint,
+        render_state.force_full_repaint,
       )
-      rendered = next_rendered
-      prev_line_count = next_line_count
-      last_render_ms = next_last_render_ms
-      render_due_at = next_render_due_at
+      render_state = {
+        ..render_state,
+        rendered: next_rendered,
+        prev_line_count: next_line_count,
+        last_render_ms: next_last_render_ms,
+        render_due_at: next_render_due_at,
+        force_full_repaint: false,
+      }
     }
     if quit {
       break
@@ -1010,8 +1307,8 @@ fn[Model, Msg] run_internal(
 
     if !updated {
       let poll_result = pippa_poll_events(
-        runtime_timeout_ms(program, timers, render_due_at),
-        if terminal_active && program.read_stdin {
+        runtime_timeout_ms(program, timers, render_state.render_due_at),
+        if render_state.terminal_active && program.read_stdin {
           1
         } else {
           0
@@ -1027,8 +1324,22 @@ fn[Model, Msg] run_internal(
         for timer in timers {
           if timer_deadline(timer) <= now {
             match timer {
-              TickAt(_) => pending.push(program.on_tick)
-              AfterAt(_, task) => pending.push(task)
+              TickAt(_) => pending.push(RuntimeTask(program.on_tick))
+              AfterAt(_, task) => pending.push(RuntimeTask(task))
+              EveryAt(_, interval_ms, started_at, task) => {
+                let elapsed = now - started_at
+                pending.push(
+                  RuntimeTask(fn() { Some(task({ elapsed_ms: elapsed })) }),
+                )
+                remaining.push(
+                  EveryAt(
+                    next_every_deadline(started_at, interval_ms, now),
+                    interval_ms,
+                    started_at,
+                    task,
+                  ),
+                )
+              }
             }
           } else {
             remaining.push(timer)
@@ -1039,7 +1350,9 @@ fn[Model, Msg] run_internal(
         if (poll_result & 4) != 0 {
           pippa_drain_wakeup()
         }
-        if (poll_result & 1) != 0 && terminal_active && program.read_stdin {
+        if (poll_result & 1) != 0 &&
+          render_state.terminal_active &&
+          program.read_stdin {
           let b = pippa_read_byte()
           if b < 0 {
             break
@@ -1077,27 +1390,25 @@ fn[Model, Msg] run_internal(
       }
     }
 
-    if terminal_active && program.read_stdin && pippa_check_resize() != 0 {
-      let cols = pippa_get_cols()
-      let rows = pippa_get_rows()
+    if render_state.terminal_active &&
+      program.read_stdin &&
+      pippa_check_resize() != 0 {
+      let size = current_window_size()
       updated = true
-      match (program.on_resize)(cols, rows) {
-        Some(msg) => {
-          let (next_model, should_quit, cmd) = apply_msg(program, model, msg)
-          model = next_model
-          queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
-          if should_quit {
-            quit = true
-          }
-        }
-        None => ()
+      let (resize_model, resize_quit, _resize_updated) = apply_window_size(
+        program, model, size, pending, timers, sequences,
+      )
+      model = resize_model
+      if resize_quit {
+        quit = true
       }
     }
 
-    let (final_model, final_quit, final_updated) = drain_runtime(
-      program, model, sent_msgs, pending, timers, sequences,
+    let (final_model, final_quit, final_updated, final_render_state) = drain_runtime(
+      program, model, render_state, sent_msgs, pending, timers, sequences,
     )
     model = final_model
+    render_state = final_render_state
     if final_quit {
       quit = true
     }
@@ -1109,8 +1420,10 @@ fn[Model, Msg] run_internal(
       desired = desired_view(program, model)
     }
     let should_flush_view = updated ||
-      (match render_due_at {
-        Some(deadline) => terminal_active && pippa_now_ms() >= deadline
+      render_state.force_full_repaint ||
+      (match render_state.render_due_at {
+        Some(deadline) =>
+          render_state.terminal_active && pippa_now_ms() >= deadline
         None => false
       })
     if should_flush_view {
@@ -1120,18 +1433,37 @@ fn[Model, Msg] run_internal(
         next_last_render_ms,
         next_render_due_at,
       ) = flush_view(
-        program, rendered, desired, prev_line_count, terminal_active, last_render_ms,
-        quit,
+        program,
+        render_state.rendered,
+        desired,
+        render_state.prev_line_count,
+        render_state.terminal_active,
+        render_state.last_render_ms,
+        quit || render_state.force_full_repaint,
+        render_state.force_full_repaint,
       )
-      rendered = next_rendered
-      prev_line_count = next_line_count
-      last_render_ms = next_last_render_ms
-      render_due_at = next_render_due_at
+      render_state = {
+        ..render_state,
+        rendered: next_rendered,
+        prev_line_count: next_line_count,
+        last_render_ms: next_last_render_ms,
+        render_due_at: next_render_due_at,
+        force_full_repaint: false,
+      }
     }
   }
   handle_closed.val = true
 
-  if terminal_active {
-    deactivate_terminal(program)
+  if render_state.terminal_active {
+    if render_state.alt_screen == program.alt_screen &&
+      render_state.cursor_hidden == program.hide_cursor {
+      deactivate_terminal(program)
+    } else {
+      deactivate_terminal_with_modes(
+        program,
+        render_state.alt_screen,
+        render_state.cursor_hidden,
+      )
+    }
   }
 }

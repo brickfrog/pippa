@@ -62,6 +62,52 @@ test "pippa cmd after is lazy until the runtime executes it" {
 }
 
 ///|
+test "pippa cmd every stores a typed recurring callback" {
+  let cmd : Cmd[Int] = Cmd::every(33, fn(tick) { tick.elapsed_ms.to_int() + 4 })
+  assert_eq(cmd.actions.length(), 1)
+  match cmd.actions[0] {
+    Every(interval_ms, task) => {
+      assert_eq(interval_ms, 33)
+      assert_eq(task({ elapsed_ms: 12L }), 16)
+    }
+    _ => fail("expected Every action")
+  }
+}
+
+///|
+test "pippa screen command constructors store typed actions" {
+  let cmd : Cmd[Int] = Cmd::batch([
+    Cmd::enter_alt_screen(),
+    Cmd::exit_alt_screen(),
+    Cmd::clear_screen(),
+    Cmd::repaint(),
+    Cmd::force_redraw(),
+    Cmd::hide_cursor(),
+    Cmd::show_cursor(),
+  ])
+  assert_eq(cmd.actions.length(), 7)
+  assert_true(cmd.actions[0] is EnterAltScreen)
+  assert_true(cmd.actions[1] is ExitAltScreen)
+  assert_true(cmd.actions[2] is ClearScreen)
+  assert_true(cmd.actions[3] is Repaint)
+  assert_true(cmd.actions[4] is ForceRedraw)
+  assert_true(cmd.actions[5] is HideCursor)
+  assert_true(cmd.actions[6] is ShowCursor)
+}
+
+///|
+test "pippa request window size command stores typed callback" {
+  let cmd : Cmd[Int] = Cmd::request_window_size(fn(size) {
+    size.width * 1000 + size.height
+  })
+  assert_eq(cmd.actions.length(), 1)
+  match cmd.actions[0] {
+    RequestWindowSize(task) => assert_eq(task({ width: 80, height: 24 }), 80024)
+    _ => fail("expected RequestWindowSize action")
+  }
+}
+
+///|
 test "pippa cmd map transforms perform and after results lazily" {
   let mut value = 5
   let mapped = Cmd::map(
@@ -126,6 +172,28 @@ test "pippa cmd map transforms nested sequence lazily" {
 }
 
 ///|
+test "pippa cmd map transforms every and request window size callbacks lazily" {
+  let mapped = Cmd::map(
+    fn(n : Int) { "\{n}" },
+    Cmd::batch([
+      Cmd::every(20, fn(tick) { tick.elapsed_ms.to_int() + 1 }),
+      Cmd::request_window_size(fn(size) { size.width + size.height }),
+    ]),
+  )
+  match mapped.actions[0] {
+    Every(interval_ms, task) => {
+      assert_eq(interval_ms, 20)
+      assert_eq(task({ elapsed_ms: 4L }), "5")
+    }
+    _ => fail("expected Every action")
+  }
+  match mapped.actions[1] {
+    RequestWindowSize(task) => assert_eq(task({ width: 80, height: 24 }), "104")
+    _ => fail("expected RequestWindowSize action")
+  }
+}
+
+///|
 #cfg(any(target="native", target="llvm"))
 test "pippa program handle send queues messages until closed" {
   let pending_msgs = @queue.Queue::new()
@@ -172,6 +240,7 @@ test "pippa sequence waits for immediate effects to settle before next step" {
   let pending = @queue.Queue::new()
   let sequences = @deque.Deque::new()
   let timers = []
+  let state = initial_render_state(program, false)
   queue_cmd_effects(
     Cmd::sequence([Cmd::msg(1), Cmd::msg(2)]),
     0L,
@@ -179,9 +248,10 @@ test "pippa sequence waits for immediate effects to settle before next step" {
     timers,
     sequences,
   )
-  let (model, quit, updated) = drain_runtime(
+  let (model, quit, updated, _state) = drain_runtime(
     program,
     [],
+    state,
     sent_msgs,
     pending,
     timers,
@@ -192,6 +262,208 @@ test "pippa sequence waits for immediate effects to settle before next step" {
   assert_eq(updated, true)
   assert_true(pending.is_empty())
   assert_true(sequences.is_empty())
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa every command recurs with typed elapsed time" {
+  let seen : Ref[Array[Int64]] = Ref::new([])
+  let program : Program[Int, Int64] = Program::new(
+    init=fn() {
+      UpdateResult::new(
+        model=0,
+        cmd=Cmd::every(2, fn(tick) { tick.elapsed_ms }),
+      )
+    },
+    update=fn(model, msg) {
+      seen.val = [..seen.val, msg]
+      UpdateResult::new(model=model + 1, cmd=Cmd::none())
+    },
+    view=fn(_model) { "" },
+    should_quit=fn(model) { model >= 3 },
+  ).headless()
+  program.run()
+  assert_true(seen.val.length() >= 3)
+  assert_true(seen.val[0] >= 1L)
+  assert_true(seen.val[1] >= seen.val[0])
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa screen commands emit ANSI and update runtime shutdown state" {
+  let chunks : Ref[Array[String]] = Ref::new([])
+  let program : Program[Int, Int] = Program::new(
+      init=fn() {
+        UpdateResult::new(
+          model=0,
+          cmd=Cmd::batch([
+            Cmd::enter_alt_screen(),
+            Cmd::hide_cursor(),
+            Cmd::clear_screen(),
+            Cmd::msg(1),
+          ]),
+        )
+      },
+      update=fn(_model, msg) { UpdateResult::new(model=msg, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+      should_quit=fn(model) { model == 1 },
+    )
+    .with_stdin(false)
+    .with_alt_screen(false)
+    .with_hide_cursor(false)
+    .with_output(fn(output) { chunks.val = [..chunks.val, output] })
+  program.run()
+  let captured = chunks.val.join("")
+  assert_true(captured.contains(enter_alt_screen()))
+  assert_true(captured.contains(hide_cursor()))
+  assert_true(captured.contains(clear_screen() + move_cursor(1, 1)))
+  assert_true(captured.contains(exit_alt_screen()))
+  assert_true(captured.contains(show_cursor()))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa exit and show cursor commands update runtime state" {
+  let chunks : Ref[Array[String]] = Ref::new([])
+  let program : Program[Int, Int] = Program::new(
+      init=fn() {
+        UpdateResult::new(
+          model=0,
+          cmd=Cmd::batch([
+            Cmd::exit_alt_screen(),
+            Cmd::show_cursor(),
+            Cmd::msg(1),
+          ]),
+        )
+      },
+      update=fn(_model, msg) { UpdateResult::new(model=msg, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+      should_quit=fn(model) { model == 1 },
+    )
+    .with_stdin(false)
+    .with_output(fn(output) { chunks.val = [..chunks.val, output] })
+  program.run()
+  let captured = chunks.val.join("")
+  assert_true(captured.contains(enter_alt_screen()))
+  assert_true(captured.contains(hide_cursor()))
+  assert_true(captured.contains(exit_alt_screen()))
+  assert_true(captured.contains(show_cursor()))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa repaint command invalidates the render cache" {
+  let chunks : Ref[Array[String]] = Ref::new([])
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(model, msg) {
+        let cmd = if msg == 1 {
+          Cmd::sequence([Cmd::repaint(), Cmd::msg(2)])
+        } else {
+          Cmd::none()
+        }
+        UpdateResult::new(model=if msg == 2 { 2 } else { model }, cmd~)
+      },
+      view=fn(_model) { "paint" },
+      should_quit=fn(model) { model == 2 },
+    )
+    .with_stdin(false)
+    .with_alt_screen(false)
+    .with_hide_cursor(false)
+    .with_output(fn(output) { chunks.val = [..chunks.val, output] })
+  program.run_with_handle(handle => ignore(handle.send(1)))
+  let mut paint_chunks = 0
+  for chunk in chunks.val {
+    if chunk.contains("paint") {
+      paint_chunks = paint_chunks + 1
+    }
+  }
+  assert_true(paint_chunks >= 2)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa force redraw command invalidates the render cache" {
+  let chunks : Ref[Array[String]] = Ref::new([])
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(model, msg) {
+        let cmd = if msg == 1 {
+          Cmd::sequence([Cmd::force_redraw(), Cmd::msg(2)])
+        } else {
+          Cmd::none()
+        }
+        UpdateResult::new(model=if msg == 2 { 2 } else { model }, cmd~)
+      },
+      view=fn(_model) { "paint" },
+      should_quit=fn(model) { model == 2 },
+    )
+    .with_stdin(false)
+    .with_alt_screen(false)
+    .with_hide_cursor(false)
+    .with_output(fn(output) { chunks.val = [..chunks.val, output] })
+  program.run_with_handle(handle => ignore(handle.send(1)))
+  let mut paint_chunks = 0
+  for chunk in chunks.val {
+    if chunk.contains("paint") {
+      paint_chunks = paint_chunks + 1
+    }
+  }
+  assert_true(paint_chunks >= 2)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa request window size delivers a typed message" {
+  let seen : Ref[WindowSize?] = Ref::new(None)
+  let program : Program[Int, WindowSize] = Program::new(
+    init=fn() {
+      UpdateResult::new(
+        model=0,
+        cmd=Cmd::request_window_size(fn(size) { size }),
+      )
+    },
+    update=fn(_model, msg) {
+      seen.val = Some(msg)
+      UpdateResult::new(model=1, cmd=Cmd::none())
+    },
+    view=fn(_model) { "" },
+    should_quit=fn(model) { model == 1 },
+  ).headless()
+  program.run()
+  match seen.val {
+    Some(size) => {
+      assert_true(size.width > 0)
+      assert_true(size.height > 0)
+    }
+    None => fail("expected typed window size message")
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa typed window size hook receives initial resize and on_resize still works" {
+  let typed_seen : Ref[WindowSize?] = Ref::new(None)
+  let legacy_seen = Ref::new(0)
+  let program : Program[Int, WindowSize] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(_model, msg) {
+        typed_seen.val = Some(msg)
+        UpdateResult::new(model=1, cmd=Cmd::none())
+      },
+      view=fn(_model) { "" },
+      on_window_size=fn(size) { Some(size) },
+      on_resize=fn(cols, rows) {
+        legacy_seen.val = cols * 1000 + rows
+        None
+      },
+      should_quit=fn(model) { model == 1 },
+    )
+    .headless()
+    .with_window_size(90, 31)
+  program.run()
+  @test.assert_eq(typed_seen.val, Some({ width: 90, height: 31 }))
+  assert_eq(legacy_seen.val, 90031)
 }
 
 ///|

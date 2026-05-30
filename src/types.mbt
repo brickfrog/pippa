@@ -23,6 +23,13 @@
 pub(all) struct Nothing {} derive(Debug, Eq)
 
 ///|
+/// Typed payload delivered to recurring scheduler callbacks.
+pub(all) struct TimerTick {
+  /// Milliseconds elapsed since the recurring command was scheduled.
+  elapsed_ms : Int64
+} derive(Debug, Eq)
+
+///|
 /// A batch of I/O commands to be performed by the runtime.
 ///
 /// `Cmd[Msg]` represents one-shot runtime effects that may later produce a
@@ -48,22 +55,52 @@ priv enum CmdAction[Msg] {
   Tick(Int)
   // Schedule a one-shot runtime effect after `interval_ms`.
   After(Int, () -> Msg)
+  // Schedule a recurring callback aligned to `interval_ms`.
+  Every(Int, (TimerTick) -> Msg)
+  // Enter the alternate screen buffer.
+  EnterAltScreen
+  // Exit the alternate screen buffer.
+  ExitAltScreen
+  // Clear the screen and move the cursor home.
+  ClearScreen
+  // Invalidate the renderer cache and repaint on the next render pass.
+  Repaint
+  // Alias for `Repaint`, mirroring Bubble Tea's force redraw command.
+  ForceRedraw
+  // Hide the terminal cursor.
+  HideCursor
+  // Show the terminal cursor.
+  ShowCursor
+  // Ask the runtime to report the current terminal size.
+  RequestWindowSize((WindowSize) -> Msg)
   // Run commands in order, waiting for immediate effects from each step to settle
   // before starting the next one.
   Sequence(Array[Cmd[Msg]])
 }
 
 ///|
-pub impl[Msg] Debug for Cmd[Msg] with to_repr(self) {
+pub impl[Msg] Debug for Cmd[Msg] with fn to_repr(self) {
   let mut perform_count = 0
   let mut tick_count = 0
   let mut after_count = 0
+  let mut every_count = 0
+  let mut screen_count = 0
+  let mut window_size_count = 0
   let mut sequence_count = 0
   for action in self.actions {
     match action {
       Perform(_) => perform_count = perform_count + 1
       Tick(_) => tick_count = tick_count + 1
       After(_, _) => after_count = after_count + 1
+      Every(_, _) => every_count = every_count + 1
+      EnterAltScreen
+      | ExitAltScreen
+      | ClearScreen
+      | Repaint
+      | ForceRedraw
+      | HideCursor
+      | ShowCursor => screen_count = screen_count + 1
+      RequestWindowSize(_) => window_size_count = window_size_count + 1
       Sequence(_) => sequence_count = sequence_count + 1
     }
   }
@@ -81,6 +118,18 @@ pub impl[Msg] Debug for Cmd[Msg] with to_repr(self) {
   if after_count > 0 {
     buf.write_string(", after=")
     buf.write_string(after_count.to_string())
+  }
+  if every_count > 0 {
+    buf.write_string(", every=")
+    buf.write_string(every_count.to_string())
+  }
+  if screen_count > 0 {
+    buf.write_string(", screen=")
+    buf.write_string(screen_count.to_string())
+  }
+  if window_size_count > 0 {
+    buf.write_string(", window_size=")
+    buf.write_string(window_size_count.to_string())
   }
   if sequence_count > 0 {
     buf.write_string(", sequence=")

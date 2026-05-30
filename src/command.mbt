@@ -45,6 +45,64 @@ pub fn[Msg] Cmd::after(interval_ms : Int, f : () -> Msg) -> Cmd[Msg] {
 }
 
 ///|
+/// Schedule `f` on every aligned interval.
+///
+/// The runtime passes a typed elapsed-time payload to the callback each time
+/// the recurring timer fires.
+pub fn[Msg] Cmd::every(interval_ms : Int, f : (TimerTick) -> Msg) -> Cmd[Msg] {
+  let ms = if interval_ms > 0 { interval_ms } else { 1 }
+  { _phantom: [], actions: [Every(ms, f)] }
+}
+
+///|
+/// Enter the terminal alternate screen buffer at runtime.
+pub fn[Msg] Cmd::enter_alt_screen() -> Cmd[Msg] {
+  { _phantom: [], actions: [EnterAltScreen] }
+}
+
+///|
+/// Exit the terminal alternate screen buffer at runtime.
+pub fn[Msg] Cmd::exit_alt_screen() -> Cmd[Msg] {
+  { _phantom: [], actions: [ExitAltScreen] }
+}
+
+///|
+/// Clear the screen and move the cursor to the home position.
+pub fn[Msg] Cmd::clear_screen() -> Cmd[Msg] {
+  { _phantom: [], actions: [ClearScreen] }
+}
+
+///|
+/// Invalidate the renderer cache so the next render fully repaints.
+pub fn[Msg] Cmd::repaint() -> Cmd[Msg] {
+  { _phantom: [], actions: [Repaint] }
+}
+
+///|
+/// Invalidate the renderer cache so the next render fully repaints.
+pub fn[Msg] Cmd::force_redraw() -> Cmd[Msg] {
+  { _phantom: [], actions: [ForceRedraw] }
+}
+
+///|
+/// Hide the terminal cursor at runtime.
+pub fn[Msg] Cmd::hide_cursor() -> Cmd[Msg] {
+  { _phantom: [], actions: [HideCursor] }
+}
+
+///|
+/// Show the terminal cursor at runtime.
+pub fn[Msg] Cmd::show_cursor() -> Cmd[Msg] {
+  { _phantom: [], actions: [ShowCursor] }
+}
+
+///|
+/// Ask the runtime to deliver the current terminal size as a typed message.
+pub fn[Msg] Cmd::request_window_size(f : (WindowSize) -> Msg) -> Cmd[Msg] {
+  { _phantom: [], actions: [RequestWindowSize(f)] }
+}
+
+///|
 /// Run commands in order.
 ///
 /// Each command starts only after the prior command's immediate effects have
@@ -82,6 +140,17 @@ pub fn[A, B] Cmd::map(f : (A) -> B, cmd : Cmd[A]) -> Cmd[B] {
       Tick(interval_ms) => actions.push(Tick(interval_ms))
       After(interval_ms, task) =>
         actions.push(After(interval_ms, fn() { f(task()) }))
+      Every(interval_ms, task) =>
+        actions.push(Every(interval_ms, fn(tick) { f(task(tick)) }))
+      EnterAltScreen => actions.push(EnterAltScreen)
+      ExitAltScreen => actions.push(ExitAltScreen)
+      ClearScreen => actions.push(ClearScreen)
+      Repaint => actions.push(Repaint)
+      ForceRedraw => actions.push(ForceRedraw)
+      HideCursor => actions.push(HideCursor)
+      ShowCursor => actions.push(ShowCursor)
+      RequestWindowSize(task) =>
+        actions.push(RequestWindowSize(fn(size) { f(task(size)) }))
       Sequence(cmds) =>
         actions.push(Sequence(cmds.map(fn(inner) { Cmd::map(f, inner) })))
     }
