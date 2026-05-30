@@ -1,14 +1,16 @@
 ///|
+fn timer_tick_msg(model : TimerModel) -> TimerMsg {
+  Tick({ instance_id: model.instance_id, generation: model.tick_generation })
+}
+
+///|
 test "timer counts down to zero" {
   let c = timer(duration_ms=250, interval_ms=100)
   let m0 = (c.init)().model
   let started = (c.update)(m0, Start)
-  let m1 = (c.update)(
-      started.model,
-      Tick(started.model.instance_id, started.model.tick_generation),
-    ).model
-  let m2 = (c.update)(m1, Tick(m1.instance_id, m1.tick_generation)).model
-  let m3 = (c.update)(m2, Tick(m2.instance_id, m2.tick_generation)).model
+  let m1 = (c.update)(started.model, timer_tick_msg(started.model)).model
+  let m2 = (c.update)(m1, timer_tick_msg(m1)).model
+  let m3 = (c.update)(m2, timer_tick_msg(m2)).model
   assert_eq(m3.remaining_ms, 0)
   assert_eq(m3.finished, true)
   assert_eq(m3.running, false)
@@ -19,10 +21,7 @@ test "timer reset restores full duration" {
   let c = timer(duration_ms=500, interval_ms=100)
   let m0 = (c.init)().model
   let started = (c.update)(m0, Start)
-  let m1 = (c.update)(
-      started.model,
-      Tick(started.model.instance_id, started.model.tick_generation),
-    ).model
+  let m1 = (c.update)(started.model, timer_tick_msg(started.model)).model
   let m2 = (c.update)(m1, Reset).model
   assert_eq(m2.remaining_ms, 500)
   assert_eq(m2.finished, false)
@@ -34,13 +33,24 @@ test "timer ignores stale tick from paused run after restart" {
   let c = timer(duration_ms=500, interval_ms=100)
   let m0 = (c.init)().model
   let started = (c.update)(m0, Start).model
-  let stale_tick : TimerMsg = Tick(started.instance_id, started.tick_generation)
+  let stale_tick = timer_tick_msg(started)
   let paused = (c.update)(started, Pause).model
   let restarted = (c.update)(paused, Start).model
   let stale_result = (c.update)(restarted, stale_tick)
-  let after_stale_tick = stale_result.model
-  assert_eq(after_stale_tick.remaining_ms, restarted.remaining_ms)
-  assert_eq(after_stale_tick.running, true)
+  @test.assert_eq(stale_result.model, restarted)
+  assert_true(stale_result.cmd.is_none())
+}
+
+///|
+test "timer ignores stale tick from reset run after restart" {
+  let c = timer(duration_ms=500, interval_ms=100)
+  let m0 = (c.init)().model
+  let started = (c.update)(m0, Start).model
+  let stale_tick = timer_tick_msg(started)
+  let reset = (c.update)(started, Reset).model
+  let restarted = (c.update)(reset, Start).model
+  let stale_result = (c.update)(restarted, stale_tick)
+  @test.assert_eq(stale_result.model, restarted)
   assert_true(stale_result.cmd.is_none())
 }
 
@@ -52,11 +62,11 @@ test "timer ignores ticks from another instance" {
   let second_running = (second.update)((second.init)().model, Start).model
   let first_after_second_tick = (first.update)(
     first_running,
-    Tick(second_running.instance_id, second_running.tick_generation),
+    timer_tick_msg(second_running),
   )
   let second_after_first_tick = (second.update)(
     second_running,
-    Tick(first_running.instance_id, first_running.tick_generation),
+    timer_tick_msg(first_running),
   )
   assert_eq(
     first_after_second_tick.model.remaining_ms,

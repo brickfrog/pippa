@@ -2,12 +2,18 @@
 /// Stopwatch component — counts up while running.
 
 ///|
+pub(all) struct StopwatchTickToken {
+  instance_id : Int64
+  generation : Int64
+} derive(Debug, Eq)
+
+///|
 pub(all) struct StopwatchModel {
   elapsed_ms : Int
   interval_ms : Int
   running : Bool
-  instance_id : Int
-  tick_generation : Int
+  instance_id : Int64
+  tick_generation : Int64
 } derive(Debug, Eq)
 
 ///|
@@ -15,36 +21,65 @@ pub(all) enum StopwatchMsg {
   Start
   Pause
   Reset
-  Tick(Int, Int)
+  Tick(StopwatchTickToken)
 } derive(Debug, Eq)
 
 ///|
-let stopwatch_instance_counter : Ref[Int] = Ref(0)
+priv struct StopwatchScheduledTick {
+  interval_ms : Int
+  task : () -> StopwatchMsg
+}
 
 ///|
-fn stopwatch_next_instance_id() -> Int {
-  stopwatch_instance_counter.val = stopwatch_instance_counter.val + 1
+/// Stopwatch identity counters are monotonic Int64 values. Their range is far
+/// beyond realistic component lifetimes; exhausting it would be a token-collision
+/// risk for a process that has already run billions of billions of ticks.
+let stopwatch_instance_counter : Ref[Int64] = Ref(0L)
+
+///|
+fn stopwatch_next_instance_id() -> Int64 {
+  stopwatch_instance_counter.val = stopwatch_instance_counter.val + 1L
   stopwatch_instance_counter.val
+}
+
+///|
+fn stopwatch_current_tick_token(model : StopwatchModel) -> StopwatchTickToken {
+  { instance_id: model.instance_id, generation: model.tick_generation }
+}
+
+///|
+fn stopwatch_next_tick_generation(model : StopwatchModel) -> Int64 {
+  model.tick_generation + 1L
+}
+
+///|
+fn stopwatch_tick_task(token : StopwatchTickToken) -> () -> StopwatchMsg {
+  fn() { Tick(token) }
+}
+
+///|
+fn stopwatch_next_tick_schedule(
+  interval_ms : Int,
+  token : StopwatchTickToken,
+) -> StopwatchScheduledTick {
+  { interval_ms: interval_ms.max(1), task: stopwatch_tick_task(token) }
 }
 
 ///|
 fn stopwatch_next_tick_cmd(
   interval_ms : Int,
-  instance_id : Int,
-  tick_generation : Int,
+  token : StopwatchTickToken,
 ) -> @pippa.Cmd[StopwatchMsg] {
-  @pippa.Cmd::after(interval_ms.max(1), fn() {
-    Tick(instance_id, tick_generation)
-  })
+  let schedule = stopwatch_next_tick_schedule(interval_ms, token)
+  @pippa.Cmd::after(schedule.interval_ms, schedule.task)
 }
 
 ///|
 fn stopwatch_tick_is_current(
   model : StopwatchModel,
-  instance_id : Int,
-  tick_generation : Int,
+  token : StopwatchTickToken,
 ) -> Bool {
-  instance_id == model.instance_id && tick_generation == model.tick_generation
+  token == stopwatch_current_tick_token(model)
 }
 
 ///|
@@ -82,13 +117,13 @@ pub fn stopwatch(
           if model.running {
             @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
           } else {
-            let tick_generation = model.tick_generation + 1
+            let tick_generation = stopwatch_next_tick_generation(model)
+            let model = { ..model, running: true, tick_generation }
             @pippa.UpdateResult::new(
-              model={ ..model, running: true, tick_generation },
+              model~,
               cmd=stopwatch_next_tick_cmd(
                 model.interval_ms,
-                model.instance_id,
-                tick_generation,
+                stopwatch_current_tick_token(model),
               ),
             )
           }
@@ -102,22 +137,21 @@ pub fn stopwatch(
             model={ ..model, elapsed_ms: 0, running: false },
             cmd=@pippa.Cmd::none(),
           )
-        Tick(instance_id, tick_generation) =>
-          if !stopwatch_tick_is_current(model, instance_id, tick_generation) ||
-            !model.running {
+        Tick(token) =>
+          if !stopwatch_tick_is_current(model, token) || !model.running {
             @pippa.UpdateResult::new(model~, cmd=@pippa.Cmd::none())
           } else {
-            let next_generation = model.tick_generation + 1
+            let next_generation = stopwatch_next_tick_generation(model)
+            let model = {
+              ..model,
+              elapsed_ms: model.elapsed_ms + model.interval_ms,
+              tick_generation: next_generation,
+            }
             @pippa.UpdateResult::new(
-              model={
-                ..model,
-                elapsed_ms: model.elapsed_ms + model.interval_ms,
-                tick_generation: next_generation,
-              },
+              model~,
               cmd=stopwatch_next_tick_cmd(
                 model.interval_ms,
-                model.instance_id,
-                next_generation,
+                stopwatch_current_tick_token(model),
               ),
             )
           }
