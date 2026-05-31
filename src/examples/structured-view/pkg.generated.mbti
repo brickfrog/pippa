@@ -17,4 +17,3 @@ type Msg derive(@debug.Debug)
 // Type aliases
 
 // Traits
-

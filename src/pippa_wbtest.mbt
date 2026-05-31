@@ -735,7 +735,7 @@ test "pippa desired_view wraps plain string views and flushes the same frame" {
   assert_eq(rendered, "plain 7")
   assert_eq(lines, 1)
   assert_true(due_at is None)
-  assert_eq(chunks.val.join(""), render_full("plain 7", 0))
+  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Kplain 7")
 }
 
 ///|
@@ -768,7 +768,7 @@ test "pippa structured_view carries state while rendering content unchanged" {
   assert_eq(rendered, "structured 5")
   assert_eq(lines, 1)
   assert_true(due_at is None)
-  assert_eq(chunks.val.join(""), render_full("structured 5", 0))
+  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Kstructured 5")
 }
 
 ///|
