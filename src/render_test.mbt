@@ -23,6 +23,28 @@ test "diff_views: old view has more lines clears extra" {
 }
 
 ///|
+test "diff_views: trailing blank line behavior is preserved" {
+  assert_eq(diff_views("line1\n", "line1\n"), [])
+  assert_eq(diff_views("line1", "line1\n"), [])
+  assert_eq(diff_views("line1\n", "line1"), [])
+  assert_eq(diff_views("a\n\n", "a\n"), [])
+  assert_eq(diff_views("a\n", "a\n\n"), [])
+}
+
+///|
+test "diff_views: empty string transitions match split_lines semantics" {
+  assert_eq(diff_views("", "x"), [PatchOp::{ row: 1, col: 1, text: "x" }])
+  assert_eq(diff_views("x", ""), [PatchOp::{ row: 1, col: 1, text: "" }])
+}
+
+///|
+test "diff_views: unicode line slices are preserved" {
+  assert_eq(diff_views("alpha\n界", "alpha\n新"), [
+    PatchOp::{ row: 2, col: 1, text: "新" },
+  ])
+}
+
+///|
 test "render_patch: empty ops returns empty string" {
   let result = render_patch([])
   assert_eq(result, "")
