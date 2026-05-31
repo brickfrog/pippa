@@ -7,6 +7,10 @@ import {
 }
 
 // Values
+pub fn default_filepicker_keymap() -> FilepickerKeymap
+
+pub fn default_filepicker_styles() -> FilepickerStyles
+
 pub fn[T] default_list_delegate() -> ListDelegate[T]
 
 pub fn default_list_keymap() -> ListKeymap
@@ -17,7 +21,21 @@ pub fn default_table_keymap() -> TableKeymap
 
 pub fn default_text_input_keymap() -> TextInputKeymap
 
-pub fn filepicker(current_directory? : String, height? : Int, show_hidden? : Bool, allow_files? : Bool, allow_directories? : Bool, allowed_extensions? : Array[String]) -> Component[FilepickerModel, FilepickerMsg]
+pub fn filepicker(current_directory? : String, height? : Int, show_hidden? : Bool, show_permissions? : Bool, show_size? : Bool, allow_files? : Bool, allow_directories? : Bool, allowed_extensions? : Array[String], allowed_types? : Array[String], auto_height? : Bool, available_height? : Int, cursor? : String, styles? : FilepickerStyles, keymap? : FilepickerKeymap) -> Component[FilepickerModel, FilepickerMsg]
+
+pub fn filepicker_help_model(keymap? : FilepickerKeymap, show_full? : Bool, width? : Int) -> @pippa.HelpModel
+
+pub fn filepicker_help_view(keymap? : FilepickerKeymap, show_full? : Bool, width? : Int) -> String
+
+pub fn filepicker_keymap_disable(FilepickerKeymap, FilepickerAction) -> FilepickerKeymap
+
+pub fn filepicker_keymap_help(FilepickerKeymap) -> @pippa.KeyMap
+
+pub fn filepicker_keymap_override(FilepickerKeymap, FilepickerAction, @pippa.Binding) -> FilepickerKeymap
+
+pub fn filepicker_msg_from_input_event(@pippa.InputEvent, keymap? : FilepickerKeymap) -> FilepickerMsg?
+
+pub fn filepicker_text_style(prefix? : String, suffix? : String) -> FilepickerTextStyle
 
 pub fn[T] list(items? : Array[ListItem[T]], page_size? : Int, title? : String, sections? : ListSections, keymap? : ListKeymap, delegate? : ListDelegate[T], status_duration_ms? : Int, focused? : Bool) -> Component[ListModel[T], ListMsg[T]]
 
@@ -133,6 +151,33 @@ pub(all) struct FileEntry {
   name : String
   path : String
   is_dir : Bool
+  is_symlink : Bool
+  permissions : String
+  size : Int
+  hidden : Bool
+  disabled : Bool
+} derive(Eq, @debug.Debug)
+
+pub(all) enum FilepickerAction {
+  FilepickerActionMoveUp
+  FilepickerActionMoveDown
+  FilepickerActionPageUp
+  FilepickerActionPageDown
+  FilepickerActionMoveToTop
+  FilepickerActionMoveToBottom
+  FilepickerActionOpen
+  FilepickerActionSelect
+  FilepickerActionBack
+  FilepickerActionToggleHidden
+} derive(Eq, @debug.Debug)
+
+pub(all) struct FilepickerKeyBinding {
+  binding : @pippa.Binding
+  action : FilepickerAction
+} derive(Eq, @debug.Debug)
+
+pub(all) struct FilepickerKeymap {
+  bindings : Array[FilepickerKeyBinding]
 } derive(Eq, @debug.Debug)
 
 pub(all) struct FilepickerModel {
@@ -142,12 +187,23 @@ pub(all) struct FilepickerModel {
   selected_path : String?
   height : Int
   show_hidden : Bool
+  show_permissions : Bool
+  show_size : Bool
   allow_files : Bool
   allow_directories : Bool
   allowed_extensions : Array[String]
+  allowed_types : Array[String]
   loading : Bool
   scan_handle : Int?
   error : String?
+  auto_height : Bool
+  available_height : Int
+  min_index : Int
+  max_index : Int
+  selected_stack : Array[Int]
+  min_stack : Array[Int]
+  max_stack : Array[Int]
+  pending_restore : FilepickerViewState?
 } derive(Eq, @debug.Debug)
 
 pub(all) enum FilepickerMsg {
@@ -164,13 +220,47 @@ pub(all) enum FilepickerMsg {
   ToggleHidden
   SetDirectory(String)
   SetHeight(Int)
+  SetAvailableHeight(Int)
+  SetAutoHeight(Bool)
+  SetShowPermissions(Bool)
+  SetShowSize(Bool)
+  SetShowHidden(Bool)
   SetAllowedExtensions(Array[String])
+  SetAllowedTypes(Array[String])
   SetSelectionMode(Bool, Bool)
+  HandleInput(@pippa.InputEvent)
   ScanOpened(String, Int)
   ContinueScan(String, Int)
   ScanChunk(String, Int, Array[FileEntry])
   ScanFinished(String, Int)
   LoadFailed(String)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct FilepickerStyles {
+  cursor : FilepickerTextStyle
+  disabled_cursor : FilepickerTextStyle
+  directory : FilepickerTextStyle
+  file : FilepickerTextStyle
+  symlink : FilepickerTextStyle
+  disabled : FilepickerTextStyle
+  permissions : FilepickerTextStyle
+  size : FilepickerTextStyle
+  selected : FilepickerTextStyle
+  status : FilepickerTextStyle
+  error : FilepickerTextStyle
+  loading : FilepickerTextStyle
+  empty : FilepickerTextStyle
+} derive(Eq, @debug.Debug)
+
+pub(all) struct FilepickerTextStyle {
+  prefix : String
+  suffix : String
+} derive(Eq, @debug.Debug)
+
+pub(all) struct FilepickerViewState {
+  selected : Int
+  min : Int
+  max : Int
 } derive(Eq, @debug.Debug)
 
 pub(all) enum ListAction {
