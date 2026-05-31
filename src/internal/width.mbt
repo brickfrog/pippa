@@ -50,6 +50,11 @@ fn in_range(code : Int, first : Int, last : Int) -> Bool {
 }
 
 ///|
+fn is_printable_ascii_code(code : Int) -> Bool {
+  code >= 0x20 && code <= 0x7E
+}
+
+///|
 fn is_combining_mark(ch : Char) -> Bool {
   let code = ch.to_int()
   // Terminal wcwidth-style zero-width combining intervals: Mn/Me marks,
@@ -265,8 +270,26 @@ fn is_regional_indicator(ch : Char) -> Bool {
 }
 
 ///|
+fn extends_previous_grapheme(ch : Char) -> Bool {
+  let code = ch.to_int()
+  if code < 0x80 {
+    false
+  } else {
+    ch == '\u{200D}' ||
+    is_combining_mark(ch) ||
+    is_variation_selector(ch) ||
+    is_emoji_modifier(ch)
+  }
+}
+
+///|
 fn char_cell_width(ch : Char) -> Int {
-  if ch == '\u{200D}' ||
+  let code = ch.to_int()
+  if is_printable_ascii_code(code) {
+    1
+  } else if code < 0x80 {
+    0
+  } else if ch == '\u{200D}' ||
     is_combining_mark(ch) ||
     is_variation_selector(ch) ||
     is_emoji_modifier(ch) ||
@@ -283,6 +306,10 @@ fn char_cell_width(ch : Char) -> Int {
 fn next_grapheme_end(chars : Array[Char], start : Int) -> Int {
   let n = chars.length()
   let mut i = start + 1
+  if is_printable_ascii_code(chars[start].to_int()) &&
+    (i >= n || !extends_previous_grapheme(chars[i])) {
+    return i
+  }
   if is_regional_indicator(chars[start]) {
     if i < n && is_regional_indicator(chars[i]) {
       return i + 1
@@ -313,6 +340,14 @@ fn next_grapheme_end(chars : Array[Char], start : Int) -> Int {
 
 ///|
 fn grapheme_width(chars : Array[Char], start : Int, end_index : Int) -> Int {
+  if end_index == start + 1 {
+    let code = chars[start].to_int()
+    if is_printable_ascii_code(code) {
+      return 1
+    } else if code < 0x80 {
+      return 0
+    }
+  }
   let mut width = 0
   let mut has_emoji = false
   for i in start..<end_index {
@@ -403,6 +438,11 @@ fn write_trailing_sgr_resets(
 ///|
 pub fn display_width(s : String) -> Int {
   let chars = s.to_array()
+  display_width_chars(chars)
+}
+
+///|
+fn display_width_chars(chars : Array[Char]) -> Int {
   let n = chars.length()
   let mut width = 0
   let mut i = 0
@@ -526,11 +566,11 @@ pub fn truncate_width(s : String, max_width : Int) -> String {
 
 ///|
 pub fn pad_right_width(s : String, width : Int) -> String {
-  let current = display_width(s)
+  let chars = s.to_array()
+  let current = display_width_chars(chars)
   if current >= width {
     return s
   }
-  let chars = s.to_array()
   let suffix_start = trailing_sgr_reset_start(chars, 0)
   let padding = String::make(width - current, ' ')
   if suffix_start == chars.length() {
