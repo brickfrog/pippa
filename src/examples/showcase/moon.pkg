@@ -4,6 +4,10 @@ import {
   "brickfrog/pippa/styling",
 }
 
+import {
+  "moonbitlang/core/debug",
+} for "wbtest"
+
 options(
   "is-main": true,
 )

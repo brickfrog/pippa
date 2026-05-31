@@ -1,80 +1,109 @@
 ///|
-fn showcase_step_progress(model : Model) -> Model {
-  showcase_update(model, ProgressMsg(@component.ProgressBarMsg::Tick)).model
+fn showcase_step_progress_result(
+  model : Model,
+) -> @pippa.UpdateResult[Model, Msg] {
+  showcase_update(model, ProgressTick)
 }
 
 ///|
-fn showcase_advance_until_phase(
-  model : Model,
-  phase : Int,
-  max_ticks : Int,
-) -> Model {
+fn showcase_step_progress(model : Model) -> Model {
+  showcase_step_progress_result(model).model
+}
+
+///|
+fn assert_showcase_steady_tick_cmd(cmd : @pippa.Cmd[Msg]) -> Unit raise {
+  @debug.debug_inspect(cmd, content="Cmd(actions=1, every=1)")
+}
+
+///|
+test "showcase progress starts by filling on a steady clock" {
+  let initialized = showcase_init()
+  assert_eq(showcase_tick_ms, 16)
+  assert_eq(initialized.model.progress.target_percent, 1.0)
+  assert_eq(initialized.model.progress.displayed_percent, 0.0)
+  assert_eq(initialized.model.spinner_ticks, 0)
+  assert_showcase_steady_tick_cmd(initialized.cmd)
+}
+
+///|
+test "showcase progress reissues the steady tick on every animation update" {
+  let { model, .. } = showcase_init()
+  let ticked = showcase_step_progress_result(model)
+  assert_showcase_steady_tick_cmd(ticked.cmd)
+
+  let settled_at_full = {
+    ..ticked.model,
+    progress: {
+      ..ticked.model.progress,
+      target_percent: 1.0,
+      displayed_percent: 1.0,
+      velocity: 0.0,
+    },
+  }
+  let still_ticking = showcase_step_progress_result(settled_at_full)
+  assert_showcase_steady_tick_cmd(still_ticking.cmd)
+}
+
+///|
+test "showcase progress flips target at the full and empty bounds" {
+  let { model, .. } = showcase_init()
+  let near_full = {
+    ..model,
+    progress: {
+      ..model.progress,
+      target_percent: 1.0,
+      displayed_percent: 0.991,
+      velocity: 0.2,
+    },
+  }
+  let draining = showcase_step_progress_result(near_full)
+  assert_eq(draining.model.progress.target_percent, 0.0)
+  assert_true(draining.model.progress.displayed_percent > 0.98)
+  assert_showcase_steady_tick_cmd(draining.cmd)
+
+  let near_empty = {
+    ..model,
+    progress: {
+      ..model.progress,
+      target_percent: 0.0,
+      displayed_percent: 0.009,
+      velocity: -0.2,
+    },
+  }
+  let filling = showcase_step_progress_result(near_empty)
+  assert_eq(filling.model.progress.target_percent, 1.0)
+  assert_true(filling.model.progress.displayed_percent < 0.02)
+  assert_showcase_steady_tick_cmd(filling.cmd)
+}
+
+///|
+test "showcase progress keeps a calm elastic pace" {
+  let { model, .. } = showcase_init()
   let mut current = model
-  for _ in 0..<max_ticks {
-    if current.progress_phase == phase {
-      return current
-    }
+  let mut ticks_to_full = 0
+  while current.progress.target_percent == 1.0 && ticks_to_full < 260 {
+    current = showcase_step_progress(current)
+    ticks_to_full = ticks_to_full + 1
+  }
+  assert_true(ticks_to_full >= 90)
+  assert_true(ticks_to_full <= 140)
+  assert_eq(current.progress.target_percent, 0.0)
+}
+
+///|
+test "showcase spinner advances on the same steady clock" {
+  let { model, .. } = showcase_init()
+  let mut current = model
+  let ticks_before_spinner = showcase_spinner_stride - 1
+  for _ in 0..<ticks_before_spinner {
     current = showcase_step_progress(current)
   }
-  current
-}
+  assert_eq(current.spinner.current, model.spinner.current)
 
-///|
-test "showcase progress starts by filling to 100 percent" {
-  let { model, .. } = showcase_init()
-  assert_eq(model.progress.target_percent, 1.0)
-  assert_eq(model.progress_phase, 0)
-}
-
-///|
-test "showcase progress first rebound retargets to 75 percent" {
-  let { model, .. } = showcase_init()
-  let dipped = showcase_advance_until_phase(model, 1, 120)
-  assert_eq(dipped.progress_phase, 1)
-  assert_eq(dipped.progress.target_percent, 0.75)
-}
-
-///|
-test "showcase progress rebounds back to 100 percent after the dip" {
-  let { model, .. } = showcase_init()
-  let recovered = showcase_advance_until_phase(model, 2, 180)
-  assert_eq(recovered.progress_phase, 2)
-  assert_eq(recovered.progress.target_percent, 1.0)
-}
-
-///|
-test "showcase progress second rebound retargets to 90 percent" {
-  let { model, .. } = showcase_init()
-  let dipped = showcase_advance_until_phase(model, 3, 240)
-  assert_eq(dipped.progress_phase, 3)
-  assert_eq(dipped.progress.target_percent, 0.9)
-}
-
-///|
-test "showcase progress settles back at 100 percent after rebounds" {
-  let { model, .. } = showcase_init()
-  let settled = showcase_advance_until_phase(model, 4, 300)
-  assert_eq(settled.progress_phase, 4)
-  assert_eq(settled.progress.target_percent, 1.0)
-}
-
-///|
-test "showcase progress restarts after holding at 100 percent" {
-  let { model, .. } = showcase_init()
-  let settled = showcase_advance_until_phase(model, 4, 300)
-  let restarted = showcase_advance_until_phase(settled, 0, 80)
-  assert_eq(restarted.progress_phase, 0)
-  assert_eq(restarted.progress.target_percent, 1.0)
-  assert_eq(restarted.progress.displayed_percent, 0.0)
-}
-
-///|
-test "showcase progress no longer waits for full settle before rebounding" {
-  let { model, .. } = showcase_init()
-  let dipped = showcase_advance_until_phase(model, 1, 120)
-  assert_eq(dipped.progress_phase, 1)
-  assert_true(dipped.progress.velocity > 0.0)
-  assert_true(!progress_settled(dipped.progress))
+  current = showcase_step_progress(current)
+  let expected = (model.spinner.current + 1) % model.spinner.frames.length()
+  assert_eq(current.spinner.current, expected)
+  assert_eq(current.spinner_ticks, showcase_spinner_stride)
 }
 
 ///|

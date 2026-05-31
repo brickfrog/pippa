@@ -8,14 +8,6 @@ struct Model {
   progress : @component.ProgressBarModel
   text_input : @component.TextInputModel
   viewport : @component.ViewportModel
-  // Progress animation phase:
-  //   0 = animating to 1.0
-  //   1 = bouncing down toward 0.75
-  //   2 = rebounding back toward 1.0
-  //   3 = bouncing down toward 0.90 after the rebound to 1.0
-  //   4 = settling back at 1.0 before the loop restarts
-  progress_phase : Int
-  progress_pause_ticks : Int
   spinner_ticks : Int
 } derive(Debug)
 
@@ -23,7 +15,7 @@ struct Model {
 enum Msg {
   TabNext
   TabPrev
-  ProgressMsg(@component.ProgressBarMsg)
+  ProgressTick
   TextInputMsg(@component.TextInputMsg)
   ViewportMsg(@component.ViewportMsg)
   Quit
@@ -44,8 +36,8 @@ let progress_comp : @component.Component[
   blend_start=(199, 38, 138),
   blend_end=(255, 178, 56),
   empty_color=(96, 77, 112),
-  spring_frequency=10.0,
-  spring_damping=0.6,
+  spring_frequency=1.3,
+  spring_damping=0.5,
 )
 
 ///|
@@ -61,8 +53,20 @@ let viewport_comp : @component.Component[
 ] = @component.viewport(width=60, height=10)
 
 ///|
+let showcase_tick_ms = 16
+
+///|
+let showcase_full_threshold = 0.99
+
+///|
+let showcase_empty_threshold = 0.01
+
+///|
+let showcase_spinner_stride = 8
+
+///|
 fn showcase_tick_cmd() -> @pippa.Cmd[Msg] {
-  @pippa.Cmd::after(16, fn() { ProgressMsg(@component.ProgressBarMsg::Tick) })
+  @pippa.Cmd::every(showcase_tick_ms, fn(_tick) { ProgressTick })
 }
 
 ///|
@@ -235,38 +239,24 @@ fn showcase_init() -> @pippa.UpdateResult[Model, Msg] {
     ).model
 
   @pippa.UpdateResult::new(
-    model={
-      tab: 0,
-      spinner,
-      progress,
-      text_input,
-      viewport,
-      progress_phase: 0,
-      progress_pause_ticks: 0,
-      spinner_ticks: 0,
-    },
+    model={ tab: 0, spinner, progress, text_input, viewport, spinner_ticks: 0 },
     cmd=showcase_tick_cmd(),
   )
 }
 
 ///|
-fn progress_settled(m : @component.ProgressBarModel) -> Bool {
-  (m.displayed_percent - m.target_percent).abs() < 0.001 &&
-  m.velocity.abs() < 0.01
-}
-
-///|
-fn showcase_restart_progress(
+fn showcase_oscillate_progress(
   progress : @component.ProgressBarModel,
-) -> (@component.ProgressBarModel, @pippa.Cmd[Msg]) {
-  let reset = {
-    ..progress,
-    target_percent: 0.0,
-    displayed_percent: 0.0,
-    velocity: 0.0,
+) -> @component.ProgressBarModel {
+  if progress.target_percent >= 0.5 &&
+    progress.displayed_percent >= showcase_full_threshold {
+    return (progress_comp.update)(progress, @component.SetPercent(0.0)).model
   }
-  let sr = (progress_comp.update)(reset, @component.SetPercent(1.0))
-  (sr.model, @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, sr.cmd))
+  if progress.target_percent < 0.5 &&
+    progress.displayed_percent <= showcase_empty_threshold {
+    return (progress_comp.update)(progress, @component.SetPercent(1.0)).model
+  }
+  progress
 }
 
 ///|
@@ -291,105 +281,28 @@ fn showcase_update(model : Model, msg : Msg) -> @pippa.UpdateResult[Model, Msg] 
         model=showcase_set_tab(model, showcase_tab_prev(model.tab)),
         cmd=@pippa.Cmd::none(),
       )
-    ProgressMsg(progress_msg) => {
-      // Step the spring.
-      let tick_result = (progress_comp.update)(model.progress, progress_msg)
-      let ticked = tick_result.model
-      // Tick the spinner every 8 spring frames (~128ms).
+    ProgressTick => {
+      let ticked = (progress_comp.update)(
+          model.progress,
+          @component.ProgressBarMsg::Tick,
+        ).model
+      let progress = showcase_oscillate_progress(ticked)
+
       let new_spinner_ticks = model.spinner_ticks + 1
-      let new_spinner = if new_spinner_ticks % 8 == 0 {
+      let new_spinner = if new_spinner_ticks % showcase_spinner_stride == 0 {
         (spinner_comp.update)(model.spinner, @component.SpinnerMsg::Tick).model
       } else {
         model.spinner
       }
 
-      let (final_progress, final_progress_cmd, new_phase, new_pause_ticks) = match
-        model.progress_phase {
-        0 =>
-          if ticked.displayed_percent >= 0.99 && ticked.velocity > 0.0 {
-            let sr = (progress_comp.update)(ticked, @component.SetPercent(0.75))
-            (sr.model, @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, sr.cmd), 1, 0)
-          } else {
-            (
-              ticked,
-              @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, tick_result.cmd),
-              0,
-              0,
-            )
-          }
-        1 =>
-          if ticked.displayed_percent <= 0.76 && ticked.velocity < 0.0 {
-            let sr = (progress_comp.update)(ticked, @component.SetPercent(1.0))
-            (sr.model, @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, sr.cmd), 2, 0)
-          } else {
-            (
-              ticked,
-              @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, tick_result.cmd),
-              1,
-              0,
-            )
-          }
-        2 =>
-          if ticked.displayed_percent >= 0.99 && ticked.velocity > 0.0 {
-            let sr = (progress_comp.update)(ticked, @component.SetPercent(0.90))
-            (sr.model, @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, sr.cmd), 3, 0)
-          } else {
-            (
-              ticked,
-              @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, tick_result.cmd),
-              2,
-              0,
-            )
-          }
-        3 =>
-          if ticked.displayed_percent <= 0.905 && ticked.velocity < 0.0 {
-            let sr = (progress_comp.update)(ticked, @component.SetPercent(1.0))
-            (sr.model, @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, sr.cmd), 4, 0)
-          } else {
-            (
-              ticked,
-              @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, tick_result.cmd),
-              3,
-              0,
-            )
-          }
-        _ =>
-          if progress_settled(ticked) {
-            let paused = model.progress_pause_ticks + 1
-            if paused >= 24 {
-              let (restarted, restart_cmd) = showcase_restart_progress(ticked)
-              (restarted, restart_cmd, 0, 0)
-            } else {
-              (ticked, @pippa.Cmd::none(), 4, paused)
-            }
-          } else {
-            (
-              ticked,
-              @pippa.Cmd::map(fn(m) { ProgressMsg(m) }, tick_result.cmd),
-              4,
-              0,
-            )
-          }
-      }
-
-      // When the progress bar is actively animating it schedules its own 16ms
-      // follow-up tick. Once settled, fall back to the app tick so the loop can
-      // restart after a short hold at 100%.
-      let cmd = if final_progress_cmd.is_none() {
-        showcase_tick_cmd()
-      } else {
-        final_progress_cmd
-      }
       @pippa.UpdateResult::new(
         model={
           ..model,
-          progress: final_progress,
+          progress,
           spinner: new_spinner,
-          progress_phase: new_phase,
-          progress_pause_ticks: new_pause_ticks,
           spinner_ticks: new_spinner_ticks,
         },
-        cmd~,
+        cmd=showcase_tick_cmd(),
       )
     }
     TextInputMsg(text_input_msg) => {
@@ -445,14 +358,24 @@ fn showcase_sub(event : @pippa.InputEvent) -> Msg? {
 }
 
 ///|
-fn showcase_progress_phase_label(phase : Int) -> String {
-  match phase {
-    0 => "launch"
-    1 => "kickback"
-    2 => "rebound"
-    3 => "aftershock"
-    4 => "settling"
-    _ => "idle"
+fn showcase_progress_flow_label(
+  progress : @component.ProgressBarModel,
+) -> String {
+  if progress.target_percent >= 0.5 {
+    "filling"
+  } else {
+    "draining"
+  }
+}
+
+///|
+fn showcase_progress_target_label(
+  progress : @component.ProgressBarModel,
+) -> String {
+  if progress.target_percent >= 0.5 {
+    "100%"
+  } else {
+    "0%"
   }
 }
 
@@ -498,27 +421,29 @@ fn showcase_panel(
 ///|
 fn showcase_activity_body(model : Model) -> String {
   let stats = @styling.row <| [
-      showcase_stat_card(
-        "PHASE",
-        showcase_progress_phase_label(model.progress_phase),
-        showcase_moon_hex,
-      ),
-      "  ",
-      showcase_stat_card(
-        "TICKS",
-        model.spinner_ticks.to_string(),
-        showcase_sun_hex,
-      ),
-      "  ",
-      showcase_stat_card("TARGET", "100%", showcase_tide_hex),
-    ]
+    showcase_stat_card(
+      "FLOW",
+      showcase_progress_flow_label(model.progress),
+      showcase_moon_hex,
+    ),
+    "  ",
+    showcase_stat_card(
+      "TICKS",
+      model.spinner_ticks.to_string(),
+      showcase_sun_hex,
+    ),
+    "  ",
+    showcase_stat_card(
+      "TARGET",
+      showcase_progress_target_label(model.progress),
+      showcase_tide_hex,
+    ),
+  ]
   showcase_panel(
     "ACTIVITY",
     showcase_moon_hex,
     @styling.col <| [
-      showcase_whisper(
-        "A springy fill with deliberate recoil, not stepped progress.",
-      ),
+      showcase_whisper("A steady 60fps clock drives the spring directly."),
       "",
       stats,
       "",
@@ -528,9 +453,7 @@ fn showcase_activity_body(model : Model) -> String {
       showcase_loud("Progress", showcase_sun_hex),
       (progress_comp.view)(model.progress),
       "",
-      showcase_whisper(
-        "Rush to 100%, bounce to 75%, rebound, then soften into a final settle.",
-      ),
+      showcase_whisper("The target flips at the ends; the clock never stops."),
     ],
   )
 }
@@ -554,28 +477,28 @@ fn showcase_input_body(model : Model) -> String {
     .width(60)
     .render((text_input_comp.view)(model.text_input))
   let stats = @styling.row <| [
-      showcase_stat_card(
-        "CURSOR",
-        model.text_input.cursor.to_string(),
-        showcase_sun_hex,
-      ),
-      "  ",
-      showcase_stat_card(
-        "FOCUS",
-        if model.text_input.focused {
-          "on"
-        } else {
-          "off"
-        },
-        showcase_moon_hex,
-      ),
-      "  ",
-      showcase_stat_card(
-        "CHARS",
-        @pippa.visible_width(model.text_input.value).to_string(),
-        showcase_tide_hex,
-      ),
-    ]
+    showcase_stat_card(
+      "CURSOR",
+      model.text_input.cursor.to_string(),
+      showcase_sun_hex,
+    ),
+    "  ",
+    showcase_stat_card(
+      "FOCUS",
+      if model.text_input.focused {
+        "on"
+      } else {
+        "off"
+      },
+      showcase_moon_hex,
+    ),
+    "  ",
+    showcase_stat_card(
+      "CHARS",
+      @pippa.visible_width(model.text_input.value).to_string(),
+      showcase_tide_hex,
+    ),
+  ]
   showcase_panel(
     "INPUT",
     showcase_sun_hex,
