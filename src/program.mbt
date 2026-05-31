@@ -1588,7 +1588,7 @@ fn[Model, Msg] restore_terminal_state(
         "",
         current_view,
         0,
-        runtime_view_terminal_state_empty(),
+        runtime_view_terminal_state_for_program(program, true),
         true,
         0L,
         true,

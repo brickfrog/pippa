@@ -730,6 +730,37 @@ fn test_render_program(chunks : Ref[Array[String]]) -> Program[Int, Int] {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn count_sequence(haystack : String, needle : String) -> Int {
+  let source = @utf8.encode(haystack)
+  let target = @utf8.encode(needle)
+  if target.length() == 0 {
+    0
+  } else {
+    let mut count = 0
+    let mut i = 0
+    while i + target.length() <= source.length() {
+      let mut matched = true
+      let mut j = 0
+      while j < target.length() {
+        if source[i + j] != target[j] {
+          matched = false
+          break
+        }
+        j = j + 1
+      }
+      if matched {
+        count = count + 1
+        i = i + target.length()
+      } else {
+        i = i + 1
+      }
+    }
+    count
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "pippa desired_view wraps plain string views and flushes the same frame" {
   let chunks : Ref[Array[String]] = Ref::new([])
   let program = test_render_program(chunks)
@@ -1247,6 +1278,42 @@ test "pippa runtime screen commands keep structured cursor cache honest" {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+test "pippa runtime hide cursor command updates structured cursor cache" {
+  let chunks : Ref[Array[String]] = Ref::new([])
+  let program = test_render_program(chunks)
+    .with_alt_screen(false)
+    .with_hide_cursor(false)
+  let state = {
+    ..initial_render_state(program, true),
+    cursor_hidden: false,
+    view_terminal_state: {
+      ..runtime_view_terminal_state_empty(),
+      cursor_visible: Some(true),
+    },
+  }
+
+  let hidden = apply_screen_command(program, state, RuntimeHideCursor)
+  @test.assert_eq(hidden.cursor_hidden, true)
+  @test.assert_eq(hidden.view_terminal_state.cursor_visible, Some(false))
+  chunks.val = []
+  ignore(
+    flush_view(
+      program,
+      "",
+      View::text("").with_cursor_visible(true),
+      0,
+      hidden.view_terminal_state,
+      true,
+      0L,
+      true,
+      false,
+    ),
+  )
+  assert_eq(chunks.val.join(""), show_cursor())
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "pippa interrupt cleanup resets structured terminal state at runtime" {
   let chunks : Ref[Array[String]] = Ref::new([])
   let polled = Ref::new(false)
@@ -1640,6 +1707,56 @@ test "pippa handle can release and restore terminal" {
   assert_true(captured.val.contains(exit_alt_screen()))
   assert_true(captured.val.contains("zero"))
   assert_true(captured.val.contains("one"))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa restore seeds structured cache from program cursor and mouse flags" {
+  let ran = Ref::new(false)
+  let restore_chunks : Ref[Array[String]] = Ref::new([])
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(_model, msg) {
+        let cmd = if msg == 1 {
+          Cmd::exec_process(ExecProcess::new(command="fake", args=[]), fn(
+            _result,
+          ) {
+            2
+          })
+        } else {
+          Cmd::none()
+        }
+        UpdateResult::new(model=msg, cmd~)
+      },
+      view=fn(_model) { "" },
+      mouse=true,
+      alt_screen=false,
+      focus_reporting=false,
+      bracketed_paste=false,
+      should_quit=fn(model) { model == 2 },
+    )
+    .with_structured_view(fn(_model) {
+      View::text("restored")
+      .with_cursor_visible(false)
+      .with_mouse_mode(ViewMousePress)
+    })
+    .with_output(fn(output) {
+      if ran.val {
+        restore_chunks.val = [..restore_chunks.val, output]
+      }
+    })
+    .with_exec_runner(fn(_process) {
+      ran.val = true
+      ExecCompleted(0)
+    })
+  match program.run_with_handle(handle => ignore(handle.send(1))) {
+    RunExec(model, ExecCompleted(0)) => assert_eq(model, 2)
+    _ => fail("expected successful RunExec")
+  }
+  let restored = restore_chunks.val.join("")
+  assert_true(restored.contains("restored"))
+  assert_eq(count_sequence(restored, hide_cursor()), 1)
+  assert_eq(count_sequence(restored, enable_mouse()), 1)
 }
 
 ///|
