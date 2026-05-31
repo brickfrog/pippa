@@ -400,6 +400,27 @@ fn list_text_input_with_value(
 }
 
 ///|
+fn list_text_input_with_focus(
+  input : TextInputModel,
+  focused : Bool,
+) -> TextInputModel {
+  text_input_normalize_state(
+    input.value,
+    input.cursor,
+    input.width,
+    input.scroll_col,
+    input.prompt,
+    input.placeholder,
+    input.echo_mode,
+    input.char_limit,
+    input.validation,
+    input.suggestions,
+    focused,
+    input.disabled,
+  )
+}
+
+///|
 pub fn[T] list_filter_query(model : ListModel[T]) -> String {
   match model.filter_state {
     Unfiltered => ""
@@ -660,6 +681,18 @@ fn[T] list_cancel_filter(model : ListModel[T]) -> ListModel[T] {
       model.filter_input,
       model.committed_filter,
       false,
+    ),
+  })
+}
+
+///|
+fn[T] list_set_focus(model : ListModel[T], focused : Bool) -> ListModel[T] {
+  list_normalize({
+    ..model,
+    focused,
+    filter_input: list_text_input_with_focus(
+      model.filter_input,
+      focused && model.filter_state == Filtering,
     ),
   })
 }
@@ -1013,12 +1046,12 @@ fn[T] list_update(
       )
     Focus =>
       @pippa.UpdateResult::new(
-        model=list_normalize({ ..model, focused: true }),
+        model=list_set_focus(model, true),
         cmd=@pippa.Cmd::none(),
       )
     Blur =>
       @pippa.UpdateResult::new(
-        model=list_normalize({ ..model, focused: false }),
+        model=list_set_focus(model, false),
         cmd=@pippa.Cmd::none(),
       )
     HandleInput(event) =>

@@ -64,6 +64,15 @@ test "list filter state transitions live filter accept and cancel" {
   assert_true(model.filter_state == Filtering)
   assert_eq(model.filter_input.focused, true)
 
+  model = (c.update)(model, Blur).model
+  assert_eq(model.focused, false)
+  assert_eq(model.filter_input.focused, false)
+  model = (c.update)(model, HandleInput(@pippa.Key(@pippa.Char('x')))).model
+  assert_eq(list_filter_query(model), "")
+  model = (c.update)(model, Focus).model
+  assert_eq(model.focused, true)
+  assert_eq(model.filter_input.focused, true)
+
   model = (c.update)(model, HandleInput(@pippa.Key(@pippa.Char('g')))).model
   model = (c.update)(model, HandleInput(@pippa.Key(@pippa.Char('m')))).model
   assert_eq(list_filter_query(model), "gm")
