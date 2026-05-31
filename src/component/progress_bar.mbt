@@ -30,10 +30,23 @@ pub(all) struct ProgressBarModel {
 } derive(Debug)
 
 ///|
+/// Fill-colour strategy for the progress bar.
+pub(all) enum ProgressBarPalette {
+  /// Use the existing left-to-right gradient.
+  ProgressGradient
+  /// Use a single foreground colour for filled cells.
+  ProgressSolid((Int, Int, Int))
+  /// Render without ANSI colour.
+  ProgressNoColor
+} derive(Debug, Eq)
+
+///|
 /// Messages handled by the progress bar component.
 pub(all) enum ProgressBarMsg {
   /// Set a new target percentage (0.0–1.0); kicks off spring animation.
   SetPercent(Double)
+  /// Set the render width in terminal cells.
+  SetWidth(Int)
   /// Drive one spring physics step (~16 ms dt); typically scheduled via `Cmd::after`.
   Tick
 } derive(Debug)
@@ -123,6 +136,56 @@ fn rounded_filled_cells(percent : Double, width : Int) -> Int {
 }
 
 ///|
+fn progress_default_percentage_format(pct : Double) -> String {
+  let pct_int = (pct * 100.0 + 0.5).to_int()
+  "\{pct_int}%"
+}
+
+///|
+fn progress_rgb_for_cell(
+  palette : ProgressBarPalette,
+  blend_start : (Int, Int, Int),
+  blend_end : (Int, Int, Int),
+  index : Int,
+  denominator : Double,
+) -> (Int, Int, Int)? {
+  match palette {
+    ProgressNoColor => None
+    ProgressSolid(rgb) => Some(rgb)
+    ProgressGradient => {
+      let t = if denominator <= 0.0 {
+        0.0
+      } else {
+        index.to_double() / denominator
+      }
+      Some(lerp_rgb(blend_start, blend_end, t))
+    }
+  }
+}
+
+///|
+fn progress_bg_for_cell(
+  palette : ProgressBarPalette,
+  blend_start : (Int, Int, Int),
+  blend_end : (Int, Int, Int),
+  index : Int,
+  denominator : Double,
+) -> (Int, Int, Int)? {
+  match palette {
+    ProgressGradient => {
+      let t = if denominator <= 0.0 {
+        0.0
+      } else {
+        (index.to_double() + 0.5) / denominator
+      }
+      let clamped = if t > 1.0 { 1.0 } else { t }
+      Some(lerp_rgb(blend_start, blend_end, clamped))
+    }
+    _ => None
+  }
+}
+
+///|
 /// Create an animated gradient progress bar component with spring physics.
 pub fn progress_bar(
   width? : Int = 40,
@@ -132,6 +195,12 @@ pub fn progress_bar(
   empty_color? : (Int, Int, Int) = (96, 96, 96),
   spring_frequency? : Double = 18.0,
   spring_damping? : Double = 1.0,
+  fill_char? : String = "▌",
+  empty_char? : String = "░",
+  palette? : ProgressBarPalette = ProgressGradient,
+  percentage_format? : (Double) -> String = progress_default_percentage_format,
+  percentage_style? : (String) -> String = fn(text) { text },
+  scaled? : Bool = false,
 ) -> Component[ProgressBarModel, ProgressBarMsg] {
   {
     init: fn() {
@@ -158,6 +227,11 @@ pub fn progress_bar(
             cmd=@pippa.Cmd::after(16, fn() { ProgressBarMsg::Tick }),
           )
         }
+        SetWidth(w) =>
+          @pippa.UpdateResult::new(
+            model={ ..model, width: w.max(0) },
+            cmd=@pippa.Cmd::none(),
+          )
         Tick => {
           let (new_pos, new_vel) = spring_step(
             model.displayed_percent,
@@ -194,32 +268,54 @@ pub fn progress_bar(
       }
       let filled = rounded_filled_cells(pct, w)
       let empty = w - filled
-      let total_width = w.to_double()
+      let fill_width = if scaled { filled } else { w }
+      let denominator = fill_width.to_double()
       let buf = StringBuilder::new()
-      if filled > 0 && total_width > 0.0 {
+      if filled > 0 {
         for i in 0..<filled {
-          let t = i.to_double() / total_width
-          let tb = t + 0.5 / total_width
-          let t_bg = if tb > 1.0 { 1.0 } else { tb }
-          let fg = lerp_rgb(model.blend_start, model.blend_end, t)
-          let bg = lerp_rgb(model.blend_start, model.blend_end, t_bg)
-          buf.write_string(@pippa.fg_rgb(fg.0, fg.1, fg.2))
-          buf.write_string(@pippa.bg_rgb(bg.0, bg.1, bg.2))
-          buf.write_string("▌")
-          buf.write_string(@pippa.reset())
+          match
+            progress_rgb_for_cell(
+              palette,
+              model.blend_start,
+              model.blend_end,
+              i,
+              denominator,
+            ) {
+            Some(fg) => buf.write_string(@pippa.fg_rgb(fg.0, fg.1, fg.2))
+            None => ()
+          }
+          match
+            progress_bg_for_cell(
+              palette,
+              model.blend_start,
+              model.blend_end,
+              i,
+              denominator,
+            ) {
+            Some(bg) => buf.write_string(@pippa.bg_rgb(bg.0, bg.1, bg.2))
+            None => ()
+          }
+          buf.write_string(fill_char)
+          if palette != ProgressNoColor {
+            buf.write_string(@pippa.reset())
+          }
         }
       }
       if empty > 0 {
-        let (er, eg, eb) = model.empty_color
-        buf.write_string(@pippa.fg_rgb(er, eg, eb))
-        for _ in 0..<empty {
-          buf.write_string("░")
+        if palette != ProgressNoColor {
+          let (er, eg, eb) = model.empty_color
+          buf.write_string(@pippa.fg_rgb(er, eg, eb))
         }
-        buf.write_string(@pippa.reset())
+        for _ in 0..<empty {
+          buf.write_string(empty_char)
+        }
+        if palette != ProgressNoColor {
+          buf.write_string(@pippa.reset())
+        }
       }
       if model.show_percentage {
-        let pct_int = (pct * 100.0 + 0.5).to_int()
-        buf.write_string(" \{pct_int}%")
+        buf.write_string(" ")
+        buf.write_string(percentage_style(percentage_format(pct)))
       }
       buf.to_string()
     },

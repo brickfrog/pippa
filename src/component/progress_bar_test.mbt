@@ -88,6 +88,19 @@ test "Tick returns tick cmd when animating" {
 }
 
 ///|
+test "Tick converges displayed_percent to target over repeated ticks" {
+  let comp = progress_bar(show_percentage=false)
+  let { model, .. } = (comp.init)()
+  let mut m = (comp.update)(model, SetPercent(0.75)).model
+  for _ in 0..<80 {
+    m = (comp.update)(m, Tick).model
+  }
+  assert_eq(m.target_percent, 0.75)
+  assert_true((m.displayed_percent - 0.75).abs() < 0.001)
+  assert_eq(m.velocity, 0.0)
+}
+
+///|
 test "spring_step critically damped moves toward target" {
   let (new_pos, _) = spring_step(0.0, 0.0, 1.0, 18.0, 1.0, 1.0 / 60.0)
   assert_true(new_pos > 0.0)
@@ -117,6 +130,75 @@ test "view empty bar at 0 percent" {
     view,
     content="\u001b[38;2;96;96;96m░░░░░░░░░░\u001b[0m",
   )
+}
+
+///|
+test "view renders custom chars percentage format and percentage style" {
+  let comp = progress_bar(
+    width=8,
+    show_percentage=true,
+    fill_char="#",
+    empty_char="-",
+    palette=ProgressNoColor,
+    percentage_format=fn(pct) { "\{(pct * 100.0).to_int()}/100" },
+    percentage_style=fn(text) { "[" + text + "]" },
+  )
+  let { model, .. } = (comp.init)()
+  let m1 = { ..model, displayed_percent: 0.375, target_percent: 0.375 }
+  assert_eq((comp.view)(m1), "###----- [37/100]")
+}
+
+///|
+test "view applies solid palette to filled cells" {
+  let comp = progress_bar(
+    width=2,
+    show_percentage=false,
+    fill_char="#",
+    empty_char="-",
+    palette=ProgressSolid((1, 2, 3)),
+    empty_color=(4, 5, 6),
+  )
+  let { model, .. } = (comp.init)()
+  let m1 = { ..model, displayed_percent: 0.5, target_percent: 0.5 }
+  assert_eq(
+    (comp.view)(m1),
+    "\u001b[38;2;1;2;3m#\u001b[0m\u001b[38;2;4;5;6m-\u001b[0m",
+  )
+}
+
+///|
+test "view scaled mode spreads gradient across visible fill" {
+  let comp = progress_bar(
+    width=4,
+    show_percentage=false,
+    fill_char="#",
+    empty_char="-",
+    blend_start=(0, 0, 0),
+    blend_end=(100, 0, 0),
+    scaled=true,
+  )
+  let { model, .. } = (comp.init)()
+  let m1 = { ..model, displayed_percent: 0.5, target_percent: 0.5 }
+  let view = (comp.view)(m1)
+  assert_true(view.contains("\u001b[38;2;50;0;0m"))
+  assert_false(view.contains("\u001b[38;2;25;0;0m"))
+}
+
+///|
+test "SetWidth updates render width" {
+  let comp = progress_bar(
+    width=2,
+    show_percentage=false,
+    empty_char="-",
+    palette=ProgressNoColor,
+  )
+  let { model, .. } = (comp.init)()
+  let { model: wider, .. } = (comp.update)(model, SetWidth(6))
+  assert_eq(wider.width, 6)
+  assert_eq((comp.view)(wider), "------")
+  let { model: zero, .. } = (comp.update)(wider, SetWidth(-1))
+  assert_eq(zero.width, 0)
+  assert_eq((comp.view)(zero), "")
 }
 
 ///|

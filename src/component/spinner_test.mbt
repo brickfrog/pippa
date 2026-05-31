@@ -16,6 +16,33 @@ test "spinner init uses provided label" {
 }
 
 ///|
+test "spinner named presets expose Bubbles parity frames" {
+  let s = spinner(preset=Line, label="Loading")
+  let { model, .. } = (s.init)()
+  assert_eq(model.frames.length(), 4)
+  assert_eq(model.frames[0], "|")
+  assert_eq(model.frames[1], "/")
+  assert_eq((s.view)(model), "| Loading")
+}
+
+///|
+test "spinner interval can be configured directly or from fps" {
+  let direct = spinner(interval_ms=42)
+  assert_eq((direct.init)().model.interval_ms, 42)
+  let fps = spinner(fps=20.0)
+  assert_eq((fps.init)().model.interval_ms, 50)
+}
+
+///|
+test "spinner frame style hook decorates only the frame" {
+  let s = spinner(preset=Line, label="Working", frame_style=fn(frame) {
+    "<" + frame + ">"
+  })
+  let { model, .. } = (s.init)()
+  assert_eq((s.view)(model), "<|> Working")
+}
+
+///|
 test "spinner Tick advances frame" {
   let s = spinner()
   let { model: m0, .. } = (s.init)()

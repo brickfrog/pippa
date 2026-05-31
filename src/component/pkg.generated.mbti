@@ -63,11 +63,17 @@ pub fn[T] list_visible_items(ListModel[T]) -> Array[ListVisibleItem[T]]
 
 pub fn paginator(per_page? : Int) -> Component[PaginatorModel, PaginatorMsg]
 
-pub fn progress_bar(width? : Int, show_percentage? : Bool, blend_start? : (Int, Int, Int), blend_end? : (Int, Int, Int), empty_color? : (Int, Int, Int), spring_frequency? : Double, spring_damping? : Double) -> Component[ProgressBarModel, ProgressBarMsg]
+pub fn progress_bar(width? : Int, show_percentage? : Bool, blend_start? : (Int, Int, Int), blend_end? : (Int, Int, Int), empty_color? : (Int, Int, Int), spring_frequency? : Double, spring_damping? : Double, fill_char? : String, empty_char? : String, palette? : ProgressBarPalette, percentage_format? : (Double) -> String, percentage_style? : (String) -> String, scaled? : Bool) -> Component[ProgressBarModel, ProgressBarMsg]
 
 pub fn select_list(items? : Array[String]) -> Component[SelectListModel, SelectListMsg]
 
-pub fn spinner(label? : String) -> Component[SpinnerModel, SpinnerMsg]
+pub fn spinner(label? : String, preset? : SpinnerPreset, frames? : Array[String], interval_ms? : Int, fps? : Double, frame_style? : (String) -> String, autostart? : Bool) -> Component[SpinnerModel, SpinnerMsg]
+
+pub fn spinner_interval_ms_from_fps(Double) -> Int
+
+pub fn spinner_preset_frames(SpinnerPreset) -> Array[String]
+
+pub fn spinner_preset_interval_ms(SpinnerPreset) -> Int
 
 pub fn spring_step(Double, Double, Double, Double, Double, Double) -> (Double, Double)
 
@@ -418,8 +424,15 @@ pub(all) struct ProgressBarModel {
 
 pub(all) enum ProgressBarMsg {
   SetPercent(Double)
+  SetWidth(Int)
   Tick
 } derive(@debug.Debug)
+
+pub(all) enum ProgressBarPalette {
+  ProgressGradient
+  ProgressSolid((Int, Int, Int))
+  ProgressNoColor
+} derive(Eq, @debug.Debug)
 
 pub(all) struct SelectListModel {
   items : Array[String]
@@ -438,11 +451,39 @@ pub(all) struct SpinnerModel {
   frames : Array[String]
   current : Int
   label : String
+  interval_ms : Int
+  running : Bool
+  instance_id : Int64
+  tick_generation : Int64
 } derive(@debug.Debug)
 
 pub(all) enum SpinnerMsg {
+  Start
+  Stop
+  Reset
   Tick
-} derive(@debug.Debug)
+  TimedTick(SpinnerTickToken)
+} derive(Eq, @debug.Debug)
+
+pub(all) enum SpinnerPreset {
+  Line
+  Dot
+  MiniDot
+  Jump
+  Pulse
+  Points
+  Globe
+  Moon
+  Monkey
+  Meter
+  Hamburger
+  Ellipsis
+} derive(Eq, @debug.Debug)
+
+pub(all) struct SpinnerTickToken {
+  instance_id : Int64
+  generation : Int64
+} derive(Eq, @debug.Debug)
 
 pub(all) struct StopwatchModel {
   elapsed_ms : Int
