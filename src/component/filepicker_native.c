@@ -16,6 +16,7 @@
 #endif
 
 #define PIPPA_FILEPICKER_MAX_SCANNERS 32
+#define PIPPA_FILEPICKER_MAX_TEST_FIXTURES 8
 
 typedef struct {
     DIR *dir;
@@ -32,6 +33,7 @@ typedef struct {
 } pippa_filepicker_entry_meta;
 
 static pippa_filepicker_scanner pippa_filepicker_scanners[PIPPA_FILEPICKER_MAX_SCANNERS];
+static char *pippa_filepicker_test_fixture_roots[PIPPA_FILEPICKER_MAX_TEST_FIXTURES];
 
 static char *pippa_filepicker_copy_path(const unsigned char *path, int path_len) {
     char *buf = (char *)malloc((size_t)path_len + 1);
@@ -300,6 +302,57 @@ static int pippa_filepicker_populate_test_fixture(const char *root) {
     return 0;
 }
 
+static int pippa_filepicker_test_fixture_remember(const char *root) {
+    for (int i = 0; i < PIPPA_FILEPICKER_MAX_TEST_FIXTURES; i++) {
+        if (pippa_filepicker_test_fixture_roots[i] == NULL) {
+            pippa_filepicker_test_fixture_roots[i] = strdup(root);
+            return pippa_filepicker_test_fixture_roots[i] == NULL ? -1 : 0;
+        }
+    }
+    return -1;
+}
+
+static int pippa_filepicker_test_fixture_forget(const char *root) {
+    for (int i = 0; i < PIPPA_FILEPICKER_MAX_TEST_FIXTURES; i++) {
+        char *known = pippa_filepicker_test_fixture_roots[i];
+        if (known != NULL && strcmp(known, root) == 0) {
+            free(known);
+            pippa_filepicker_test_fixture_roots[i] = NULL;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int pippa_filepicker_test_fixture_path_valid(const char *root) {
+    if (root == NULL || root[0] == '\0' || strcmp(root, ".") == 0) {
+        return 0;
+    }
+    char expected_prefix[PATH_MAX];
+    int prefix_len = snprintf(
+        expected_prefix,
+        sizeof(expected_prefix),
+        "/tmp/pippa-filepicker-%ld-",
+        (long)getpid()
+    );
+    if (prefix_len <= 0 || prefix_len >= (int)sizeof(expected_prefix)) {
+        return 0;
+    }
+    if (strncmp(root, expected_prefix, (size_t)prefix_len) != 0) {
+        return 0;
+    }
+    const char *suffix = root + prefix_len;
+    if (strlen(suffix) != 6) {
+        return 0;
+    }
+    for (const char *p = suffix; *p != '\0'; p++) {
+        if (*p == '/' || *p == '.') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int pippa_filepicker_test_fixture_create(unsigned char *out_buf, int out_len) {
     if (out_buf == NULL || out_len <= 0) {
         return -1;
@@ -322,8 +375,14 @@ int pippa_filepicker_test_fixture_create(unsigned char *out_buf, int out_len) {
         pippa_filepicker_remove_test_fixture(root);
         return -1;
     }
+    if (!pippa_filepicker_test_fixture_path_valid(root) ||
+        pippa_filepicker_test_fixture_remember(root) != 0) {
+        pippa_filepicker_remove_test_fixture(root);
+        return -1;
+    }
     size_t root_len = strlen(root);
     if (root_len > (size_t)INT_MAX || root_len > (size_t)out_len) {
+        pippa_filepicker_test_fixture_forget(root);
         pippa_filepicker_remove_test_fixture(root);
         return -1;
     }
@@ -334,7 +393,10 @@ int pippa_filepicker_test_fixture_create(unsigned char *out_buf, int out_len) {
 void pippa_filepicker_test_fixture_cleanup(const unsigned char *path, int path_len) {
     char *root = pippa_filepicker_copy_path(path, path_len);
     if (root != NULL) {
-        pippa_filepicker_remove_test_fixture(root);
+        if (pippa_filepicker_test_fixture_path_valid(root) &&
+            pippa_filepicker_test_fixture_forget(root)) {
+            pippa_filepicker_remove_test_fixture(root);
+        }
         free(root);
     }
 }

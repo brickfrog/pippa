@@ -113,6 +113,10 @@ test "filepicker native scanner can stream chunks" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "filepicker native scanner populates deterministic metadata and continues past 64 entries" {
+  filepicker_cleanup_native_test_fixture("")
+  filepicker_cleanup_native_test_fixture(".")
+  filepicker_cleanup_native_test_fixture("/tmp")
+  filepicker_cleanup_native_test_fixture("/tmp/pippa-filepicker-0-ABCDEF/..")
   match filepicker_create_native_test_fixture() {
     Some(root) => {
       defer filepicker_cleanup_native_test_fixture(root)
