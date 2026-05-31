@@ -2097,6 +2097,41 @@ test "pippa default exec runner reports exit exec failure and signals" {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+test "pippa default exec runner restores terminal after missing command error" {
+  let missing = "/nonexistent/pippa-d1s-no-such-binary"
+  let captured = Ref::new("")
+  let program : Program[Int, ExecResult] = Program::new(
+      init=fn() {
+        UpdateResult::new(
+          model=0,
+          cmd=Cmd::exec_process(ExecProcess::new(command=missing, args=[]), fn(
+            result,
+          ) {
+            result
+          }),
+        )
+      },
+      update=fn(_model, _msg) { UpdateResult::new(model=1, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+      should_quit=fn(model) { model == 1 },
+    )
+    .with_stdin(false)
+    .with_hide_cursor(false)
+    .with_focus_reporting(false)
+    .with_bracketed_paste(false)
+    .with_output(fn(output) { captured.val = captured.val + output })
+  match program.run() {
+    RunExec(model, ExecError(message)) => {
+      assert_eq(model, 1)
+      assert_eq(message, "failed to exec " + missing)
+    }
+    _ => fail("expected missing command ExecError")
+  }
+  assert_eq(count_sequence(captured.val, enter_alt_screen()), 2)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "pippa default exec runner rejects embedded nul bytes" {
   match
     default_exec_runner(ExecProcess::new(command="fake\u0000split", args=[])) {
