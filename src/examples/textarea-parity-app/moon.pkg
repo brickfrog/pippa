@@ -1,0 +1,8 @@
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/examples/textarea-parity" @textarea_parity,
+}
+
+options(
+  "is-main": true,
+)

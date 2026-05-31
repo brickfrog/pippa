@@ -1,0 +1,8 @@
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/examples/filepicker-parity" @filepicker_parity,
+}
+
+options(
+  "is-main": true,
+)

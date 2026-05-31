@@ -1,0 +1,8 @@
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/examples/viewport-parity" @viewport_parity,
+}
+
+options(
+  "is-main": true,
+)

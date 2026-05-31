@@ -167,15 +167,3 @@ pub fn timer_stopwatch_parity_view(model : Model) -> String {
   "Timer: \{(timer_stopwatch_parity_timer.view)(model.timer)}\n" +
   "Stopwatch: \{(timer_stopwatch_parity_stopwatch.view)(model.stopwatch)}\n"
 }
-
-///|
-fn main {
-  let program = @pippa.Program::new(
-    init=timer_stopwatch_parity_init,
-    update=timer_stopwatch_parity_update,
-    view=timer_stopwatch_parity_view,
-    sub=timer_stopwatch_parity_sub,
-    should_quit=fn(model) { model.quitting },
-  )
-  ignore(@pippa.Program::run(program))
-}

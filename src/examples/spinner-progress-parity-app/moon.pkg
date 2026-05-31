@@ -1,0 +1,8 @@
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/examples/spinner-progress-parity" @spinner_progress_parity,
+}
+
+options(
+  "is-main": true,
+)
