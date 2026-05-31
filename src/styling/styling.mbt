@@ -507,7 +507,7 @@ fn fit_line_width_known(
   target_width : Int,
   align : Align,
 ) -> String {
-  if target_width <= 0 || width > target_width {
+  if target_width <= 0 || width >= target_width {
     let truncated = @pippa.truncate(line, target_width)
     let truncated_width = styling_visible_width(truncated)
     return pad_line_known_width(truncated, truncated_width, target_width, align)

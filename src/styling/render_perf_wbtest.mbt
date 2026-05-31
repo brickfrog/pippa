@@ -371,6 +371,30 @@ fn unicode_matrix_content() -> String {
 }
 
 ///|
+fn exact_fit_trailing_suffix_contents() -> Array[String] {
+  [
+    "hi\{@pippa.fg_color(1)}",
+    "hi\{@pippa.bg_rgb(1, 2, 3)}",
+    "hi\{@pippa.reset()}",
+    "hi\u001b[?25l",
+    "h\t",
+    "h\u0001",
+    "h\u007F",
+  ]
+}
+
+///|
+fn assert_optimized_render_matches_legacy(
+  name : String,
+  sty : Style,
+  content : String,
+) -> Unit raise {
+  if sty.render(content) != legacy_render(sty, content) {
+    fail("render drift: \{name}")
+  }
+}
+
+///|
 test "styling render optimized path stays byte-identical to legacy reference" {
   let contents = [
     "hi",
@@ -393,6 +417,9 @@ test "styling render optimized path stays byte-identical to legacy reference" {
     style().width(10).align(Left),
     style().width(10).align(Center),
     style().width(10).align(Right),
+    style().width(2).align(Left),
+    style().width(2).align(Center),
+    style().width(2).align(Right),
     style().height(4).min_width(8).max_width(12).max_height(5),
     style()
     .foreground(color_ansi(2))
@@ -422,7 +449,10 @@ test "styling render optimized path stays byte-identical to legacy reference" {
   }
   for sty in styles {
     for content in contents {
-      assert_eq(sty.render(content), legacy_render(sty, content))
+      assert_optimized_render_matches_legacy("matrix", sty, content)
+    }
+    for content in exact_fit_trailing_suffix_contents() {
+      assert_optimized_render_matches_legacy("exact-fit suffix", sty, content)
     }
   }
 }
