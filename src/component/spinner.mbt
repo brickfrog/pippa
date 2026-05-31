@@ -215,6 +215,15 @@ fn spinner_start(
 }
 
 ///|
+fn spinner_view(frame : String, label : String) -> String {
+  if label == "" || frame.has_suffix(" ") {
+    "\{frame}\{label}"
+  } else {
+    "\{frame} \{label}"
+  }
+}
+
+///|
 /// Construct a Spinner `Component`.
 ///
 /// ```moonbit nocheck
@@ -290,7 +299,7 @@ pub fn spinner(
     },
     view: fn(model) {
       let frame = frame_style(model.frames[model.current])
-      "\{frame} \{model.label}"
+      spinner_view(frame, model.label)
     },
   }
 }

@@ -43,6 +43,14 @@ test "spinner frame style hook decorates only the frame" {
 }
 
 ///|
+test "spinner dot preset does not double-space before label" {
+  let s = spinner(preset=Dot, label="Loading")
+  let { model, .. } = (s.init)()
+  assert_eq(model.frames[0], "⣾ ")
+  assert_eq((s.view)(model), "⣾ Loading")
+}
+
+///|
 test "spinner Tick advances frame" {
   let s = spinner()
   let { model: m0, .. } = (s.init)()
