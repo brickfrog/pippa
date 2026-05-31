@@ -291,9 +291,9 @@ test "filepicker back restores previous cursor and window" {
   )
   let entered = (c.update)(model, Open).model
   assert_eq(entered.current_directory, "/repo/sub")
-  assert_eq(entered.selected_stack, [1])
-  assert_eq(entered.min_stack, [1])
-  assert_eq(entered.max_stack, [2])
+  @test.assert_eq(entered.selected_stack, [1])
+  @test.assert_eq(entered.min_stack, [1])
+  @test.assert_eq(entered.max_stack, [2])
 
   let inside = {
     ..entered,
@@ -311,7 +311,7 @@ test "filepicker back restores previous cursor and window" {
   assert_eq(backed.cursor, 1)
   assert_eq(backed.min_index, 1)
   assert_eq(backed.max_index, 2)
-  assert_eq(backed.selected_stack, [])
+  @test.assert_eq(backed.selected_stack, [])
 }
 
 ///|
@@ -327,18 +327,18 @@ test "filepicker set directory and load failure clear navigation history" {
     show_hidden=true,
   )
   let entered = (c.update)(model, Open).model
-  assert_eq(entered.selected_stack, [0])
+  @test.assert_eq(entered.selected_stack, [0])
 
   let replaced = (c.update)(entered, SetDirectory("/tmp")).model
   assert_eq(replaced.current_directory, "/tmp")
-  assert_eq(replaced.selected_stack, [])
-  assert_eq(replaced.min_stack, [])
-  assert_eq(replaced.max_stack, [])
+  @test.assert_eq(replaced.selected_stack, [])
+  @test.assert_eq(replaced.min_stack, [])
+  @test.assert_eq(replaced.max_stack, [])
 
   let failed = (c.update)({ ..entered, entries: [] }, LoadFailed("boom")).model
-  assert_eq(failed.selected_stack, [])
-  assert_eq(failed.min_stack, [])
-  assert_eq(failed.max_stack, [])
+  @test.assert_eq(failed.selected_stack, [])
+  @test.assert_eq(failed.min_stack, [])
+  @test.assert_eq(failed.max_stack, [])
 }
 
 ///|

@@ -16,7 +16,7 @@ test "terminal state parity requests size and renders structured state" {
     }
     None => fail("expected measured window size")
   }
-  assert_eq(view.window_title, Some("Pippa terminal state"))
+  @test.assert_eq(view.window_title, Some("Pippa terminal state"))
   match view.cursor_position {
     Some(position) => {
       assert_eq(position.row, 2)
@@ -24,7 +24,7 @@ test "terminal state parity requests size and renders structured state" {
     }
     None => fail("expected cursor position")
   }
-  assert_eq(view.cursor_visible, Some(false))
+  @test.assert_eq(view.cursor_visible, Some(false))
 }
 
 ///|
@@ -33,5 +33,5 @@ test "terminal state parity toggles cursor with scripted input" {
   let view = terminal_state_parity_structured_view(model)
 
   assert_true(model.cursor_visible)
-  assert_eq(view.cursor_visible, Some(true))
+  @test.assert_eq(view.cursor_visible, Some(true))
 }
