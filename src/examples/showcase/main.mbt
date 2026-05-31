@@ -56,6 +56,15 @@ let viewport_comp : @component.Component[
 let showcase_tick_ms = 16
 
 ///|
+let fps_frames : Ref[Int] = { val: 0 }
+
+///|
+let fps_sum : Ref[Int64] = { val: 0L }
+
+///|
+let fps_last : Ref[Int64] = { val: 0L }
+
+///|
 let showcase_full_threshold = 0.99
 
 ///|
@@ -66,7 +75,12 @@ let showcase_spinner_stride = 8
 
 ///|
 fn showcase_tick_cmd() -> @pippa.Cmd[Msg] {
-  @pippa.Cmd::every(showcase_tick_ms, fn(_tick) { ProgressTick })
+  @pippa.Cmd::every(showcase_tick_ms, fn(tick) {
+    fps_frames.val = fps_frames.val + 1
+    fps_sum.val = fps_sum.val + tick.elapsed_ms
+    fps_last.val = tick.elapsed_ms
+    ProgressTick
+  })
 }
 
 ///|
@@ -594,6 +608,13 @@ fn showcase_view(model : Model) -> String {
   if model.tab < 0 {
     return showcase_tint("Closing Pippa showcase...", showcase_moon_hex)
   }
+  let avg = if fps_frames.val > 0 {
+    fps_sum.val / fps_frames.val.to_int64()
+  } else {
+    0L
+  }
+  let fps = if avg > 0L { 1000L / avg } else { 0L }
+  "FPS \{fps_frames.val}f  last=\{fps_last.val}ms  avg=\{avg}ms  ~\{fps}fps\n" +
   @styling.style()
   .background_hex(showcase_shell_hex)
   .border(@styling.border_rounded())

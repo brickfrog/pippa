@@ -873,8 +873,7 @@ fn[T] list_handle_input(
         }
       } else {
         match list_action_from_keymap(keymap, key) {
-          Some(action) =>
-            list_apply_action(model, action)
+          Some(action) => list_apply_action(model, action)
           None =>
             if model.filter_state == Filtering {
               match text_input_msg_from_input_event(event) {
@@ -970,8 +969,7 @@ fn[T] list_update(
         },
         cmd=@pippa.Cmd::none(),
       )
-    Accept =>
-      list_apply_action(model, ListActionAccept)
+    Accept => list_apply_action(model, ListActionAccept)
     SetItems(items) =>
       @pippa.UpdateResult::new(
         model=list_normalize({ ..model, items, }),

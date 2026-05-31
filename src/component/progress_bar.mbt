@@ -254,13 +254,7 @@ fn progress_cell_sequence(
 ) -> String {
   let buf = StringBuilder::new(size_hint=48 + fill_char.length())
   progress_write_cell_sequence(
-    buf,
-    palette,
-    blend_start,
-    blend_end,
-    index,
-    denominator,
-    fill_char,
+    buf, palette, blend_start, blend_end, index, denominator, fill_char,
   )
   buf.to_string()
 }
