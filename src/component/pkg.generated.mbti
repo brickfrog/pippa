@@ -7,13 +7,41 @@ import {
 }
 
 // Values
+pub fn[T] default_list_delegate() -> ListDelegate[T]
+
+pub fn default_list_keymap() -> ListKeymap
+
+pub fn default_list_sections() -> ListSections
+
 pub fn default_table_keymap() -> TableKeymap
 
 pub fn default_text_input_keymap() -> TextInputKeymap
 
 pub fn filepicker(current_directory? : String, height? : Int, show_hidden? : Bool, allow_files? : Bool, allow_directories? : Bool, allowed_extensions? : Array[String]) -> Component[FilepickerModel, FilepickerMsg]
 
-pub fn list(items? : Array[String], page_size? : Int) -> Component[ListModel, ListMsg]
+pub fn[T] list(items? : Array[ListItem[T]], page_size? : Int, title? : String, sections? : ListSections, keymap? : ListKeymap, delegate? : ListDelegate[T], status_duration_ms? : Int, focused? : Bool) -> Component[ListModel[T], ListMsg[T]]
+
+pub fn[T] list_filter_query(ListModel[T]) -> String
+
+pub fn list_fuzzy_match(String, String) -> ListFuzzyMatch?
+
+pub fn list_help_model(keymap? : ListKeymap, show_full? : Bool, width? : Int) -> @pippa.HelpModel
+
+pub fn list_help_view(keymap? : ListKeymap, show_full? : Bool, width? : Int) -> String
+
+pub fn list_items_from_strings(Array[String]) -> Array[ListItem[String]]
+
+pub fn list_keymap_disable(ListKeymap, ListAction) -> ListKeymap
+
+pub fn list_keymap_help(ListKeymap) -> @pippa.KeyMap
+
+pub fn list_keymap_override(ListKeymap, ListAction, @pippa.Binding) -> ListKeymap
+
+pub fn[T] list_msg_from_input_event(@pippa.InputEvent, keymap? : ListKeymap) -> ListMsg[T]?
+
+pub fn[T] list_selected_item(ListModel[T]) -> ListItem[T]?
+
+pub fn[T] list_visible_items(ListModel[T]) -> Array[ListVisibleItem[T]]
 
 pub fn paginator(per_page? : Int) -> Component[PaginatorModel, PaginatorMsg]
 
@@ -26,6 +54,8 @@ pub fn spinner(label? : String) -> Component[SpinnerModel, SpinnerMsg]
 pub fn spring_step(Double, Double, Double, Double, Double, Double) -> (Double, Double)
 
 pub fn stopwatch(interval_ms? : Int) -> Component[StopwatchModel, StopwatchMsg]
+
+pub fn string_list(items? : Array[String], page_size? : Int, title? : String, sections? : ListSections, keymap? : ListKeymap, status_duration_ms? : Int, focused? : Bool) -> Component[ListModel[String], ListMsg[String]]
 
 pub fn table(columns~ : Array[Column], width? : Int, height? : Int, keymap? : TableKeymap, focused? : Bool) -> Component[TableModel, TableMsg]
 
@@ -143,25 +173,130 @@ pub(all) enum FilepickerMsg {
   LoadFailed(String)
 } derive(Eq, @debug.Debug)
 
-pub(all) struct ListModel {
-  items : Array[String]
-  filter : String
-  cursor : Int
-  selected : Int
-  page_size : Int
+pub(all) enum ListAction {
+  ListActionCursorUp
+  ListActionCursorDown
+  ListActionPageUp
+  ListActionPageDown
+  ListActionFilter
+  ListActionClearFilter
+  ListActionAccept
+  ListActionCancel
+  ListActionToggleHelp
+  ListActionQuit
 } derive(Eq, @debug.Debug)
 
-pub(all) enum ListMsg {
+pub(all) struct ListDelegate[T] {
+  render : (ListRenderContext[T]) -> String
+  update : ((ListItem[T], String) -> ListItem[T])?
+}
+
+pub(all) enum ListFilterState {
+  Unfiltered
+  Filtering
+  FilterApplied
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ListFuzzyMatch {
+  score : Int
+  matched_indexes : Array[Int]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ListItem[T] {
+  id : String
+  filter_value : String
+  title : String
+  description : String?
+  payload : T?
+} derive(Eq, @debug.Debug)
+pub fn[T] ListItem::new(id~ : String, filter_value~ : String, title? : String, description? : String?, payload? : T?) -> Self[T]
+
+pub(all) struct ListKeyBinding {
+  binding : @pippa.Binding
+  action : ListAction
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ListKeymap {
+  bindings : Array[ListKeyBinding]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ListModel[T] {
+  items : Array[ListItem[T]]
+  filter_state : ListFilterState
+  committed_filter : String
+  filter_input : TextInputModel
+  cursor : Int
+  cursor_id : String?
+  selected_id : String?
+  page_size : Int
+  paginator : PaginatorModel
+  title : String
+  sections : ListSections
+  status_message : String?
+  status_instance_id : Int64
+  status_generation : Int64
+  status_duration_ms : Int
+  help : @pippa.HelpModel
+  focused : Bool
+} derive(Eq, @debug.Debug)
+
+pub(all) enum ListMsg[T] {
   CursorUp
   CursorDown
   PageUp
   PageDown
   Select
-  SetItems(Array[String])
+  Accept
+  SetItems(Array[ListItem[T]])
   SetFilter(String)
+  StartFilter
+  AcceptFilter
+  CancelFilter
   FilterInsertChar(Char)
   FilterBackspace
+  FilterInput(TextInputMsg)
   ClearFilter
+  SetStatus(String, Int)
+  ResetStatus
+  StatusExpired(ListStatusToken)
+  SetSections(ListSections)
+  SetTitle(String)
+  ToggleHelp
+  Focus
+  Blur
+  HandleInput(@pippa.InputEvent)
+  DelegateMsg(String, String)
+  Quit
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ListRenderContext[T] {
+  item : ListItem[T]
+  selected : Bool
+  cursor : Bool
+  index : Int
+  matched_indexes : Array[Int]
+  filter_state : ListFilterState
+  filter_query : String
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ListSections {
+  title : Bool
+  filter : Bool
+  status : Bool
+  pagination : Bool
+  help : Bool
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ListStatusToken {
+  instance_id : Int64
+  generation : Int64
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ListVisibleItem[T] {
+  item : ListItem[T]
+  index : Int
+  score : Int
+  matched_indexes : Array[Int]
 } derive(Eq, @debug.Debug)
 
 pub(all) struct PaginatorModel {
