@@ -1505,6 +1505,239 @@ test "pippa runtime timeout clamps custom polling and render fps" {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+priv enum RuntimePacingMsg {
+  RuntimePacingTick
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+priv struct RuntimePacingStats {
+  rendered_frames : Int
+  interval_count : Int
+  min_interval_ms : Int64
+  max_interval_ms : Int64
+  mean_interval_micros : Int64
+  jitter_ms : Int64
+  last_frame_ms : Int64
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_pacing_next_deadline(
+  timers : Array[RuntimeTimer[RuntimePacingMsg]],
+  render_due_at : Int64?,
+  limit_ms : Int64,
+) -> Int64? {
+  let mut next : Int64? = None
+  for timer in timers {
+    let deadline = timer_deadline(timer)
+    if deadline <= limit_ms {
+      match next {
+        Some(current) => if deadline < current { next = Some(deadline) }
+        None => next = Some(deadline)
+      }
+    }
+  }
+  match render_due_at {
+    Some(deadline) =>
+      if deadline <= limit_ms {
+        match next {
+          Some(current) =>
+            if deadline < current {
+              Some(deadline)
+            } else {
+              next
+            }
+          None => Some(deadline)
+        }
+      } else {
+        next
+      }
+    None => next
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_pacing_frame_times() -> Array[Int64] raise {
+  let now = Ref::new(0L)
+  let previous_clock = runtime_clock_override.val
+  runtime_clock_override.val = Some(fn() { now.val })
+  defer restore_runtime_clock(previous_clock)
+
+  let frame_times : Ref[Array[Int64]] = Ref::new([])
+  let program : Program[Int, RuntimePacingMsg] = Program::new(
+      init=fn() {
+        UpdateResult::new(
+          model=0,
+          cmd=Cmd::after(16, fn() { RuntimePacingTick }),
+        )
+      },
+      update=fn(model, _msg) {
+        let next = model + 1
+        let cmd = if now.val + 16L <= 1000L {
+          Cmd::after(16, fn() { RuntimePacingTick })
+        } else {
+          Cmd::none()
+        }
+        UpdateResult::new(model=next, cmd~)
+      },
+      view=fn(model) { "frame \{model}" },
+      output=fn(_output) { frame_times.val = [..frame_times.val, now.val] },
+    )
+    .with_stdin(false)
+    .with_alt_screen(false)
+    .with_hide_cursor(false)
+    .with_fps(60)
+
+  let init_res = (program.init)()
+  let mut model = init_res.model
+  let sent_msgs = @queue.Queue::new()
+  let pending = @queue.Queue::new()
+  let sequences = @deque.Deque::new()
+  let mut timers : Array[RuntimeTimer[RuntimePacingMsg]] = []
+  queue_cmd_effects(init_res.cmd, runtime_now_ms(), pending, timers, sequences)
+
+  let mut render_state = initial_render_state(program, true)
+  let mut desired = desired_view(program, model)
+  let (
+    initial_rendered,
+    initial_line_count,
+    initial_last_render_ms,
+    initial_render_due_at,
+    initial_view_terminal_state,
+  ) = flush_view(
+    program,
+    render_state.rendered,
+    desired,
+    render_state.prev_line_count,
+    render_state.view_terminal_state,
+    render_state.terminal_active,
+    render_state.last_render_ms,
+    true,
+    true,
+  )
+  render_state = {
+    ..render_state,
+    rendered: initial_rendered,
+    prev_line_count: initial_line_count,
+    last_render_ms: initial_last_render_ms,
+    render_due_at: initial_render_due_at,
+    force_full_repaint: false,
+    view_terminal_state: initial_view_terminal_state,
+  }
+
+  while true {
+    match
+      runtime_pacing_next_deadline(timers, render_state.render_due_at, 1000L) {
+      Some(deadline) => now.val = deadline
+      None => break
+    }
+
+    timers = queue_due_timers(program, now.val, timers, pending)
+    let (next_model, reason, updated, next_render_state) = drain_runtime(
+      program, model, render_state, sent_msgs, pending, timers, sequences,
+    )
+    model = next_model
+    render_state = next_render_state
+    assert_true(reason is None)
+    if updated {
+      desired = desired_view(program, model)
+    }
+
+    let should_flush_view = updated ||
+      (match render_state.render_due_at {
+        Some(deadline) => now.val >= deadline
+        None => false
+      })
+    if should_flush_view {
+      let (
+        next_rendered,
+        next_line_count,
+        next_last_render_ms,
+        next_render_due_at,
+        next_view_terminal_state,
+      ) = flush_view(
+        program,
+        render_state.rendered,
+        desired,
+        render_state.prev_line_count,
+        render_state.view_terminal_state,
+        render_state.terminal_active,
+        render_state.last_render_ms,
+        false,
+        render_state.force_full_repaint,
+      )
+      render_state = {
+        ..render_state,
+        rendered: next_rendered,
+        prev_line_count: next_line_count,
+        last_render_ms: next_last_render_ms,
+        render_due_at: next_render_due_at,
+        force_full_repaint: false,
+        view_terminal_state: next_view_terminal_state,
+      }
+    }
+  }
+  frame_times.val
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_pacing_stats(frames : Array[Int64]) -> RuntimePacingStats raise {
+  if frames.length() < 2 {
+    fail("expected at least two rendered frames")
+  }
+  let mut min_interval = frames[1] - frames[0]
+  let mut max_interval = min_interval
+  let mut total = 0L
+  let mut index = 1
+  while index < frames.length() {
+    let interval = frames[index] - frames[index - 1]
+    if interval < min_interval {
+      min_interval = interval
+    }
+    if interval > max_interval {
+      max_interval = interval
+    }
+    total = total + interval
+    index = index + 1
+  }
+  let interval_count = frames.length() - 1
+  {
+    rendered_frames: interval_count,
+    interval_count,
+    min_interval_ms: min_interval,
+    max_interval_ms: max_interval,
+    mean_interval_micros: total * 1000L / interval_count.to_int64(),
+    jitter_ms: max_interval - min_interval,
+    last_frame_ms: frames[frames.length() - 1],
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_pacing_stats_summary(stats : RuntimePacingStats) -> String {
+  "renders=\{stats.rendered_frames}, intervals=\{stats.interval_count}, mean_us=\{stats.mean_interval_micros}, jitter_ms=\{stats.jitter_ms}, min_ms=\{stats.min_interval_ms}, max_ms=\{stats.max_interval_ms}, last_ms=\{stats.last_frame_ms}"
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa 16ms after animation paces to 60 evenly spaced fps-capped frames" {
+  let stats = runtime_pacing_stats(runtime_pacing_frame_times())
+  let summary = runtime_pacing_stats_summary(stats)
+  let expected = "renders=60, intervals=60, mean_us=16666, " +
+    "jitter_ms=1, min_ms=16, max_ms=17, last_ms=1000"
+  if summary != expected {
+    fail(
+      "expected 60 fps-capped frames over 1000ms; got " +
+      summary,
+    )
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "pippa custom output captures rendered views" {
   let captured = Ref::new("")
   let sent = Ref::new(false)
