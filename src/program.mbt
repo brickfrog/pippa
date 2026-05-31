@@ -749,13 +749,20 @@ priv struct RuntimeRenderState {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+priv struct RuntimeTerminalProgress {
+  state : Int
+  value : Int
+} derive(Eq)
+
+///|
+#cfg(any(target="native", target="llvm"))
 priv struct RuntimeViewTerminalState {
   cursor_position : ViewCursorPosition?
   cursor_visible : Bool?
   window_title : String?
   foreground_color : Color?
   background_color : Color?
-  progress : ViewProgress?
+  progress : RuntimeTerminalProgress?
   mouse_mode : ViewMouseMode?
 } derive(Eq)
 
@@ -770,6 +777,33 @@ fn runtime_view_terminal_state_empty() -> RuntimeViewTerminalState {
     background_color: None,
     progress: None,
     mouse_mode: None,
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] runtime_view_terminal_state_for_program(
+  program : Program[Model, Msg],
+  terminal_active : Bool,
+) -> RuntimeViewTerminalState {
+  let state = runtime_view_terminal_state_empty()
+  {
+    ..state,
+    cursor_visible: if terminal_active &&
+      program.rendering &&
+      program.hide_cursor {
+      Some(false)
+    } else {
+      None
+    },
+    mouse_mode: if terminal_active &&
+      program.rendering &&
+      program.read_stdin &&
+      program.mouse {
+      Some(ViewMousePress)
+    } else {
+      None
+    },
   }
 }
 
@@ -804,7 +838,9 @@ fn[Model, Msg] initial_render_state(
     last_render_ms: 0L,
     render_due_at: None,
     force_full_repaint: false,
-    view_terminal_state: runtime_view_terminal_state_empty(),
+    view_terminal_state: runtime_view_terminal_state_for_program(
+      program, terminal_active,
+    ),
   }
 }
 
@@ -850,28 +886,80 @@ fn[Model, Msg] apply_screen_command(
       if state.terminal_active && program.rendering {
         emit_output(program, clear_screen() + move_cursor(1, 1))
       }
-      { ..state, rendered: "", prev_line_count: 0, render_due_at: None }
+      {
+        ..state,
+        rendered: "",
+        prev_line_count: 0,
+        render_due_at: None,
+        view_terminal_state: {
+          ..state.view_terminal_state,
+          cursor_position: None,
+        },
+      }
     }
-    RuntimeRepaint => { ..state, force_full_repaint: true, render_due_at: None }
+    RuntimeRepaint =>
+      {
+        ..state,
+        force_full_repaint: true,
+        render_due_at: None,
+        view_terminal_state: {
+          ..state.view_terminal_state,
+          cursor_position: None,
+        },
+      }
     RuntimeForceRedraw =>
-      { ..state, force_full_repaint: true, render_due_at: None }
+      {
+        ..state,
+        force_full_repaint: true,
+        render_due_at: None,
+        view_terminal_state: {
+          ..state.view_terminal_state,
+          cursor_position: None,
+        },
+      }
     RuntimeHideCursor =>
       if state.cursor_hidden {
-        state
+        {
+          ..state,
+          view_terminal_state: {
+            ..state.view_terminal_state,
+            cursor_visible: Some(false),
+          },
+        }
       } else {
         if state.terminal_active && program.rendering {
           emit_output(program, hide_cursor())
         }
-        { ..state, cursor_hidden: true }
+        {
+          ..state,
+          cursor_hidden: true,
+          view_terminal_state: {
+            ..state.view_terminal_state,
+            cursor_visible: Some(false),
+          },
+        }
       }
     RuntimeShowCursor =>
       if !state.cursor_hidden {
-        state
+        {
+          ..state,
+          view_terminal_state: {
+            ..state.view_terminal_state,
+            cursor_visible: Some(true),
+          },
+        }
       } else {
         if state.terminal_active && program.rendering {
           emit_output(program, show_cursor())
         }
-        { ..state, cursor_hidden: false }
+        {
+          ..state,
+          cursor_hidden: false,
+          view_terminal_state: {
+            ..state.view_terminal_state,
+            cursor_visible: Some(true),
+          },
+        }
       }
   }
 }
@@ -916,20 +1004,39 @@ fn[Model, Msg] apply_terminal_command(
 #cfg(any(target="native", target="llvm"))
 fn progress_value(value : Int?) -> Int {
   match value {
-    Some(n) => n
+    Some(n) => n.max(0).min(100)
     None => 0
   }
 }
 
 ///|
 #cfg(any(target="native", target="llvm"))
-fn view_progress_sequence(progress : ViewProgress) -> String {
+fn view_progress_state(progress : ViewProgress?) -> RuntimeTerminalProgress? {
   match progress {
-    ViewProgressNone => clear_terminal_progress()
-    ViewProgressIndeterminate => set_terminal_progress(3, 0)
-    ViewProgressPercent(value) => set_terminal_progress(1, value)
-    ViewProgressPaused(value) => set_terminal_progress(4, progress_value(value))
-    ViewProgressError(value) => set_terminal_progress(2, progress_value(value))
+    None | Some(ViewProgressNone) => None
+    Some(ViewProgressIndeterminate) => Some({ state: 3, value: 0 })
+    Some(ViewProgressPercent(value)) =>
+      Some({ state: 1, value: progress_value(Some(value)) })
+    Some(ViewProgressPaused(value)) =>
+      Some({ state: 4, value: progress_value(value) })
+    Some(ViewProgressError(value)) =>
+      Some({ state: 2, value: progress_value(value) })
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn view_progress_sequence(progress : RuntimeTerminalProgress) -> String {
+  set_terminal_progress(progress.state, progress.value)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn view_mouse_state(mouse_mode : ViewMouseMode?) -> ViewMouseMode? {
+  match mouse_mode {
+    Some(ViewMousePress) => Some(ViewMousePress)
+    Some(ViewMouseAllMotion) => Some(ViewMouseAllMotion)
+    Some(ViewMouseOff) | None => None
   }
 }
 
@@ -940,11 +1047,7 @@ fn mouse_mode_transition(
   next : ViewMouseMode?,
 ) -> String {
   match next {
-    None =>
-      match previous {
-        Some(ViewMousePress) | Some(ViewMouseAllMotion) => disable_mouse()
-        _ => ""
-      }
+    None => disable_mouse()
     Some(ViewMouseOff) => disable_mouse()
     Some(ViewMousePress) =>
       match previous {
@@ -968,8 +1071,8 @@ fn view_terminal_state_from_view(view : View) -> RuntimeViewTerminalState {
     window_title: view.window_title,
     foreground_color: view.foreground_color,
     background_color: view.background_color,
-    progress: view.progress,
-    mouse_mode: view.mouse_mode,
+    progress: view_progress_state(view.progress),
+    mouse_mode: view_mouse_state(view.mouse_mode),
   }
 }
 
@@ -978,10 +1081,9 @@ fn view_terminal_state_from_view(view : View) -> RuntimeViewTerminalState {
 fn view_terminal_state_delta(
   applied : RuntimeViewTerminalState,
   view : View,
-) -> (String, String, RuntimeViewTerminalState) {
+) -> (String, RuntimeViewTerminalState) {
   let next = view_terminal_state_from_view(view)
   let prefix = StringBuilder::new()
-  let suffix = StringBuilder::new()
   if next.window_title != applied.window_title {
     match next.window_title {
       Some(title) => prefix.write_string(set_window_title(title))
@@ -1030,13 +1132,29 @@ fn view_terminal_state_delta(
       None => ()
     }
   }
+  (prefix.to_string(), next)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn view_cursor_position_suffix(
+  applied : RuntimeViewTerminalState,
+  next : RuntimeViewTerminalState,
+  content_painted : Bool,
+) -> String {
   if next.cursor_position != applied.cursor_position {
     match next.cursor_position {
-      Some(pos) => suffix.write_string(move_cursor(pos.row, pos.col))
-      None => ()
+      Some(pos) => move_cursor(pos.row, pos.col)
+      None => ""
     }
+  } else if content_painted {
+    match next.cursor_position {
+      Some(pos) => move_cursor(pos.row, pos.col)
+      None => ""
+    }
+  } else {
+    ""
   }
-  (prefix.to_string(), suffix.to_string(), next)
 }
 
 ///|
@@ -1552,7 +1670,7 @@ fn[Model, Msg] flush_view(
       applied_terminal_state,
     )
   } else {
-    let (terminal_prefix, terminal_suffix, next_terminal_state) = view_terminal_state_delta(
+    let (terminal_prefix, next_terminal_state) = view_terminal_state_delta(
       applied_terminal_state, next_view,
     )
     let terminal_changed = next_terminal_state != applied_terminal_state
@@ -1580,6 +1698,11 @@ fn[Model, Msg] flush_view(
       } else {
         ""
       }
+      let terminal_suffix = view_cursor_position_suffix(
+        applied_terminal_state,
+        next_terminal_state,
+        content_output != "",
+      )
       let output = terminal_prefix + content_output + terminal_suffix
       emit_output(program, output)
       (

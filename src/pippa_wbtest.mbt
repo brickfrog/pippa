@@ -799,7 +799,7 @@ test "pippa structured_view carries state while rendering content unchanged" {
 test "pippa flush_view emits cursor state once and reconciles unchanged frames" {
   let chunks : Ref[Array[String]] = Ref::new([])
   let program = test_render_program(chunks)
-  let view = View::text("")
+  let view = View::text("one")
     .with_cursor_position(row=4, col=7)
     .with_cursor_visible(false)
   let (rendered, lines, last_render_ms, due_at, terminal_state) = flush_view(
@@ -813,18 +813,30 @@ test "pippa flush_view emits cursor state once and reconciles unchanged frames" 
     true,
     false,
   )
-  assert_eq(rendered, "")
-  assert_eq(lines, 0)
+  assert_eq(rendered, "one")
+  assert_eq(lines, 1)
   assert_true(due_at is None)
   let first = chunks.val.join("")
   assert_true(first.contains(move_cursor(4, 7)))
   assert_true(first.contains(hide_cursor()))
 
   chunks.val = []
-  let (_rendered2, _lines2, _last2, due2, _terminal_state2) = flush_view(
-    program, rendered, view, lines, terminal_state, true, last_render_ms, true, false,
+  let changed_view = View::text("two")
+    .with_cursor_position(row=4, col=7)
+    .with_cursor_visible(false)
+  let (rendered2, lines2, last2, due2, terminal_state2) = flush_view(
+    program, rendered, changed_view, lines, terminal_state, true, last_render_ms,
+    true, false,
   )
   assert_true(due2 is None)
+  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Ktwo\u001b[4;7H")
+
+  chunks.val = []
+  let (_rendered3, _lines3, _last3, due3, _terminal_state3) = flush_view(
+    program, rendered2, changed_view, lines2, terminal_state2, true, last2, true,
+    false,
+  )
+  assert_true(due3 is None)
   assert_eq(chunks.val.join(""), "")
 }
 
@@ -834,7 +846,7 @@ test "pippa flush_view sets changes and clears window title" {
   let chunks : Ref[Array[String]] = Ref::new([])
   let program = test_render_program(chunks)
   let state0 = runtime_view_terminal_state_empty()
-  let (_r1, _l1, last1, _d1, state1) = flush_view(
+  let (rendered1, lines1, last1, _d1, state1) = flush_view(
     program,
     "",
     View::text("").with_window_title("Alpha"),
@@ -848,18 +860,32 @@ test "pippa flush_view sets changes and clears window title" {
   assert_eq(chunks.val.join(""), "\u001b]2;Alpha\u001b\\")
 
   chunks.val = []
-  let (_r2, _l2, last2, _d2, state2) = flush_view(
+  let (rendered_same, lines_same, last_same, _d_same, state_same) = flush_view(
     program,
-    "",
-    View::text("").with_window_title("Beta"),
-    0,
+    rendered1,
+    View::text("same").with_window_title("Alpha"),
+    lines1,
     state1,
     true,
     last1,
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b]2;Beta\u001b\\")
+  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Ksame")
+
+  chunks.val = []
+  let (_r2, _l2, last2, _d2, state2) = flush_view(
+    program,
+    rendered_same,
+    View::text("").with_window_title("Beta"),
+    lines_same,
+    state_same,
+    true,
+    last_same,
+    true,
+    false,
+  )
+  assert_eq(chunks.val.join(""), "\u001b]2;Beta\u001b\\\u001b[1;1H\u001b[K")
 
   chunks.val = []
   ignore(
@@ -873,7 +899,7 @@ test "pippa flush_view sets changes and clears window title" {
 test "pippa flush_view applies and resets default foreground and background colors" {
   let chunks : Ref[Array[String]] = Ref::new([])
   let program = test_render_program(chunks)
-  let (_r1, _l1, last1, _d1, state1) = flush_view(
+  let (rendered1, lines1, last1, _d1, state1) = flush_view(
     program,
     "",
     View::text("")
@@ -889,10 +915,36 @@ test "pippa flush_view applies and resets default foreground and background colo
   assert_eq(chunks.val.join(""), "\u001b[38;5;2m\u001b[48;2;1;2;3m")
 
   chunks.val = []
-  ignore(
-    flush_view(program, "", View::text(""), 0, state1, true, last1, true, false),
+  let (rendered_same, lines_same, last_same, _d_same, state_same) = flush_view(
+    program,
+    rendered1,
+    View::text("same")
+    .with_foreground_color(color_ansi(2))
+    .with_background_color(color_rgb(1, 2, 3)),
+    lines1,
+    state1,
+    true,
+    last1,
+    true,
+    false,
   )
-  assert_eq(chunks.val.join(""), "\u001b[39m\u001b[49m")
+  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Ksame")
+
+  chunks.val = []
+  ignore(
+    flush_view(
+      program,
+      rendered_same,
+      View::text(""),
+      lines_same,
+      state_same,
+      true,
+      last_same,
+      true,
+      false,
+    ),
+  )
+  assert_eq(chunks.val.join(""), "\u001b[39m\u001b[49m\u001b[1;1H\u001b[K")
 }
 
 ///|
@@ -902,22 +954,6 @@ test "pippa flush_view maps every ViewProgress variant to OSC 9;4" {
   let program = test_render_program(chunks)
   let state0 = runtime_view_terminal_state_empty()
 
-  ignore(
-    flush_view(
-      program,
-      "",
-      View::text("").with_progress(ViewProgressNone),
-      0,
-      state0,
-      true,
-      0L,
-      true,
-      false,
-    ),
-  )
-  assert_eq(chunks.val.join(""), "\u001b]9;4;0;0\u001b\\")
-
-  chunks.val = []
   ignore(
     flush_view(
       program,
@@ -934,20 +970,62 @@ test "pippa flush_view maps every ViewProgress variant to OSC 9;4" {
   assert_eq(chunks.val.join(""), "\u001b]9;4;3;0\u001b\\")
 
   chunks.val = []
+  let (rendered_percent, lines_percent, last_percent, _d_percent, state_percent) = flush_view(
+    program,
+    "",
+    View::text("").with_progress(ViewProgressPercent(42)),
+    0,
+    state0,
+    true,
+    0L,
+    true,
+    false,
+  )
+  assert_eq(chunks.val.join(""), "\u001b]9;4;1;42\u001b\\")
+
+  chunks.val = []
+  let (_r_same, _l_same, _last_same, _d_same, state_same) = flush_view(
+    program,
+    rendered_percent,
+    View::text("same").with_progress(ViewProgressPercent(42)),
+    lines_percent,
+    state_percent,
+    true,
+    last_percent,
+    true,
+    false,
+  )
+  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Ksame")
+
+  chunks.val = []
+  let (_r_clear, _l_clear, _last_clear, _d_clear, state_clear) = flush_view(
+    program,
+    "",
+    View::text("").with_progress(ViewProgressNone),
+    0,
+    state_same,
+    true,
+    0L,
+    true,
+    false,
+  )
+  assert_eq(chunks.val.join(""), "\u001b]9;4;0;0\u001b\\")
+
+  chunks.val = []
   ignore(
     flush_view(
       program,
       "",
-      View::text("").with_progress(ViewProgressPercent(42)),
+      View::text("cleared"),
       0,
-      state0,
+      state_clear,
       true,
       0L,
       true,
       false,
     ),
   )
-  assert_eq(chunks.val.join(""), "\u001b]9;4;1;42\u001b\\")
+  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Kcleared")
 
   chunks.val = []
   ignore(
@@ -987,7 +1065,7 @@ test "pippa flush_view maps every ViewProgress variant to OSC 9;4" {
 test "pippa flush_view reconciles mouse mode transitions" {
   let chunks : Ref[Array[String]] = Ref::new([])
   let program = test_render_program(chunks)
-  let (_r1, _l1, last1, _d1, state1) = flush_view(
+  let (rendered1, lines1, last1, _d1, state1) = flush_view(
     program,
     "",
     View::text("").with_mouse_mode(ViewMousePress),
@@ -1001,18 +1079,35 @@ test "pippa flush_view reconciles mouse mode transitions" {
   assert_eq(chunks.val.join(""), "\u001b[?1000h\u001b[?1006h")
 
   chunks.val = []
-  let (_r2, _l2, last2, _d2, state2) = flush_view(
+  let (rendered_same, lines_same, last_same, _d_same, state_same) = flush_view(
     program,
-    "",
-    View::text("").with_mouse_mode(ViewMouseAllMotion),
-    0,
+    rendered1,
+    View::text("same").with_mouse_mode(ViewMousePress),
+    lines1,
     state1,
     true,
     last1,
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b[?1000l\u001b[?1003h\u001b[?1006h")
+  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Ksame")
+
+  chunks.val = []
+  let (_r2, _l2, last2, _d2, state2) = flush_view(
+    program,
+    rendered_same,
+    View::text("").with_mouse_mode(ViewMouseAllMotion),
+    lines_same,
+    state_same,
+    true,
+    last_same,
+    true,
+    false,
+  )
+  assert_eq(
+    chunks.val.join(""),
+    "\u001b[?1000l\u001b[?1003h\u001b[?1006h\u001b[1;1H\u001b[K",
+  )
 
   chunks.val = []
   let (_r3, _l3, last3, _d3, state3) = flush_view(
@@ -1029,37 +1124,169 @@ test "pippa flush_view reconciles mouse mode transitions" {
   assert_eq(chunks.val.join(""), "\u001b[?1003l\u001b[?1000h\u001b[?1006h")
 
   chunks.val = []
+  let (_r_off, _l_off, last_off, _d_off, state_off) = flush_view(
+    program,
+    "",
+    View::text("").with_mouse_mode(ViewMouseOff),
+    0,
+    state3,
+    true,
+    last3,
+    true,
+    false,
+  )
+  assert_eq(chunks.val.join(""), "\u001b[?1000l\u001b[?1003l\u001b[?1006l")
+
+  chunks.val = []
   ignore(
     flush_view(
       program,
       "",
-      View::text("").with_mouse_mode(ViewMouseOff),
+      View::text("off"),
       0,
-      state3,
+      state_off,
       true,
-      last3,
+      last_off,
       true,
       false,
     ),
   )
-  assert_eq(chunks.val.join(""), "\u001b[?1000l\u001b[?1003l\u001b[?1006l")
+  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Koff")
 }
 
 ///|
 #cfg(any(target="native", target="llvm"))
-test "pippa program exit sequence resets structured terminal state" {
+test "pippa initial view terminal cache reflects program-managed cursor and mouse" {
+  let chunks : Ref[Array[String]] = Ref::new([])
+  let program : Program[Int, Int] = Program::new(
+    init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+    update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+    view=fn(_model) { "" },
+    mouse=true,
+    output=fn(output) { chunks.val = [..chunks.val, output] },
+  )
+  let render_state = initial_render_state(program, true)
+  @test.assert_eq(render_state.view_terminal_state.cursor_visible, Some(false))
+  @test.assert_eq(
+    render_state.view_terminal_state.mouse_mode,
+    Some(ViewMousePress),
+  )
+  ignore(
+    flush_view(
+      program,
+      "",
+      View::text("").with_cursor_visible(false).with_mouse_mode(ViewMousePress),
+      0,
+      render_state.view_terminal_state,
+      true,
+      0L,
+      true,
+      false,
+    ),
+  )
+  assert_eq(chunks.val.join(""), "")
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa runtime screen commands keep structured cursor cache honest" {
   let chunks : Ref[Array[String]] = Ref::new([])
   let program = test_render_program(chunks)
-    .with_stdin(false)
     .with_alt_screen(false)
     .with_hide_cursor(false)
-  let expected = "\u001b[?25h" +
-    "\u001b]2;\u001b\\" +
-    "\u001b[39m" +
-    "\u001b[49m" +
-    "\u001b]9;4;0;0\u001b\\" +
-    "\u001b[?1000l\u001b[?1003l\u001b[?1006l"
-  assert_eq(program_exit_sequence(program), expected)
+  let state = {
+    ..initial_render_state(program, true),
+    cursor_hidden: true,
+    view_terminal_state: {
+      ..runtime_view_terminal_state_empty(),
+      cursor_position: Some({ row: 4, col: 7 }),
+      cursor_visible: Some(false),
+    },
+  }
+
+  let shown = apply_screen_command(program, state, RuntimeShowCursor)
+  @test.assert_eq(shown.view_terminal_state.cursor_visible, Some(true))
+  chunks.val = []
+  let (_r1, _l1, _last1, _d1, _state1) = flush_view(
+    program,
+    "",
+    View::text("").with_cursor_visible(false),
+    0,
+    shown.view_terminal_state,
+    true,
+    0L,
+    true,
+    false,
+  )
+  assert_eq(chunks.val.join(""), hide_cursor())
+
+  chunks.val = []
+  let cleared = apply_screen_command(program, state, RuntimeClearScreen)
+  @test.assert_eq(cleared.view_terminal_state.cursor_position, None)
+  chunks.val = []
+  ignore(
+    flush_view(
+      program,
+      "",
+      View::text("").with_cursor_position(row=4, col=7),
+      0,
+      cleared.view_terminal_state,
+      true,
+      0L,
+      true,
+      false,
+    ),
+  )
+  assert_eq(chunks.val.join(""), move_cursor(4, 7))
+
+  let repainted = apply_screen_command(program, state, RuntimeRepaint)
+  @test.assert_eq(repainted.view_terminal_state.cursor_position, None)
+  let forced = apply_screen_command(program, state, RuntimeForceRedraw)
+  @test.assert_eq(forced.view_terminal_state.cursor_position, None)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa interrupt cleanup resets structured terminal state at runtime" {
+  let chunks : Ref[Array[String]] = Ref::new([])
+  let polled = Ref::new(false)
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+    )
+    .with_structured_view(fn(_model) {
+      View::text("live")
+      .with_cursor_visible(false)
+      .with_window_title("Runtime")
+      .with_foreground_color(color_ansi(3))
+      .with_background_color(color_rgb(4, 5, 6))
+      .with_progress(ViewProgressPercent(33))
+      .with_mouse_mode(ViewMousePress)
+    })
+    .with_input(fn() {
+      if polled.val {
+        []
+      } else {
+        polled.val = true
+        [Key(Modified("ctrl", "c"))]
+      }
+    })
+    .with_alt_screen(false)
+    .with_hide_cursor(false)
+    .with_output(fn(output) { chunks.val = [..chunks.val, output] })
+  match program.run() {
+    RunInterrupted(_) => ()
+    _ => fail("expected RunInterrupted")
+  }
+  let captured = chunks.val.join("")
+  assert_true(captured.contains(hide_cursor()))
+  assert_true(captured.contains(set_window_title("Runtime")))
+  assert_true(captured.contains(fg_color(3)))
+  assert_true(captured.contains(bg_rgb(4, 5, 6)))
+  assert_true(captured.contains(set_terminal_progress(1, 33)))
+  assert_true(captured.contains(enable_mouse()))
+  assert_true(captured.contains(terminal_view_reset_sequence()))
 }
 
 ///|
