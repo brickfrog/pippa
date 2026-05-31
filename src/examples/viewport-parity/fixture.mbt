@@ -108,15 +108,3 @@ pub fn viewport_parity_run_script(events : Array[@pippa.InputEvent]) -> Model {
   }
   model
 }
-
-///|
-fn main {
-  let program = @pippa.Program::new(
-    init=viewport_parity_init,
-    update=viewport_parity_update,
-    view=viewport_parity_view,
-    sub=viewport_parity_sub,
-    should_quit=fn(model) { model.quitting },
-  )
-  ignore(@pippa.Program::run(program))
-}

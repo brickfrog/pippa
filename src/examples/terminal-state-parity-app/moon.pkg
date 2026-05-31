@@ -1,0 +1,8 @@
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/examples/terminal-state-parity" @terminal_state_parity,
+}
+
+options(
+  "is-main": true,
+)

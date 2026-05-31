@@ -104,15 +104,3 @@ pub fn textarea_parity_run_script(events : Array[@pippa.InputEvent]) -> Model {
   }
   model
 }
-
-///|
-fn main {
-  let program = @pippa.Program::new(
-    init=textarea_parity_init,
-    update=textarea_parity_update,
-    view=textarea_parity_view,
-    sub=textarea_parity_sub,
-    should_quit=fn(model) { model.quitting },
-  )
-  ignore(@pippa.Program::run(program))
-}

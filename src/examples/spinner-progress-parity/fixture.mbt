@@ -100,15 +100,3 @@ pub fn spinner_progress_parity_view(model : Model) -> String {
   (spinner_progress_parity_progress.view)(model.progress) +
   "\n"
 }
-
-///|
-fn main {
-  let program = @pippa.Program::new(
-    init=spinner_progress_parity_init,
-    update=spinner_progress_parity_update,
-    view=spinner_progress_parity_view,
-    sub=spinner_progress_parity_sub,
-    should_quit=fn(model) { model.quitting },
-  )
-  ignore(@pippa.Program::run(program))
-}

@@ -1,0 +1,8 @@
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/examples/timer-stopwatch-parity" @timer_stopwatch_parity,
+}
+
+options(
+  "is-main": true,
+)
