@@ -159,6 +159,12 @@ test "pippa request window size command stores typed callback" {
 }
 
 ///|
+test "pippa synchronized output helpers use DEC private mode 2026" {
+  assert_eq(begin_sync_update(), "\u001b[?2026h")
+  assert_eq(end_sync_update(), "\u001b[?2026l")
+}
+
+///|
 #cfg(any(target="native", target="llvm"))
 fn assert_terminal_cmd_emits(cmd : Cmd[Int], expected : String) -> Unit raise {
   let chunks : Ref[Array[String]] = Ref::new([])
@@ -761,6 +767,12 @@ fn count_sequence(haystack : String, needle : String) -> Int {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn sync_frame(output : String) -> String {
+  begin_sync_update() + output + end_sync_update()
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "pippa desired_view wraps plain string views and flushes the same frame" {
   let chunks : Ref[Array[String]] = Ref::new([])
   let program = test_render_program(chunks)
@@ -780,7 +792,63 @@ test "pippa desired_view wraps plain string views and flushes the same frame" {
   assert_eq(rendered, "plain 7")
   assert_eq(lines, 1)
   assert_true(due_at is None)
-  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Kplain 7")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b[1;1H\u001b[Kplain 7"))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa flush_view synchronizes content frames without wrapping no-ops or disabled programs" {
+  let chunks : Ref[Array[String]] = Ref::new([])
+  let program = test_render_program(chunks)
+  let (rendered, lines, last_render_ms, due_at, terminal_state) = flush_view(
+    program,
+    "",
+    View::text("frame"),
+    0,
+    runtime_view_terminal_state_empty(),
+    true,
+    0L,
+    true,
+    true,
+  )
+  assert_true(due_at is None)
+  let captured = chunks.val.join("")
+  assert_true(captured.has_prefix(begin_sync_update()))
+  assert_true(captured.has_suffix(end_sync_update()))
+  assert_eq(captured, sync_frame("\u001b[1;1H\u001b[Kframe"))
+
+  chunks.val = []
+  ignore(
+    flush_view(
+      program,
+      rendered,
+      View::text("frame"),
+      lines,
+      terminal_state,
+      true,
+      last_render_ms,
+      true,
+      false,
+    ),
+  )
+  assert_eq(chunks.val.join(""), "")
+
+  chunks.val = []
+  let unwrapped_program = program.with_synchronized_output(false)
+  ignore(
+    flush_view(
+      unwrapped_program,
+      "",
+      View::text("legacy"),
+      0,
+      runtime_view_terminal_state_empty(),
+      true,
+      0L,
+      true,
+      true,
+    ),
+  )
+  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Klegacy")
 }
 
 ///|
@@ -860,7 +928,10 @@ test "pippa flush_view emits cursor state once and reconciles unchanged frames" 
     true, false,
   )
   assert_true(due2 is None)
-  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Ktwo\u001b[4;7H")
+  assert_eq(
+    chunks.val.join(""),
+    sync_frame("\u001b[1;1H\u001b[Ktwo\u001b[4;7H"),
+  )
 
   chunks.val = []
   let (_rendered3, _lines3, _last3, due3, _terminal_state3) = flush_view(
@@ -888,7 +959,7 @@ test "pippa flush_view sets changes and clears window title" {
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b]2;Alpha\u001b\\")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b]2;Alpha\u001b\\"))
 
   chunks.val = []
   let (rendered_same, lines_same, last_same, _d_same, state_same) = flush_view(
@@ -902,7 +973,7 @@ test "pippa flush_view sets changes and clears window title" {
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Ksame")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b[1;1H\u001b[Ksame"))
 
   chunks.val = []
   let (_r2, _l2, last2, _d2, state2) = flush_view(
@@ -916,13 +987,16 @@ test "pippa flush_view sets changes and clears window title" {
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b]2;Beta\u001b\\\u001b[1;1H\u001b[K")
+  assert_eq(
+    chunks.val.join(""),
+    sync_frame("\u001b]2;Beta\u001b\\\u001b[1;1H\u001b[K"),
+  )
 
   chunks.val = []
   ignore(
     flush_view(program, "", View::text(""), 0, state2, true, last2, true, false),
   )
-  assert_eq(chunks.val.join(""), "\u001b]2;\u001b\\")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b]2;\u001b\\"))
 }
 
 ///|
@@ -943,7 +1017,7 @@ test "pippa flush_view applies and resets default foreground and background colo
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b[38;5;2m\u001b[48;2;1;2;3m")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b[38;5;2m\u001b[48;2;1;2;3m"))
 
   chunks.val = []
   let (rendered_same, lines_same, last_same, _d_same, state_same) = flush_view(
@@ -959,7 +1033,7 @@ test "pippa flush_view applies and resets default foreground and background colo
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Ksame")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b[1;1H\u001b[Ksame"))
 
   chunks.val = []
   ignore(
@@ -975,7 +1049,10 @@ test "pippa flush_view applies and resets default foreground and background colo
       false,
     ),
   )
-  assert_eq(chunks.val.join(""), "\u001b[39m\u001b[49m\u001b[1;1H\u001b[K")
+  assert_eq(
+    chunks.val.join(""),
+    sync_frame("\u001b[39m\u001b[49m\u001b[1;1H\u001b[K"),
+  )
 }
 
 ///|
@@ -998,7 +1075,7 @@ test "pippa flush_view maps every ViewProgress variant to OSC 9;4" {
       false,
     ),
   )
-  assert_eq(chunks.val.join(""), "\u001b]9;4;3;0\u001b\\")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b]9;4;3;0\u001b\\"))
 
   chunks.val = []
   let (rendered_percent, lines_percent, last_percent, _d_percent, state_percent) = flush_view(
@@ -1012,7 +1089,7 @@ test "pippa flush_view maps every ViewProgress variant to OSC 9;4" {
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b]9;4;1;42\u001b\\")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b]9;4;1;42\u001b\\"))
 
   chunks.val = []
   let (_r_same, _l_same, _last_same, _d_same, state_same) = flush_view(
@@ -1026,7 +1103,7 @@ test "pippa flush_view maps every ViewProgress variant to OSC 9;4" {
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Ksame")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b[1;1H\u001b[Ksame"))
 
   chunks.val = []
   let (_r_clear, _l_clear, _last_clear, _d_clear, state_clear) = flush_view(
@@ -1040,7 +1117,7 @@ test "pippa flush_view maps every ViewProgress variant to OSC 9;4" {
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b]9;4;0;0\u001b\\")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b]9;4;0;0\u001b\\"))
 
   chunks.val = []
   ignore(
@@ -1056,7 +1133,7 @@ test "pippa flush_view maps every ViewProgress variant to OSC 9;4" {
       false,
     ),
   )
-  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Kcleared")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b[1;1H\u001b[Kcleared"))
 
   chunks.val = []
   ignore(
@@ -1072,7 +1149,7 @@ test "pippa flush_view maps every ViewProgress variant to OSC 9;4" {
       false,
     ),
   )
-  assert_eq(chunks.val.join(""), "\u001b]9;4;4;77\u001b\\")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b]9;4;4;77\u001b\\"))
 
   chunks.val = []
   ignore(
@@ -1088,7 +1165,7 @@ test "pippa flush_view maps every ViewProgress variant to OSC 9;4" {
       false,
     ),
   )
-  assert_eq(chunks.val.join(""), "\u001b]9;4;2;0\u001b\\")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b]9;4;2;0\u001b\\"))
 }
 
 ///|
@@ -1107,7 +1184,7 @@ test "pippa flush_view reconciles mouse mode transitions" {
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b[?1000h\u001b[?1006h")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b[?1000h\u001b[?1006h"))
 
   chunks.val = []
   let (rendered_same, lines_same, last_same, _d_same, state_same) = flush_view(
@@ -1121,7 +1198,7 @@ test "pippa flush_view reconciles mouse mode transitions" {
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Ksame")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b[1;1H\u001b[Ksame"))
 
   chunks.val = []
   let (_r2, _l2, last2, _d2, state2) = flush_view(
@@ -1137,7 +1214,7 @@ test "pippa flush_view reconciles mouse mode transitions" {
   )
   assert_eq(
     chunks.val.join(""),
-    "\u001b[?1000l\u001b[?1003h\u001b[?1006h\u001b[1;1H\u001b[K",
+    sync_frame("\u001b[?1000l\u001b[?1003h\u001b[?1006h\u001b[1;1H\u001b[K"),
   )
 
   chunks.val = []
@@ -1152,7 +1229,10 @@ test "pippa flush_view reconciles mouse mode transitions" {
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b[?1003l\u001b[?1000h\u001b[?1006h")
+  assert_eq(
+    chunks.val.join(""),
+    sync_frame("\u001b[?1003l\u001b[?1000h\u001b[?1006h"),
+  )
 
   chunks.val = []
   let (_r_off, _l_off, last_off, _d_off, state_off) = flush_view(
@@ -1166,7 +1246,10 @@ test "pippa flush_view reconciles mouse mode transitions" {
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), "\u001b[?1000l\u001b[?1003l\u001b[?1006l")
+  assert_eq(
+    chunks.val.join(""),
+    sync_frame("\u001b[?1000l\u001b[?1003l\u001b[?1006l"),
+  )
 
   chunks.val = []
   ignore(
@@ -1182,7 +1265,7 @@ test "pippa flush_view reconciles mouse mode transitions" {
       false,
     ),
   )
-  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Koff")
+  assert_eq(chunks.val.join(""), sync_frame("\u001b[1;1H\u001b[Koff"))
 }
 
 ///|
@@ -1249,7 +1332,7 @@ test "pippa runtime screen commands keep structured cursor cache honest" {
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), hide_cursor())
+  assert_eq(chunks.val.join(""), sync_frame(hide_cursor()))
 
   chunks.val = []
   let cleared = apply_screen_command(program, state, RuntimeClearScreen)
@@ -1268,7 +1351,7 @@ test "pippa runtime screen commands keep structured cursor cache honest" {
       false,
     ),
   )
-  assert_eq(chunks.val.join(""), move_cursor(4, 7))
+  assert_eq(chunks.val.join(""), sync_frame(move_cursor(4, 7)))
 
   let repainted = apply_screen_command(program, state, RuntimeRepaint)
   @test.assert_eq(repainted.view_terminal_state.cursor_position, None)
@@ -1309,7 +1392,7 @@ test "pippa runtime hide cursor command updates structured cursor cache" {
       false,
     ),
   )
-  assert_eq(chunks.val.join(""), show_cursor())
+  assert_eq(chunks.val.join(""), sync_frame(show_cursor()))
 }
 
 ///|
@@ -1421,6 +1504,7 @@ test "pippa program defaults enable rendering and terminal niceties" {
   assert_true(program.focus_reporting)
   assert_true(program.bracketed_paste)
   assert_true(program.hide_cursor)
+  assert_true(program.synchronized_output)
   assert_true(program.rendering)
   assert_true(program.read_stdin)
 }
@@ -1729,10 +1813,7 @@ test "pippa 16ms after animation paces to 60 evenly spaced fps-capped frames" {
   let expected = "renders=60, intervals=60, mean_us=16666, " +
     "jitter_ms=1, min_ms=16, max_ms=17, last_ms=1000"
   if summary != expected {
-    fail(
-      "expected 60 fps-capped frames over 1000ms; got " +
-      summary,
-    )
+    fail("expected 60 fps-capped frames over 1000ms; got " + summary)
   }
 }
 

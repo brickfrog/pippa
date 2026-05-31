@@ -39,6 +39,8 @@ pub(all) struct Program[Model, Msg] {
   bracketed_paste : Bool
   /// Hide the terminal cursor while the program runs.
   hide_cursor : Bool
+  /// Wrap each rendered frame in synchronized output mode.
+  synchronized_output : Bool
   /// Render view output and screen control sequences.
   rendering : Bool
   /// Read input events from stdin and enable terminal input modes.
@@ -162,6 +164,7 @@ pub fn[Model, Msg] Program::new(
   focus_reporting? : Bool = true,
   bracketed_paste? : Bool = true,
   hide_cursor? : Bool = true,
+  synchronized_output? : Bool = true,
   rendering? : Bool = true,
   read_stdin? : Bool = true,
   input? : (() -> Array[InputEvent])? = None,
@@ -191,6 +194,7 @@ pub fn[Model, Msg] Program::new(
     focus_reporting,
     bracketed_paste,
     hide_cursor,
+    synchronized_output,
     rendering,
     read_stdin,
     input,
@@ -250,6 +254,14 @@ pub fn[Model, Msg] Program::with_hide_cursor(
   enabled : Bool,
 ) -> Program[Model, Msg] {
   { ..self, hide_cursor: enabled }
+}
+
+///|
+pub fn[Model, Msg] Program::with_synchronized_output(
+  self : Program[Model, Msg],
+  enabled : Bool,
+) -> Program[Model, Msg] {
+  { ..self, synchronized_output: enabled }
 }
 
 ///|
@@ -1798,6 +1810,11 @@ fn[Model, Msg] flush_view(
         content_output != "",
       )
       let output = terminal_prefix + content_output + terminal_suffix
+      let output = if program.synchronized_output && output != "" {
+        begin_sync_update() + output + end_sync_update()
+      } else {
+        output
+      }
       emit_output(program, output)
       (
         if content_changed {
