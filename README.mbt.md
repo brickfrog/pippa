@@ -39,6 +39,27 @@ moon run src/examples/showcase
 The showcase example exercises the runtime, components, styling, spring
 animation, focus handling, and viewport behavior.
 
+## Keymaps and Help
+
+Key bindings separate activation keys from display help. Prefer constructors
+over raw struct literals:
+
+```moonbit
+let quit = binding(keys=["q", "ctrl+c"], help_key="q", help="quit")
+let model = help_model(
+  keymap=keymap([quit]),
+  show_full=false,
+  width=80,
+)
+let footer = help_view(model)
+```
+
+When migrating older code, replace flat `Binding::{ keys, help }` values with
+`binding(keys=..., help_key=..., help=...)`. Replace
+`HelpModel::{ bindings, show_full }` with `help_model(keymap=keymap(bindings),
+show_full=..., width=...)`. Disabled or unbound bindings do not match and are
+omitted from both short and full help.
+
 ## View Surface
 
 The common `Program::new(..., view=fn(model) { "..." })` shape remains a plain

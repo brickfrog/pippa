@@ -197,59 +197,202 @@ pub fn default_text_input_keymap() -> TextInputKeymap {
   {
     bindings: [
       {
-        binding: { keys: ["left"], help: "left" },
+        binding: @pippa.binding(keys=["left"], help_key="←", help="left"),
         action: TextInputActionMoveCursorLeft,
       },
       {
-        binding: { keys: ["right"], help: "right" },
+        binding: @pippa.binding(keys=["right"], help_key="→", help="right"),
         action: TextInputActionMoveCursorRight,
       },
       {
-        binding: { keys: ["home"], help: "start" },
+        binding: @pippa.binding(keys=["home"], help_key="home", help="start"),
         action: TextInputActionMoveToStart,
       },
       {
-        binding: { keys: ["end"], help: "end" },
+        binding: @pippa.binding(keys=["end"], help_key="end", help="end"),
         action: TextInputActionMoveToEnd,
       },
       {
-        binding: { keys: ["backspace"], help: "delete before" },
+        binding: @pippa.binding(
+          keys=["backspace"],
+          help_key="⌫",
+          help="delete before",
+        ),
         action: TextInputActionDeleteBefore,
       },
       {
-        binding: { keys: ["delete"], help: "delete after" },
+        binding: @pippa.binding(
+          keys=["delete"],
+          help_key="⌦",
+          help="delete after",
+        ),
         action: TextInputActionDeleteAfter,
       },
       {
-        binding: { keys: ["alt+b"], help: "word left" },
+        binding: @pippa.binding(
+          keys=["alt+b"],
+          help_key="M-b",
+          help="word left",
+        ),
         action: TextInputActionMoveWordLeft,
       },
       {
-        binding: { keys: ["alt+f"], help: "word right" },
+        binding: @pippa.binding(
+          keys=["alt+f"],
+          help_key="M-f",
+          help="word right",
+        ),
         action: TextInputActionMoveWordRight,
       },
       {
-        binding: { keys: ["ctrl+w"], help: "delete word backward" },
+        binding: @pippa.binding(
+          keys=["ctrl+w"],
+          help_key="C-w",
+          help="delete word backward",
+        ),
         action: TextInputActionDeleteWordBackward,
       },
       {
-        binding: { keys: ["alt+d"], help: "delete word forward" },
+        binding: @pippa.binding(
+          keys=["alt+d"],
+          help_key="M-d",
+          help="delete word forward",
+        ),
         action: TextInputActionDeleteWordForward,
       },
       {
-        binding: { keys: ["tab"], help: "accept suggestion" },
+        binding: @pippa.binding(
+          keys=["tab"],
+          help_key="tab",
+          help="accept suggestion",
+        ),
         action: TextInputActionAcceptSuggestion,
       },
       {
-        binding: { keys: ["down"], help: "next suggestion" },
+        binding: @pippa.binding(
+          keys=["down"],
+          help_key="↓",
+          help="next suggestion",
+        ),
         action: TextInputActionCycleSuggestionNext,
       },
       {
-        binding: { keys: ["up", "shift+tab"], help: "previous suggestion" },
+        binding: @pippa.binding(
+          keys=["up", "shift+tab"],
+          help_key="↑/S-tab",
+          help="previous suggestion",
+        ),
         action: TextInputActionCycleSuggestionPrev,
       },
     ],
   }
+}
+
+///|
+pub fn text_input_keymap_override(
+  keymap : TextInputKeymap,
+  action : TextInputEditingAction,
+  binding : @pippa.Binding,
+) -> TextInputKeymap {
+  let bindings : Array[TextInputKeyBinding] = []
+  let mut replaced = false
+  for entry in keymap.bindings {
+    if entry.action == action {
+      bindings.push({ ..entry, binding, })
+      replaced = true
+    } else {
+      bindings.push(entry)
+    }
+  }
+  if !replaced {
+    bindings.push({ binding, action })
+  }
+  { bindings, }
+}
+
+///|
+pub fn text_input_keymap_disable(
+  keymap : TextInputKeymap,
+  action : TextInputEditingAction,
+) -> TextInputKeymap {
+  let bindings : Array[TextInputKeyBinding] = []
+  for entry in keymap.bindings {
+    if entry.action == action {
+      bindings.push({
+        ..entry,
+        binding: @pippa.set_disabled(entry.binding, true),
+      })
+    } else {
+      bindings.push(entry)
+    }
+  }
+  { bindings, }
+}
+
+///|
+fn text_input_keymap_group_name(action : TextInputEditingAction) -> String {
+  match action {
+    TextInputActionMoveCursorLeft => "Movement"
+    TextInputActionMoveCursorRight => "Movement"
+    TextInputActionMoveWordLeft => "Movement"
+    TextInputActionMoveWordRight => "Movement"
+    TextInputActionMoveToStart => "Movement"
+    TextInputActionMoveToEnd => "Movement"
+    TextInputActionDeleteBefore => "Editing"
+    TextInputActionDeleteAfter => "Editing"
+    TextInputActionDeleteWordBackward => "Editing"
+    TextInputActionDeleteWordForward => "Editing"
+    TextInputActionAcceptSuggestion => "Suggestions"
+    TextInputActionCycleSuggestionNext => "Suggestions"
+    TextInputActionCycleSuggestionPrev => "Suggestions"
+  }
+}
+
+///|
+fn text_input_group_bindings(
+  keymap : TextInputKeymap,
+  group_name : String,
+) -> Array[@pippa.Binding] {
+  let bindings : Array[@pippa.Binding] = []
+  for entry in keymap.bindings {
+    if text_input_keymap_group_name(entry.action) == group_name {
+      bindings.push(entry.binding)
+    }
+  }
+  bindings
+}
+
+///|
+pub fn text_input_keymap_help(keymap : TextInputKeymap) -> @pippa.KeyMap {
+  @pippa.keymap_from_groups([
+    @pippa.keymap_group(
+      "Movement",
+      text_input_group_bindings(keymap, "Movement"),
+    ),
+    @pippa.keymap_group("Editing", text_input_group_bindings(keymap, "Editing")),
+    @pippa.keymap_group(
+      "Suggestions",
+      text_input_group_bindings(keymap, "Suggestions"),
+    ),
+  ])
+}
+
+///|
+pub fn text_input_help_model(
+  keymap? : TextInputKeymap = default_text_input_keymap(),
+  show_full? : Bool = false,
+  width? : Int = 0,
+) -> @pippa.HelpModel {
+  { keymap: text_input_keymap_help(keymap), show_full, width }
+}
+
+///|
+pub fn text_input_help_view(
+  keymap? : TextInputKeymap = default_text_input_keymap(),
+  show_full? : Bool = false,
+  width? : Int = 0,
+) -> String {
+  @pippa.help_view(text_input_help_model(keymap~, show_full~, width~))
 }
 
 ///|
