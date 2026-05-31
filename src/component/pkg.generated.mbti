@@ -45,7 +45,27 @@ pub fn textarea(width~ : Int, height~ : Int, placeholder? : String, min_height? 
 
 pub fn timer(duration_ms~ : Int, interval_ms? : Int) -> Component[TimerModel, TimerMsg]
 
-pub fn viewport(width~ : Int, height~ : Int) -> Component[ViewportModel, ViewportMsg]
+pub fn viewport(width~ : Int, height~ : Int, horizontal_step? : Int, soft_wrap? : Bool, fill_height? : Bool, mouse_wheel_enabled? : Bool, mouse_wheel_delta? : Int, gutter? : ((ViewportGutterContext) -> String)?, highlights? : Array[ViewportHighlight], content_style? : @pippa.Style?, line_style? : @pippa.Style?) -> Component[ViewportModel, ViewportMsg]
+
+pub fn viewport_at_bottom(ViewportModel) -> Bool
+
+pub fn viewport_at_left(ViewportModel) -> Bool
+
+pub fn viewport_at_right(ViewportModel) -> Bool
+
+pub fn viewport_at_top(ViewportModel) -> Bool
+
+pub fn viewport_highlight(line~ : Int, start_col~ : Int, end_col~ : Int, style? : @pippa.Style?, selected_style? : @pippa.Style?) -> ViewportHighlight
+
+pub fn viewport_highlight_range(start_line~ : Int, start_col~ : Int, end_line~ : Int, end_col~ : Int, style? : @pippa.Style?, selected_style? : @pippa.Style?) -> ViewportHighlight
+
+pub fn viewport_horizontal_scroll_percent(ViewportModel) -> Double
+
+pub fn viewport_past_bottom(ViewportModel) -> Bool
+
+pub fn viewport_past_right(ViewportModel) -> Bool
+
+pub fn viewport_scroll_percent(ViewportModel) -> Double
 
 // Errors
 
@@ -357,23 +377,64 @@ pub(all) struct TimerTickToken {
   generation : Int64
 } derive(Eq, @debug.Debug)
 
+pub(all) struct ViewportGutterContext {
+  logical_line : Int
+  visual_line : Int
+  continuation : Bool
+}
+
+pub(all) struct ViewportHighlight {
+  start_line : Int
+  start_col : Int
+  end_line : Int
+  end_col : Int
+  style : @pippa.Style?
+  selected_style : @pippa.Style?
+} derive(Eq, @debug.Debug)
+
 pub(all) struct ViewportModel {
   content : String
   width : Int
   height : Int
   offset : Int
+  x_offset : Int
   total_lines : Int
-} derive(@debug.Debug)
+  horizontal_step : Int
+  soft_wrap : Bool
+  fill_height : Bool
+  mouse_wheel_enabled : Bool
+  mouse_wheel_delta : Int
+  gutter : ((ViewportGutterContext) -> String)?
+  highlights : Array[ViewportHighlight]
+  selected_highlight : Int
+  content_style : @pippa.Style?
+  line_style : @pippa.Style?
+}
+pub impl @debug.Debug for ViewportModel
 
 pub(all) enum ViewportMsg {
   ScrollUp
   ScrollDown
+  ScrollLeft
+  ScrollRight
   PageUp
   PageDown
   ScrollToTop
   ScrollToBottom
   SetContent(String)
   Resize(Int, Int)
+  SetXOffset(Int)
+  SetHorizontalStep(Int)
+  SetSoftWrap(Bool)
+  SetFillHeight(Bool)
+  HandleMouse(@pippa.MouseMsg)
+  SetMouseWheelEnabled(Bool)
+  SetMouseWheelDelta(Int)
+  SetHighlights(Array[ViewportHighlight])
+  NextHighlight
+  PreviousHighlight
+  SetContentStyle(@pippa.Style?)
+  SetLineStyle(@pippa.Style?)
 } derive(@debug.Debug)
 
 // Type aliases
