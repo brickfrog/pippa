@@ -67,26 +67,36 @@ test "help_view short renders enabled bindings on one width-aware line" {
 
 ///|
 test "help_view full renders grouped key and description columns" {
-  let model = HelpModel::{
-    keymap: keymap_from_groups([
+  let model = help_model(
+    keymap=keymap_from_groups([
       keymap_group("Movement", [up_binding(), down_binding()]),
       keymap_group("Global", [quit_binding(), help_binding()]),
     ]),
-    show_full: true,
-    width: 0,
-  }
+    show_full=true,
+  )
   let out = help_view(model)
   let expected = "Movement\n  ↑/k  up\n  ↓/j  down\n\nGlobal\n  q  quit\n  ?  help"
   assert_eq(out, expected)
 }
 
 ///|
+test "help_view full skips disabled bindings" {
+  let disabled = set_disabled(
+    binding(keys=["x"], help_key="x", help="disabled"),
+    true,
+  )
+  let model = help_model(
+    keymap=keymap_from_groups([
+      keymap_group("Movement", [up_binding(), disabled, down_binding()]),
+    ]),
+    show_full=true,
+  )
+  assert_eq(help_view(model), "Movement\n  ↑/k  up\n  ↓/j  down")
+}
+
+///|
 test "help_view can toggle between short and full" {
-  let short = HelpModel::{
-    keymap: keymap([quit_binding()]),
-    show_full: false,
-    width: 0,
-  }
+  let short = help_model(keymap=keymap([quit_binding()]))
   let full = toggle_help(short)
   assert_eq(help_view(short), "q quit")
   assert_eq(help_view(full), "q  quit")

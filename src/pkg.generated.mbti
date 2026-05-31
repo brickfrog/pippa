@@ -88,6 +88,8 @@ pub fn fg_rgb(Int, Int, Int) -> String
 
 pub fn help_binding() -> Binding
 
+pub fn help_model(keymap~ : KeyMap, width? : Int, show_full? : Bool) -> HelpModel
+
 pub fn help_view(HelpModel) -> String
 
 pub fn hide_cursor() -> String

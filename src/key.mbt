@@ -29,6 +29,15 @@ pub(all) struct HelpModel {
 } derive(Debug, Eq)
 
 ///|
+pub fn help_model(
+  keymap~ : KeyMap,
+  width? : Int = 0,
+  show_full? : Bool = false,
+) -> HelpModel {
+  { keymap, show_full, width }
+}
+
+///|
 fn key_help_label(key : String) -> String {
   match key {
     "up" => "↑"
