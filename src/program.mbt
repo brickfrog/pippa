@@ -530,9 +530,8 @@ fn[Model, Msg] program_exit_sequence_with_modes(
     if alt_screen {
       buf.write_string(exit_alt_screen())
     }
-    if cursor_hidden {
-      buf.write_string(show_cursor())
-    }
+    ignore(cursor_hidden)
+    buf.write_string(terminal_view_reset_sequence())
   }
   buf.to_string()
 }
@@ -574,9 +573,6 @@ fn[Model, Msg] activate_terminal_with_modes(
 ///|
 #cfg(any(target="native", target="llvm"))
 fn[Model, Msg] deactivate_terminal(program : Program[Model, Msg]) -> Unit {
-  if program.rendering && program.read_stdin && program.mouse {
-    emit_output(program, disable_mouse())
-  }
   let exit_seq = program_exit_sequence(program)
   emit_output(program, exit_seq)
   if program.read_stdin {
@@ -593,9 +589,6 @@ fn[Model, Msg] deactivate_terminal_with_modes(
   focus_reporting : Bool,
   bracketed_paste : Bool,
 ) -> Unit {
-  if program.rendering && program.read_stdin && program.mouse {
-    emit_output(program, disable_mouse())
-  }
   let exit_seq = program_exit_sequence_with_modes(
     program, alt_screen, cursor_hidden, focus_reporting, bracketed_paste,
   )
@@ -751,6 +744,33 @@ priv struct RuntimeRenderState {
   last_render_ms : Int64
   render_due_at : Int64?
   force_full_repaint : Bool
+  view_terminal_state : RuntimeViewTerminalState
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+priv struct RuntimeViewTerminalState {
+  cursor_position : ViewCursorPosition?
+  cursor_visible : Bool?
+  window_title : String?
+  foreground_color : Color?
+  background_color : Color?
+  progress : ViewProgress?
+  mouse_mode : ViewMouseMode?
+} derive(Eq)
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_view_terminal_state_empty() -> RuntimeViewTerminalState {
+  {
+    cursor_position: None,
+    cursor_visible: None,
+    window_title: None,
+    foreground_color: None,
+    background_color: None,
+    progress: None,
+    mouse_mode: None,
+  }
 }
 
 ///|
@@ -784,6 +804,7 @@ fn[Model, Msg] initial_render_state(
     last_render_ms: 0L,
     render_due_at: None,
     force_full_repaint: false,
+    view_terminal_state: runtime_view_terminal_state_empty(),
   }
 }
 
@@ -889,6 +910,144 @@ fn[Model, Msg] apply_terminal_command(
     RuntimeSetBracketedPaste(enabled) => { ..state, bracketed_paste: enabled }
     _ => state
   }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn progress_value(value : Int?) -> Int {
+  match value {
+    Some(n) => n
+    None => 0
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn view_progress_sequence(progress : ViewProgress) -> String {
+  match progress {
+    ViewProgressNone => clear_terminal_progress()
+    ViewProgressIndeterminate => set_terminal_progress(3, 0)
+    ViewProgressPercent(value) => set_terminal_progress(1, value)
+    ViewProgressPaused(value) => set_terminal_progress(4, progress_value(value))
+    ViewProgressError(value) => set_terminal_progress(2, progress_value(value))
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn mouse_mode_transition(
+  previous : ViewMouseMode?,
+  next : ViewMouseMode?,
+) -> String {
+  match next {
+    None =>
+      match previous {
+        Some(ViewMousePress) | Some(ViewMouseAllMotion) => disable_mouse()
+        _ => ""
+      }
+    Some(ViewMouseOff) => disable_mouse()
+    Some(ViewMousePress) =>
+      match previous {
+        Some(ViewMouseAllMotion) => "\{CSI}?1003l" + enable_mouse()
+        _ => enable_mouse()
+      }
+    Some(ViewMouseAllMotion) =>
+      match previous {
+        Some(ViewMousePress) => "\{CSI}?1000l" + enable_mouse_motion()
+        _ => enable_mouse_motion()
+      }
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn view_terminal_state_from_view(view : View) -> RuntimeViewTerminalState {
+  {
+    cursor_position: view.cursor_position,
+    cursor_visible: view.cursor_visible,
+    window_title: view.window_title,
+    foreground_color: view.foreground_color,
+    background_color: view.background_color,
+    progress: view.progress,
+    mouse_mode: view.mouse_mode,
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn view_terminal_state_delta(
+  applied : RuntimeViewTerminalState,
+  view : View,
+) -> (String, String, RuntimeViewTerminalState) {
+  let next = view_terminal_state_from_view(view)
+  let prefix = StringBuilder::new()
+  let suffix = StringBuilder::new()
+  if next.window_title != applied.window_title {
+    match next.window_title {
+      Some(title) => prefix.write_string(set_window_title(title))
+      None =>
+        if applied.window_title is Some(_) {
+          prefix.write_string(clear_window_title())
+        }
+    }
+  }
+  if next.foreground_color != applied.foreground_color {
+    match next.foreground_color {
+      Some(color) => prefix.write_string(foreground_sequence(color))
+      None =>
+        if applied.foreground_color is Some(_) {
+          prefix.write_string(reset_foreground_color())
+        }
+    }
+  }
+  if next.background_color != applied.background_color {
+    match next.background_color {
+      Some(color) => prefix.write_string(background_sequence(color))
+      None =>
+        if applied.background_color is Some(_) {
+          prefix.write_string(reset_background_color())
+        }
+    }
+  }
+  if next.progress != applied.progress {
+    match next.progress {
+      Some(progress) => prefix.write_string(view_progress_sequence(progress))
+      None =>
+        if applied.progress is Some(_) {
+          prefix.write_string(clear_terminal_progress())
+        }
+    }
+  }
+  if next.mouse_mode != applied.mouse_mode {
+    prefix.write_string(
+      mouse_mode_transition(applied.mouse_mode, next.mouse_mode),
+    )
+  }
+  if next.cursor_visible != applied.cursor_visible {
+    match next.cursor_visible {
+      Some(true) => prefix.write_string(show_cursor())
+      Some(false) => prefix.write_string(hide_cursor())
+      None => ()
+    }
+  }
+  if next.cursor_position != applied.cursor_position {
+    match next.cursor_position {
+      Some(pos) => suffix.write_string(move_cursor(pos.row, pos.col))
+      None => ()
+    }
+  }
+  (prefix.to_string(), suffix.to_string(), next)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn terminal_view_reset_sequence() -> String {
+  show_cursor() +
+  clear_window_title() +
+  reset_foreground_color() +
+  reset_background_color() +
+  clear_terminal_progress() +
+  disable_mouse()
 }
 
 ///|
@@ -1268,6 +1427,7 @@ fn[Model, Msg] release_terminal_state(
       prev_line_count: 0,
       render_due_at: None,
       force_full_repaint: false,
+      view_terminal_state: runtime_view_terminal_state_empty(),
     }
   } else {
     state
@@ -1279,7 +1439,7 @@ fn[Model, Msg] release_terminal_state(
 fn[Model, Msg] restore_terminal_state(
   program : Program[Model, Msg],
   state : RuntimeRenderState,
-  current_view : String,
+  current_view : View,
 ) -> RuntimeRenderState {
   if !state.terminal_active {
     let mut next_state = state
@@ -1299,14 +1459,31 @@ fn[Model, Msg] restore_terminal_state(
     }
     next_state = { ..next_state, terminal_active: true }
     if program.rendering {
-      emit_output(program, render_full(current_view, 0))
+      let (
+        next_rendered,
+        next_line_count,
+        next_last_render_ms,
+        next_render_due_at,
+        next_view_terminal_state,
+      ) = flush_view(
+        program,
+        "",
+        current_view,
+        0,
+        runtime_view_terminal_state_empty(),
+        true,
+        0L,
+        true,
+        true,
+      )
       next_state = {
         ..next_state,
-        rendered: current_view,
-        prev_line_count: line_count(current_view),
-        last_render_ms: pippa_now_ms(),
-        render_due_at: None,
+        rendered: next_rendered,
+        prev_line_count: next_line_count,
+        last_render_ms: next_last_render_ms,
+        render_due_at: next_render_due_at,
         force_full_repaint: false,
+        view_terminal_state: next_view_terminal_state,
       }
     }
     next_state
@@ -1329,11 +1506,7 @@ fn[Model, Msg] drain_controls(
       Some(ReleaseTerminal) =>
         next_state = release_terminal_state(program, next_state)
       Some(RestoreTerminal) =>
-        next_state = restore_terminal_state(
-          program,
-          next_state,
-          current_view.content,
-        )
+        next_state = restore_terminal_state(program, next_state, current_view)
       None => ()
     }
   }
@@ -1363,33 +1536,78 @@ fn[Model, Msg] flush_view(
   rendered_view : String,
   next_view : View,
   prev_line_count : Int,
+  applied_terminal_state : RuntimeViewTerminalState,
   terminal_active : Bool,
   last_render_ms : Int64,
   force : Bool,
   full_repaint : Bool,
-) -> (String, Int, Int64, Int64?) {
+) -> (String, Int, Int64, Int64?, RuntimeViewTerminalState) {
   let next_content = next_view.content
-  if !program.rendering ||
-    !terminal_active ||
-    (!full_repaint && next_content == rendered_view) {
-    (rendered_view, prev_line_count, last_render_ms, None)
+  if !program.rendering || !terminal_active {
+    (
+      rendered_view,
+      prev_line_count,
+      last_render_ms,
+      None,
+      applied_terminal_state,
+    )
   } else {
+    let (terminal_prefix, terminal_suffix, next_terminal_state) = view_terminal_state_delta(
+      applied_terminal_state, next_view,
+    )
+    let terminal_changed = next_terminal_state != applied_terminal_state
+    let content_changed = full_repaint || next_content != rendered_view
+    if !content_changed && !terminal_changed {
+      return (
+        rendered_view,
+        prev_line_count,
+        last_render_ms,
+        None,
+        applied_terminal_state,
+      )
+    }
     let now = pippa_now_ms()
-    if force || now - last_render_ms >= render_interval_ms(program) {
-      let ops = diff_views(rendered_view, next_content)
-      let output = if full_repaint || ops.is_empty() {
-        render_full(next_content, prev_line_count)
+    if force ||
+      terminal_changed ||
+      now - last_render_ms >= render_interval_ms(program) {
+      let content_output = if content_changed {
+        let ops = diff_views(rendered_view, next_content)
+        if full_repaint || ops.is_empty() {
+          render_full(next_content, prev_line_count)
+        } else {
+          render_patch(ops)
+        }
       } else {
-        render_patch(ops)
+        ""
       }
+      let output = terminal_prefix + content_output + terminal_suffix
       emit_output(program, output)
-      (next_content, line_count(next_content), now, None)
+      (
+        if content_changed {
+          next_content
+        } else {
+          rendered_view
+        },
+        if content_changed {
+          line_count(next_content)
+        } else {
+          prev_line_count
+        },
+        if content_changed {
+          now
+        } else {
+          last_render_ms
+        },
+        None,
+        next_terminal_state,
+      )
     } else {
       (
         rendered_view,
         prev_line_count,
         last_render_ms,
         Some(last_render_ms + render_interval_ms(program)),
+        applied_terminal_state,
       )
     }
   }
@@ -1504,9 +1722,7 @@ fn[Model, Msg] drain_runtime(
                 current_state = release_terminal_state(program, current_state)
                 (program.suspend_runner)()
                 current_state = restore_terminal_state(
-                  program,
-                  current_state,
-                  current_view.content,
+                  program, current_state, current_view,
                 )
                 let (resume_model, resume_quit, resume_cmd, resume_updated) = apply_lifecycle_msg(
                   program,
@@ -1554,9 +1770,7 @@ fn[Model, Msg] drain_runtime(
           let exec_result = (program.exec_runner)(process)
           if was_active {
             current_state = restore_terminal_state(
-              program,
-              current_state,
-              current_view.content,
+              program, current_state, current_view,
             )
           }
           let (next_model, should_quit, cmd) = apply_msg(
@@ -1647,11 +1861,13 @@ fn[Model, Msg] run_internal(
     initial_line_count,
     initial_last_render_ms,
     initial_render_due_at,
+    initial_view_terminal_state,
   ) = flush_view(
     program,
     render_state.rendered,
     desired,
     render_state.prev_line_count,
+    render_state.view_terminal_state,
     render_state.terminal_active,
     render_state.last_render_ms,
     true,
@@ -1664,6 +1880,7 @@ fn[Model, Msg] run_internal(
     last_render_ms: initial_last_render_ms,
     render_due_at: initial_render_due_at,
     force_full_repaint: false,
+    view_terminal_state: initial_view_terminal_state,
   }
   on_start(handle)
 
@@ -1699,11 +1916,13 @@ fn[Model, Msg] run_internal(
         next_line_count,
         next_last_render_ms,
         next_render_due_at,
+        next_view_terminal_state,
       ) = flush_view(
         program,
         render_state.rendered,
         desired,
         render_state.prev_line_count,
+        render_state.view_terminal_state,
         render_state.terminal_active,
         render_state.last_render_ms,
         exit_reason is Some(_) || render_state.force_full_repaint,
@@ -1716,6 +1935,7 @@ fn[Model, Msg] run_internal(
         last_render_ms: next_last_render_ms,
         render_due_at: next_render_due_at,
         force_full_repaint: false,
+        view_terminal_state: next_view_terminal_state,
       }
     }
     if exit_reason is Some(_) {
@@ -1880,11 +2100,13 @@ fn[Model, Msg] run_internal(
         next_line_count,
         next_last_render_ms,
         next_render_due_at,
+        next_view_terminal_state,
       ) = flush_view(
         program,
         render_state.rendered,
         desired,
         render_state.prev_line_count,
+        render_state.view_terminal_state,
         render_state.terminal_active,
         render_state.last_render_ms,
         exit_reason is Some(_) || render_state.force_full_repaint,
@@ -1897,6 +2119,7 @@ fn[Model, Msg] run_internal(
         last_render_ms: next_last_render_ms,
         render_due_at: next_render_due_at,
         force_full_repaint: false,
+        view_terminal_state: next_view_terminal_state,
       }
     }
   }

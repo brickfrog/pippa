@@ -239,3 +239,44 @@ pub fn fg_rgb(r : Int, g : Int, b : Int) -> String {
 pub fn bg_rgb(r : Int, g : Int, b : Int) -> String {
   "\{CSI}48;2;\{r};\{g};\{b}m"
 }
+
+///|
+/// Reset the foreground color to the terminal default (CSI 39 m).
+pub fn reset_foreground_color() -> String {
+  "\{CSI}39m"
+}
+
+///|
+/// Reset the background color to the terminal default (CSI 49 m).
+pub fn reset_background_color() -> String {
+  "\{CSI}49m"
+}
+
+///|
+/// Set the terminal window title using OSC 2.
+pub fn set_window_title(title : String) -> String {
+  "\{OSC}2;\{title}\{ST}"
+}
+
+///|
+/// Clear the terminal window title using OSC 2 with an empty title.
+pub fn clear_window_title() -> String {
+  set_window_title("")
+}
+
+///|
+fn clamp_progress_value(value : Int) -> Int {
+  value.max(0).min(100)
+}
+
+///|
+/// Set terminal progress using the ConEmu / Windows Terminal OSC 9;4 protocol.
+pub fn set_terminal_progress(state : Int, value : Int) -> String {
+  "\{OSC}9;4;\{state};\{clamp_progress_value(value)}\{ST}"
+}
+
+///|
+/// Clear terminal progress using OSC 9;4 state 0.
+pub fn clear_terminal_progress() -> String {
+  set_terminal_progress(0, 0)
+}
