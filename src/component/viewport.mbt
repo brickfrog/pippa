@@ -221,13 +221,28 @@ fn viewport_selected_highlight(highlights : Array[ViewportHighlight]) -> Int {
 }
 
 ///|
-fn viewport_highlight_start_line(highlight : ViewportHighlight) -> Int {
-  highlight.start_line.min(highlight.end_line)
-}
-
-///|
-fn viewport_highlight_end_line(highlight : ViewportHighlight) -> Int {
-  highlight.start_line.max(highlight.end_line)
+fn viewport_highlight_forward_range(
+  highlight : ViewportHighlight,
+) -> (Int, Int, Int, Int) {
+  if highlight.start_line < highlight.end_line ||
+    (
+      highlight.start_line == highlight.end_line &&
+      highlight.start_col <= highlight.end_col
+    ) {
+    (
+      highlight.start_line,
+      highlight.start_col,
+      highlight.end_line,
+      highlight.end_col,
+    )
+  } else {
+    (
+      highlight.end_line,
+      highlight.end_col,
+      highlight.start_line,
+      highlight.start_col,
+    )
+  }
 }
 
 ///|
@@ -236,19 +251,20 @@ fn viewport_line_highlight_bounds(
   line_index : Int,
   line : String,
 ) -> (Int, Int)? {
-  let start_line = viewport_highlight_start_line(highlight)
-  let end_line = viewport_highlight_end_line(highlight)
-  if line_index < start_line || line_index > end_line {
+  let (first_line, first_col, last_line, last_col) = viewport_highlight_forward_range(
+    highlight,
+  )
+  if line_index < first_line || line_index > last_line {
     return None
   }
   let line_len = component_char_len(line)
-  let raw_start = if line_index == highlight.start_line {
-    highlight.start_col
+  let raw_start = if line_index == first_line {
+    first_col
   } else {
     0
   }
-  let raw_end = if line_index == highlight.end_line {
-    highlight.end_col
+  let raw_end = if line_index == last_line {
+    last_col
   } else {
     line_len
   }
@@ -380,12 +396,51 @@ fn viewport_gutter_width(model : ViewportModel, lines : Array[String]) -> Int {
     return 0
   }
   let mut width = 0
-  for line_index in 0..<lines.length().max(1) {
-    width = width.max(
-      @internal.display_width(viewport_gutter_text(model, line_index, 0, false)),
+  let mut previous = -1
+  while width != previous {
+    previous = width
+    width = viewport_gutter_width_for_content_width(
+      model,
+      lines,
+      (model.width - width).max(0),
     )
+  }
+  width.min(model.width)
+}
+
+///|
+fn viewport_gutter_width_for_content_width(
+  model : ViewportModel,
+  lines : Array[String],
+  content_width : Int,
+) -> Int {
+  if model.gutter is None || model.width <= 0 {
+    return 0
+  }
+  let mut width = 0
+  for line_index, line in lines {
+    let visual_rows = viewport_visual_rows_for_line(
+      line,
+      line_index,
+      content_width,
+      model.soft_wrap,
+    )
+    for visual in visual_rows {
+      width = width.max(
+        @internal.display_width(
+          viewport_gutter_text(
+            model,
+            visual.logical_line,
+            visual.visual_line,
+            visual.continuation,
+          ),
+        ),
+      )
+    }
+  }
+  if lines.length() == 0 {
     width = width.max(
-      @internal.display_width(viewport_gutter_text(model, line_index, 1, true)),
+      @internal.display_width(viewport_gutter_text(model, 0, 0, false)),
     )
   }
   width.min(model.width)
@@ -535,13 +590,14 @@ fn viewport_highlight_visual_row(
   rows : Array[ViewportVisualRow],
   highlight : ViewportHighlight,
 ) -> Int {
+  let (first_line, first_col, _, _) = viewport_highlight_forward_range(highlight)
   let line_index = viewport_clamp(
-    highlight.start_line,
+    first_line,
     0,
     lines.length().max(1) - 1,
   )
   let line = if line_index < lines.length() { lines[line_index] } else { "" }
-  let col = component_clamp_grapheme_boundary(line, highlight.start_col)
+  let col = component_clamp_grapheme_boundary(line, first_col)
   let cell = component_prefix_display_width(line, col)
   let mut fallback = 0
   for row_index, visual in rows {
@@ -589,14 +645,21 @@ fn viewport_scroll_highlight_into_view(model : ViewportModel) -> ViewportModel {
   }
   let mut x_offset = normalized.x_offset
   if !normalized.soft_wrap && content_width > 0 {
+    let (first_line, first_col, last_line, last_col) = viewport_highlight_forward_range(
+      highlight,
+    )
     let line_index = viewport_clamp(
-      highlight.start_line,
+      first_line,
       0,
       lines.length().max(1) - 1,
     )
     let line = if line_index < lines.length() { lines[line_index] } else { "" }
-    let start_col = component_clamp_grapheme_boundary(line, highlight.start_col)
-    let end_col = component_clamp_grapheme_boundary(line, highlight.end_col)
+    let start_col = component_clamp_grapheme_boundary(line, first_col)
+    let end_col = if first_line == last_line {
+      component_clamp_grapheme_boundary(line, last_col)
+    } else {
+      component_char_len(line)
+    }
     let start_cell = component_prefix_display_width(
       line,
       start_col.min(end_col),

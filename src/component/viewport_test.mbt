@@ -251,6 +251,25 @@ test "viewport gutter eats content width and renders line numbers" {
 }
 
 ///|
+test "viewport gutter measures all soft-wrapped visual rows" {
+  let vp = viewport(
+    width=6,
+    height=10,
+    soft_wrap=true,
+    gutter=Some(fn(ctx) { "\{ctx.visual_line + 1}|" }),
+  )
+  let mut m = (vp.init)().model
+  m = (vp.update)(
+      m,
+      SetContent("abcdefghijklmnopqrstuvwxyzabcdefghijklmn"),
+    ).model
+  assert_eq(
+    (vp.view)(m),
+    "1| abc\n2| def\n3| ghi\n4| jkl\n5| mno\n6| pqr\n7| stu\n8| vwx\n9| yza\n10|bcd",
+  )
+}
+
+///|
 test "viewport highlights render and next previous scroll selected range into view" {
   let vp = viewport(width=14, height=2, highlights=[
     viewport_highlight(line=1, start_col=4, end_col=7),
@@ -273,6 +292,24 @@ test "viewport highlights render and next previous scroll selected range into vi
   assert_eq(m.selected_highlight, 0)
   assert_eq(m.offset, 1)
   assert_eq((vp.view)(m), "one-\u001b[7mhit\u001b[0m!      \ntwo           ")
+}
+
+///|
+test "viewport reversed multi-line highlights normalize endpoint columns" {
+  let vp = viewport(width=8, height=4, highlights=[
+    viewport_highlight_range(
+      start_line=3,
+      start_col=4,
+      end_line=1,
+      end_col=2,
+    ),
+  ])
+  let mut m = (vp.init)().model
+  m = (vp.update)(m, SetContent("000000\nabcdef!\nuvwxyz\n123456!")).model
+  let view = (vp.view)(m)
+  assert_true(view.contains("ab\u001b[7mc"))
+  assert_true(view.contains("\u001b[7muvwxyz"))
+  assert_true(view.contains("\u001b[7m1234\u001b[0m56"))
 }
 
 ///|
