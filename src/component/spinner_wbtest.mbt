@@ -34,3 +34,17 @@ test "spinner stale timed tick is ignored after stop and restart" {
   assert_eq(current_result.model.current, 1)
   assert_true(!current_result.cmd.is_none())
 }
+
+///|
+test "spinner stale timed tick is ignored after reset" {
+  let s = spinner(preset=Line, interval_ms=10)
+  let initial = (s.init)().model
+  let started = (s.update)(initial, Start)
+  let stale = spinner_current_tick_token(started.model)
+  let reset = (s.update)(started.model, Reset)
+  assert_eq(reset.model.current, 0)
+  let stale_result = (s.update)(reset.model, TimedTick(stale))
+  assert_eq(stale_result.model.current, reset.model.current)
+  assert_true(stale_result.cmd.is_none())
+  assert_false(reset.model.running)
+}

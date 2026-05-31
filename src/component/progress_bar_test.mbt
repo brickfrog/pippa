@@ -167,21 +167,50 @@ test "view applies solid palette to filled cells" {
 }
 
 ///|
-test "view scaled mode spreads gradient across visible fill" {
+test "view renders exact unscaled gradient output" {
   let comp = progress_bar(
     width=4,
-    show_percentage=false,
+    show_percentage=true,
     fill_char="#",
     empty_char="-",
     blend_start=(0, 0, 0),
     blend_end=(100, 0, 0),
+    empty_color=(9, 9, 9),
+    percentage_format=fn(_pct) { "half" },
+    percentage_style=fn(text) { "[" + text + "]" },
+  )
+  let { model, .. } = (comp.init)()
+  let m1 = { ..model, displayed_percent: 0.5, target_percent: 0.5 }
+  assert_eq(
+    (comp.view)(m1),
+    "\u001b[38;2;0;0;0m\u001b[48;2;12;0;0m#\u001b[0m" +
+    "\u001b[38;2;25;0;0m\u001b[48;2;37;0;0m#\u001b[0m" +
+    "\u001b[38;2;9;9;9m--\u001b[0m [half]",
+  )
+}
+
+///|
+test "view renders exact scaled gradient output" {
+  let comp = progress_bar(
+    width=4,
+    show_percentage=true,
+    fill_char="#",
+    empty_char="-",
+    blend_start=(0, 0, 0),
+    blend_end=(100, 0, 0),
+    empty_color=(9, 9, 9),
+    percentage_format=fn(_pct) { "half" },
+    percentage_style=fn(text) { "[" + text + "]" },
     scaled=true,
   )
   let { model, .. } = (comp.init)()
   let m1 = { ..model, displayed_percent: 0.5, target_percent: 0.5 }
-  let view = (comp.view)(m1)
-  assert_true(view.contains("\u001b[38;2;50;0;0m"))
-  assert_false(view.contains("\u001b[38;2;25;0;0m"))
+  assert_eq(
+    (comp.view)(m1),
+    "\u001b[38;2;0;0;0m\u001b[48;2;25;0;0m#\u001b[0m" +
+    "\u001b[38;2;50;0;0m\u001b[48;2;75;0;0m#\u001b[0m" +
+    "\u001b[38;2;9;9;9m--\u001b[0m [half]",
+  )
 }
 
 ///|

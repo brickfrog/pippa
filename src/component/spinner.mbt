@@ -140,6 +140,8 @@ pub fn spinner_preset_interval_ms(preset : SpinnerPreset) -> Int {
     Line | Dot | Jump => 100
     MiniDot => 83
     Pulse | Moon => 125
+    // Keep the Bubbles-style literal frame interval instead of deriving this
+    // from rounded 7 FPS, which would be 143 ms.
     Points | Meter => 142
     Globe => 250
     Monkey | Hamburger | Ellipsis => 333
