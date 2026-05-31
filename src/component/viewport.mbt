@@ -2,41 +2,1010 @@
 /// Viewport component — a scrollable window over a larger body of text.
 
 ///|
+/// Context passed to a viewport gutter callback.
+pub(all) struct ViewportGutterContext {
+  /// 0-based logical content line.
+  logical_line : Int
+  /// 0-based visual row within that logical line.
+  visual_line : Int
+  /// Whether this row is a continuation produced by soft wrapping.
+  continuation : Bool
+}
+
+///|
+/// Highlight range in logical content coordinates.
+///
+/// Columns are display-cell offsets and are clamped to grapheme boundaries before
+/// rendering so highlight styling never splits a cluster.
+pub(all) struct ViewportHighlight {
+  start_line : Int
+  start_col : Int
+  end_line : Int
+  end_col : Int
+  style : @pippa.Style?
+  selected_style : @pippa.Style?
+} derive(Debug, Eq)
+
+///|
 /// Model for the Viewport component.
 ///
 /// - `content`: the full body of text to be displayed
 /// - `width`: the visible width of the viewport
-/// - `height`: the visible height (number of lines) of the viewport
-/// - `offset`: the index of the first visible line (0-based)
-/// - `total_lines`: pre-calculated count of total lines in content
+/// - `height`: the visible height (number of rows) of the viewport
+/// - `offset`: the index of the first visible row (0-based)
+/// - `x_offset`: the first visible display cell in horizontal-scroll mode
+/// - `total_lines`: pre-calculated count of logical lines in content
 pub(all) struct ViewportModel {
   content : String
   width : Int
   height : Int
   offset : Int
+  x_offset : Int
   total_lines : Int
-} derive(Debug)
+  horizontal_step : Int
+  soft_wrap : Bool
+  fill_height : Bool
+  mouse_wheel_enabled : Bool
+  mouse_wheel_delta : Int
+  gutter : ((ViewportGutterContext) -> String)?
+  highlights : Array[ViewportHighlight]
+  selected_highlight : Int
+  content_style : @pippa.Style?
+  line_style : @pippa.Style?
+}
+
+///|
+pub impl Debug for ViewportModel with fn to_repr(self) {
+  let buf = StringBuilder::new()
+  buf.write_string("ViewportModel(")
+  buf.write_string("width=")
+  buf.write_string(self.width.to_string())
+  buf.write_string(", height=")
+  buf.write_string(self.height.to_string())
+  buf.write_string(", offset=")
+  buf.write_string(self.offset.to_string())
+  buf.write_string(", x_offset=")
+  buf.write_string(self.x_offset.to_string())
+  buf.write_string(", total_lines=")
+  buf.write_string(self.total_lines.to_string())
+  buf.write_string(", soft_wrap=")
+  buf.write_string(self.soft_wrap.to_string())
+  buf.write_string(", fill_height=")
+  buf.write_string(self.fill_height.to_string())
+  buf.write_string(", highlights=")
+  buf.write_string(self.highlights.length().to_string())
+  buf.write_string(", selected_highlight=")
+  buf.write_string(self.selected_highlight.to_string())
+  buf.write_string(")")
+  Repr::literal(buf.to_string())
+}
 
 ///|
 /// Messages handled by the Viewport component.
 pub(all) enum ViewportMsg {
-  /// Scroll up one line.
+  /// Scroll up one row.
   ScrollUp
-  /// Scroll down one line.
+  /// Scroll down one row.
   ScrollDown
-  /// Scroll up one full page (height lines).
+  /// Scroll left by the configured horizontal step.
+  ScrollLeft
+  /// Scroll right by the configured horizontal step.
+  ScrollRight
+  /// Scroll up one full page (height rows).
   PageUp
-  /// Scroll down one full page (height lines).
+  /// Scroll down one full page (height rows).
   PageDown
-  /// Scroll directly to the first line.
+  /// Scroll directly to the first row.
   ScrollToTop
-  /// Scroll directly to the last possible line.
+  /// Scroll directly to the last possible row.
   ScrollToBottom
-  /// Replace the current content and reset the offset to 0.
+  /// Replace the current content and reset offsets to 0.
   SetContent(String)
-  /// Update the viewport dimensions and re-clamp the offset.
+  /// Update the viewport dimensions and re-clamp offsets.
   Resize(Int, Int)
+  /// Set the horizontal offset directly.
+  SetXOffset(Int)
+  /// Set the horizontal scroll step.
+  SetHorizontalStep(Int)
+  /// Toggle soft wrapping. Soft wrapping disables horizontal scroll.
+  SetSoftWrap(Bool)
+  /// Toggle padding rendered rows to the full viewport height.
+  SetFillHeight(Bool)
+  /// Handle an input mouse event, scrolling only for wheel events.
+  HandleMouse(@pippa.MouseMsg)
+  /// Toggle mouse wheel handling.
+  SetMouseWheelEnabled(Bool)
+  /// Set the row delta used for vertical mouse wheel events.
+  SetMouseWheelDelta(Int)
+  /// Replace highlight ranges.
+  SetHighlights(Array[ViewportHighlight])
+  /// Select the next highlight and scroll it into view.
+  NextHighlight
+  /// Select the previous highlight and scroll it into view.
+  PreviousHighlight
+  /// Set the optional content-area style hook.
+  SetContentStyle(@pippa.Style?)
+  /// Set the optional full-line style hook.
+  SetLineStyle(@pippa.Style?)
 } derive(Debug)
+
+///|
+priv struct ViewportVisualRow {
+  logical_line : Int
+  start_cell : Int
+  width : Int
+  continuation : Bool
+  visual_line : Int
+}
+
+///|
+pub fn viewport_highlight_range(
+  start_line~ : Int,
+  start_col~ : Int,
+  end_line~ : Int,
+  end_col~ : Int,
+  style? : @pippa.Style? = None,
+  selected_style? : @pippa.Style? = None,
+) -> ViewportHighlight {
+  { start_line, start_col, end_line, end_col, style, selected_style }
+}
+
+///|
+pub fn viewport_highlight(
+  line~ : Int,
+  start_col~ : Int,
+  end_col~ : Int,
+  style? : @pippa.Style? = None,
+  selected_style? : @pippa.Style? = None,
+) -> ViewportHighlight {
+  viewport_highlight_range(
+    start_line=line,
+    start_col~,
+    end_line=line,
+    end_col~,
+    style~,
+    selected_style~,
+  )
+}
+
+///|
+fn viewport_clamp(value : Int, lo : Int, hi : Int) -> Int {
+  if value < lo {
+    lo
+  } else if value > hi {
+    hi
+  } else {
+    value
+  }
+}
+
+///|
+fn viewport_safe_dimension(value : Int) -> Int {
+  if value > 0 {
+    value
+  } else {
+    0
+  }
+}
+
+///|
+fn viewport_safe_step(value : Int) -> Int {
+  if value > 0 {
+    value
+  } else {
+    1
+  }
+}
+
+///|
+fn viewport_safe_delta(value : Int) -> Int {
+  if value > 0 {
+    value
+  } else {
+    1
+  }
+}
+
+///|
+fn viewport_lines(model : ViewportModel) -> Array[String] {
+  @pippa.split_lines(model.content)
+}
+
+///|
+fn viewport_selected_highlight(highlights : Array[ViewportHighlight]) -> Int {
+  if highlights.length() == 0 {
+    -1
+  } else {
+    0
+  }
+}
+
+///|
+fn viewport_highlight_forward_range(
+  highlight : ViewportHighlight,
+) -> (Int, Int, Int, Int) {
+  if highlight.start_line < highlight.end_line ||
+    (
+      highlight.start_line == highlight.end_line &&
+      highlight.start_col <= highlight.end_col
+    ) {
+    (
+      highlight.start_line,
+      highlight.start_col,
+      highlight.end_line,
+      highlight.end_col,
+    )
+  } else {
+    (
+      highlight.end_line,
+      highlight.end_col,
+      highlight.start_line,
+      highlight.start_col,
+    )
+  }
+}
+
+///|
+fn viewport_line_highlight_cell_bounds(
+  highlight : ViewportHighlight,
+  line_index : Int,
+  line : String,
+) -> (Int, Int)? {
+  let (first_line, first_col, last_line, last_col) = viewport_highlight_forward_range(
+    highlight,
+  )
+  if line_index < first_line || line_index > last_line {
+    return None
+  }
+  let line_width = @internal.display_width(line)
+  let raw_start = if line_index == first_line { first_col } else { 0 }
+  let raw_end = if line_index == last_line { last_col } else { line_width }
+  let start = raw_start.max(0).min(line_width)
+  let end_ = raw_end.max(0).min(line_width)
+  let from = start.min(end_).max(0).min(line_width)
+  let to = start.max(end_).max(from).min(line_width)
+  if to <= from {
+    None
+  } else {
+    Some((from, to))
+  }
+}
+
+///|
+fn viewport_highlight_style(
+  highlight : ViewportHighlight,
+  selected : Bool,
+) -> @pippa.Style {
+  if selected {
+    match highlight.selected_style {
+      Some(style) => style
+      None =>
+        match highlight.style {
+          Some(style) => style
+          None => @pippa.style().reverse()
+        }
+    }
+  } else {
+    match highlight.style {
+      Some(style) => style
+      None => @pippa.style().reverse()
+    }
+  }
+}
+
+///|
+fn viewport_next_highlight_start(
+  model : ViewportModel,
+  line_index : Int,
+  line : String,
+  cursor : Int,
+) -> (Int, Int, Int)? {
+  let mut best_index = -1
+  let mut best_start = @internal.display_width(line) + 1
+  let mut best_end = best_start
+  for i, highlight in model.highlights {
+    match viewport_line_highlight_cell_bounds(highlight, line_index, line) {
+      Some((start, end_)) =>
+        if end_ > cursor && start < best_start {
+          best_index = i
+          best_start = start.max(cursor)
+          best_end = end_
+        }
+      None => ()
+    }
+  }
+  if best_index < 0 {
+    None
+  } else {
+    Some((best_index, best_start, best_end))
+  }
+}
+
+///|
+fn viewport_char_for_cell(line : String, cell : Int) -> Int {
+  component_cell_to_grapheme_boundary(line, cell)
+}
+
+///|
+fn viewport_original_cell_slice(
+  line : String,
+  start_cell : Int,
+  end_cell : Int,
+) -> String {
+  let start = viewport_char_for_cell(line, start_cell)
+  let end_ = viewport_char_for_cell(line, end_cell)
+  component_char_slice(line, start, end_)
+}
+
+///|
+fn viewport_sgr_state_after_cell_range(
+  chars : Array[Char],
+  line : String,
+  start_cell : Int,
+  end_cell : Int,
+  state : String,
+) -> String {
+  let start = viewport_char_for_cell(line, start_cell)
+  let end_ = viewport_char_for_cell(line, end_cell)
+  component_sgr_state_after_range(chars, start, end_, state)
+}
+
+///|
+fn viewport_apply_highlights(
+  model : ViewportModel,
+  line_index : Int,
+  line : String,
+) -> String {
+  if model.highlights.length() == 0 {
+    return line
+  }
+  let line_width = @internal.display_width(line)
+  let chars = line.to_array()
+  let buf = StringBuilder::new(size_hint=line.to_array().length() + 16)
+  let mut cursor = 0
+  let mut active_style = ""
+  while cursor < line_width {
+    match viewport_next_highlight_start(model, line_index, line, cursor) {
+      Some((highlight_index, start, end_)) => {
+        if start > cursor {
+          buf.write_string(viewport_original_cell_slice(line, cursor, start))
+          active_style = viewport_sgr_state_after_cell_range(
+            chars, line, cursor, start, active_style,
+          )
+        }
+        let segment = viewport_original_cell_slice(line, start, end_)
+        let selected = highlight_index == model.selected_highlight
+        buf.write_string(
+          viewport_highlight_style(model.highlights[highlight_index], selected).render(
+            segment,
+          ),
+        )
+        active_style = viewport_sgr_state_after_cell_range(
+          chars, line, start, end_, active_style,
+        )
+        if active_style != "" {
+          buf.write_string(active_style)
+        }
+        cursor = end_
+      }
+      None => {
+        buf.write_string(viewport_original_cell_slice(line, cursor, line_width))
+        active_style = viewport_sgr_state_after_cell_range(
+          chars, line, cursor, line_width, active_style,
+        )
+        cursor = line_width
+      }
+    }
+  }
+  if line_width == 0 {
+    match viewport_next_highlight_start(model, line_index, line, 0) {
+      Some((highlight_index, _, _)) => {
+        let selected = highlight_index == model.selected_highlight
+        return viewport_highlight_style(
+          model.highlights[highlight_index],
+          selected,
+        ).render("")
+      }
+      None => ()
+    }
+  }
+  buf.to_string()
+}
+
+///|
+fn viewport_gutter_text(
+  model : ViewportModel,
+  logical_line : Int,
+  visual_line : Int,
+  continuation : Bool,
+) -> String {
+  match model.gutter {
+    Some(gutter) => gutter({ logical_line, visual_line, continuation })
+    None => ""
+  }
+}
+
+///|
+fn viewport_gutter_width(model : ViewportModel, lines : Array[String]) -> Int {
+  if model.gutter is None || model.width <= 0 {
+    return 0
+  }
+  let mut width = 0
+  let mut previous = -1
+  let mut attempts = 0
+  while width != previous && attempts <= model.width.max(0) + 1 {
+    previous = width
+    width = viewport_gutter_width_for_content_width(
+      model,
+      lines,
+      (model.width - width).max(0),
+    )
+    if width < previous {
+      width = previous
+    }
+    attempts = attempts + 1
+  }
+  width.min(model.width)
+}
+
+///|
+fn viewport_gutter_width_for_content_width(
+  model : ViewportModel,
+  lines : Array[String],
+  content_width : Int,
+) -> Int {
+  if model.gutter is None || model.width <= 0 {
+    return 0
+  }
+  let mut width = 0
+  for line_index, line in lines {
+    let visual_rows = viewport_visual_rows_for_line(
+      line,
+      line_index,
+      content_width,
+      model.soft_wrap,
+    )
+    for visual in visual_rows {
+      width = width.max(
+        @internal.display_width(
+          viewport_gutter_text(
+            model,
+            visual.logical_line,
+            visual.visual_line,
+            visual.continuation,
+          ),
+        ),
+      )
+    }
+  }
+  if lines.length() == 0 {
+    width = width.max(
+      @internal.display_width(viewport_gutter_text(model, 0, 0, false)),
+    )
+  }
+  width.min(model.width)
+}
+
+///|
+fn viewport_content_width(model : ViewportModel, lines : Array[String]) -> Int {
+  if model.width <= 0 {
+    0
+  } else {
+    (model.width - viewport_gutter_width(model, lines)).max(0)
+  }
+}
+
+///|
+fn viewport_visual_rows_for_line(
+  line : String,
+  logical_line : Int,
+  content_width : Int,
+  soft_wrap : Bool,
+) -> Array[ViewportVisualRow] {
+  let rows : Array[ViewportVisualRow] = []
+  if !soft_wrap {
+    rows.push({
+      logical_line,
+      start_cell: 0,
+      width: @internal.display_width(line),
+      continuation: false,
+      visual_line: 0,
+    })
+    return rows
+  }
+  let text_rows = textarea_visual_rows_for_line(
+    line, logical_line, content_width,
+  )
+  for visual_index, visual in text_rows {
+    rows.push({
+      logical_line,
+      start_cell: visual.start_cell,
+      width: visual.width,
+      continuation: visual.continuation,
+      visual_line: visual_index,
+    })
+  }
+  rows
+}
+
+///|
+fn viewport_visual_rows(
+  model : ViewportModel,
+  lines : Array[String],
+  content_width : Int,
+) -> Array[ViewportVisualRow] {
+  let rows : Array[ViewportVisualRow] = []
+  for line_index, line in lines {
+    let line_rows = viewport_visual_rows_for_line(
+      line,
+      line_index,
+      content_width,
+      model.soft_wrap,
+    )
+    for row in line_rows {
+      rows.push(row)
+    }
+  }
+  if rows.length() == 0 {
+    rows.push({
+      logical_line: 0,
+      start_cell: 0,
+      width: 0,
+      continuation: false,
+      visual_line: 0,
+    })
+  }
+  rows
+}
+
+///|
+fn viewport_total_rows(model : ViewportModel) -> Int {
+  let lines = viewport_lines(model)
+  let content_width = viewport_content_width(model, lines)
+  viewport_visual_rows(model, lines, content_width).length().max(1)
+}
+
+///|
+fn viewport_max_offset(model : ViewportModel) -> Int {
+  (viewport_total_rows(model) - model.height.max(0)).max(0)
+}
+
+///|
+fn viewport_max_x_offset(model : ViewportModel) -> Int {
+  if model.soft_wrap {
+    return 0
+  }
+  let lines = viewport_lines(model)
+  let content_width = viewport_content_width(model, lines)
+  let mut max_width = 0
+  for line in lines {
+    max_width = max_width.max(@internal.display_width(line))
+  }
+  (max_width - content_width).max(0)
+}
+
+///|
+fn viewport_normalize(model : ViewportModel) -> ViewportModel {
+  let selected_highlight = if model.highlights.length() == 0 {
+    -1
+  } else {
+    viewport_clamp(
+      model.selected_highlight.max(0),
+      0,
+      model.highlights.length() - 1,
+    )
+  }
+  let base = {
+    ..model,
+    width: viewport_safe_dimension(model.width),
+    height: viewport_safe_dimension(model.height),
+    horizontal_step: viewport_safe_step(model.horizontal_step),
+    mouse_wheel_delta: viewport_safe_delta(model.mouse_wheel_delta),
+    x_offset: if model.soft_wrap {
+      0
+    } else {
+      model.x_offset.max(0)
+    },
+    offset: model.offset.max(0),
+    selected_highlight,
+    total_lines: @pippa.line_count(model.content),
+  }
+  let max_offset = viewport_max_offset(base)
+  let max_x_offset = viewport_max_x_offset(base)
+  {
+    ..base,
+    offset: viewport_clamp(base.offset, 0, max_offset),
+    x_offset: if base.soft_wrap {
+      0
+    } else {
+      viewport_clamp(base.x_offset, 0, max_x_offset)
+    },
+  }
+}
+
+///|
+fn viewport_highlight_visual_row(
+  model : ViewportModel,
+  lines : Array[String],
+  rows : Array[ViewportVisualRow],
+  highlight : ViewportHighlight,
+) -> Int {
+  let (first_line, first_col, _, _) = viewport_highlight_forward_range(
+    highlight,
+  )
+  let line_index = viewport_clamp(first_line, 0, lines.length().max(1) - 1)
+  let line_width = if line_index < lines.length() {
+    @internal.display_width(lines[line_index])
+  } else {
+    0
+  }
+  let cell = first_col.max(0).min(line_width)
+  let mut fallback = 0
+  for row_index, visual in rows {
+    if visual.logical_line == line_index {
+      fallback = row_index
+      if !model.soft_wrap {
+        return row_index
+      }
+      let final_row = row_index + 1 >= rows.length() ||
+        rows[row_index + 1].logical_line != line_index
+      if final_row {
+        if cell >= visual.start_cell {
+          return row_index
+        }
+      } else if cell >= visual.start_cell &&
+        cell < visual.start_cell + visual.width.max(1) {
+        return row_index
+      }
+    }
+  }
+  fallback
+}
+
+///|
+fn viewport_scroll_highlight_into_view(model : ViewportModel) -> ViewportModel {
+  if model.selected_highlight < 0 ||
+    model.selected_highlight >= model.highlights.length() {
+    return viewport_normalize(model)
+  }
+  let normalized = viewport_normalize(model)
+  let highlight = normalized.highlights[normalized.selected_highlight]
+  let lines = viewport_lines(normalized)
+  let content_width = viewport_content_width(normalized, lines)
+  let rows = viewport_visual_rows(normalized, lines, content_width)
+  let visual_index = viewport_highlight_visual_row(
+    normalized, lines, rows, highlight,
+  )
+  let mut offset = normalized.offset
+  if normalized.height > 0 {
+    if visual_index < offset {
+      offset = visual_index
+    } else if visual_index >= offset + normalized.height {
+      offset = visual_index - normalized.height + 1
+    }
+  }
+  let mut x_offset = normalized.x_offset
+  if !normalized.soft_wrap && content_width > 0 {
+    let (first_line, first_col, last_line, last_col) = viewport_highlight_forward_range(
+      highlight,
+    )
+    let line_index = viewport_clamp(first_line, 0, lines.length().max(1) - 1)
+    let line_width = if line_index < lines.length() {
+      @internal.display_width(lines[line_index])
+    } else {
+      0
+    }
+    let start_cell = first_col.max(0).min(line_width)
+    let end_cell = if first_line == last_line {
+      last_col.max(0).min(line_width)
+    } else {
+      line_width
+    }
+    if start_cell < x_offset {
+      x_offset = start_cell
+    } else if end_cell > x_offset + content_width {
+      if end_cell - start_cell > content_width {
+        x_offset = start_cell
+      } else {
+        x_offset = (end_cell - content_width).max(start_cell)
+      }
+    }
+  }
+  viewport_normalize({ ..normalized, offset, x_offset })
+}
+
+///|
+fn viewport_apply_style(style : @pippa.Style?, content : String) -> String {
+  match style {
+    Some(s) => s.render(content)
+    None => content
+  }
+}
+
+///|
+fn viewport_render_blank_row(
+  model : ViewportModel,
+  gutter_width : Int,
+  content_width : Int,
+) -> String {
+  let gutter = if gutter_width > 0 {
+    component_fit_width("", gutter_width)
+  } else {
+    ""
+  }
+  let content = viewport_apply_style(
+    model.content_style,
+    component_fit_width("", content_width),
+  )
+  viewport_apply_style(
+    model.line_style,
+    component_fit_width(gutter + content, model.width),
+  )
+}
+
+///|
+fn viewport_render_visual_row(
+  model : ViewportModel,
+  lines : Array[String],
+  visual : ViewportVisualRow,
+  gutter_width : Int,
+  content_width : Int,
+) -> String {
+  let raw_line = if visual.logical_line < lines.length() {
+    lines[visual.logical_line]
+  } else {
+    ""
+  }
+  let highlighted = viewport_apply_highlights(
+    model,
+    visual.logical_line,
+    raw_line,
+  )
+  let start_cell = if model.soft_wrap {
+    visual.start_cell
+  } else {
+    model.x_offset
+  }
+  let visible = component_visible_cell_slice(
+    highlighted, start_cell, content_width,
+  )
+  let content = viewport_apply_style(
+    model.content_style,
+    component_fit_width(visible, content_width),
+  )
+  let gutter = if gutter_width > 0 {
+    component_fit_width(
+      viewport_gutter_text(
+        model,
+        visual.logical_line,
+        visual.visual_line,
+        visual.continuation,
+      ),
+      gutter_width,
+    )
+  } else {
+    ""
+  }
+  viewport_apply_style(
+    model.line_style,
+    component_fit_width(gutter + content, model.width),
+  )
+}
+
+///|
+fn viewport_update(
+  model : ViewportModel,
+  msg : ViewportMsg,
+) -> @pippa.UpdateResult[ViewportModel, ViewportMsg] {
+  let next = match msg {
+    SetContent(content) =>
+      viewport_normalize({
+        ..model,
+        content,
+        offset: 0,
+        x_offset: 0,
+        total_lines: @pippa.line_count(content),
+      })
+    Resize(width, height) => viewport_normalize({ ..model, width, height })
+    ScrollUp => viewport_normalize({ ..model, offset: model.offset - 1 })
+    ScrollDown => viewport_normalize({ ..model, offset: model.offset + 1 })
+    ScrollLeft =>
+      viewport_normalize({
+        ..model,
+        x_offset: model.x_offset - model.horizontal_step,
+      })
+    ScrollRight =>
+      viewport_normalize({
+        ..model,
+        x_offset: model.x_offset + model.horizontal_step,
+      })
+    PageUp =>
+      viewport_normalize({ ..model, offset: model.offset - model.height })
+    PageDown =>
+      viewport_normalize({ ..model, offset: model.offset + model.height })
+    ScrollToTop => viewport_normalize({ ..model, offset: 0 })
+    ScrollToBottom => {
+      let normalized = viewport_normalize(model)
+      viewport_normalize({
+        ..normalized,
+        offset: viewport_max_offset(normalized),
+      })
+    }
+    SetXOffset(x_offset) => viewport_normalize({ ..model, x_offset, })
+    SetHorizontalStep(step) =>
+      viewport_normalize({ ..model, horizontal_step: step })
+    SetSoftWrap(soft_wrap) =>
+      viewport_normalize({
+        ..model,
+        soft_wrap,
+        x_offset: if soft_wrap {
+          0
+        } else {
+          model.x_offset
+        },
+      })
+    SetFillHeight(fill_height) => viewport_normalize({ ..model, fill_height, })
+    HandleMouse(mouse) =>
+      if !model.mouse_wheel_enabled || mouse.action != @pippa.MouseWheel {
+        viewport_normalize(model)
+      } else {
+        match mouse.button {
+          @pippa.MouseWheelUp =>
+            viewport_normalize({
+              ..model,
+              offset: model.offset - model.mouse_wheel_delta,
+            })
+          @pippa.MouseWheelDown =>
+            viewport_normalize({
+              ..model,
+              offset: model.offset + model.mouse_wheel_delta,
+            })
+          @pippa.MouseWheelLeft =>
+            viewport_normalize({
+              ..model,
+              x_offset: model.x_offset - model.horizontal_step,
+            })
+          @pippa.MouseWheelRight =>
+            viewport_normalize({
+              ..model,
+              x_offset: model.x_offset + model.horizontal_step,
+            })
+          _ => viewport_normalize(model)
+        }
+      }
+    SetMouseWheelEnabled(mouse_wheel_enabled) =>
+      viewport_normalize({ ..model, mouse_wheel_enabled, })
+    SetMouseWheelDelta(mouse_wheel_delta) =>
+      viewport_normalize({ ..model, mouse_wheel_delta, })
+    SetHighlights(highlights) =>
+      viewport_scroll_highlight_into_view({
+        ..model,
+        highlights,
+        selected_highlight: viewport_selected_highlight(highlights),
+      })
+    NextHighlight =>
+      if model.highlights.length() == 0 {
+        viewport_normalize(model)
+      } else {
+        let next_selected = if model.selected_highlight < 0 {
+          0
+        } else {
+          (model.selected_highlight + 1) % model.highlights.length()
+        }
+        viewport_scroll_highlight_into_view({
+          ..model,
+          selected_highlight: next_selected,
+        })
+      }
+    PreviousHighlight =>
+      if model.highlights.length() == 0 {
+        viewport_normalize(model)
+      } else {
+        let next_selected = if model.selected_highlight <= 0 {
+          model.highlights.length() - 1
+        } else {
+          model.selected_highlight - 1
+        }
+        viewport_scroll_highlight_into_view({
+          ..model,
+          selected_highlight: next_selected,
+        })
+      }
+    SetContentStyle(content_style) =>
+      viewport_normalize({ ..model, content_style, })
+    SetLineStyle(line_style) => viewport_normalize({ ..model, line_style, })
+  }
+
+  @pippa.UpdateResult::new(model=next, cmd=@pippa.Cmd::none())
+}
+
+///|
+fn viewport_view(model : ViewportModel) -> String {
+  let normalized = viewport_normalize(model)
+  if normalized.height <= 0 {
+    return ""
+  }
+  let lines = viewport_lines(normalized)
+  let gutter_width = viewport_gutter_width(normalized, lines)
+  let content_width = viewport_content_width(normalized, lines)
+  let visual_rows = viewport_visual_rows(normalized, lines, content_width)
+  let available = (visual_rows.length() - normalized.offset).max(0)
+  let row_count = if normalized.fill_height {
+    normalized.height
+  } else {
+    normalized.height.min(available)
+  }
+  let rows : Array[String] = []
+  for i in 0..<row_count {
+    let row_index = normalized.offset + i
+    if row_index < visual_rows.length() {
+      rows.push(
+        viewport_render_visual_row(
+          normalized,
+          lines,
+          visual_rows[row_index],
+          gutter_width,
+          content_width,
+        ),
+      )
+    } else {
+      rows.push(
+        viewport_render_blank_row(normalized, gutter_width, content_width),
+      )
+    }
+  }
+  rows.join("\n")
+}
+
+///|
+pub fn viewport_scroll_percent(model : ViewportModel) -> Double {
+  let max_offset = viewport_max_offset(model)
+  if max_offset <= 0 {
+    1.0
+  } else {
+    model.offset.max(0).min(max_offset).to_double() / max_offset.to_double()
+  }
+}
+
+///|
+pub fn viewport_at_top(model : ViewportModel) -> Bool {
+  model.offset <= 0
+}
+
+///|
+pub fn viewport_at_bottom(model : ViewportModel) -> Bool {
+  model.offset >= viewport_max_offset(model)
+}
+
+///|
+pub fn viewport_past_bottom(model : ViewportModel) -> Bool {
+  model.offset > viewport_max_offset(model)
+}
+
+///|
+pub fn viewport_horizontal_scroll_percent(model : ViewportModel) -> Double {
+  let max_offset = viewport_max_x_offset(model)
+  if max_offset <= 0 {
+    1.0
+  } else {
+    model.x_offset.max(0).min(max_offset).to_double() / max_offset.to_double()
+  }
+}
+
+///|
+pub fn viewport_at_left(model : ViewportModel) -> Bool {
+  model.x_offset <= 0
+}
+
+///|
+pub fn viewport_at_right(model : ViewportModel) -> Bool {
+  model.x_offset >= viewport_max_x_offset(model)
+}
+
+///|
+pub fn viewport_past_right(model : ViewportModel) -> Bool {
+  model.x_offset > viewport_max_x_offset(model)
+}
 
 ///|
 /// Construct a Viewport `Component`.
@@ -48,94 +1017,41 @@ pub(all) enum ViewportMsg {
 pub fn viewport(
   width~ : Int,
   height~ : Int,
+  horizontal_step? : Int = 1,
+  soft_wrap? : Bool = false,
+  fill_height? : Bool = true,
+  mouse_wheel_enabled? : Bool = true,
+  mouse_wheel_delta? : Int = 3,
+  gutter? : ((ViewportGutterContext) -> String)? = None,
+  highlights? : Array[ViewportHighlight] = [],
+  content_style? : @pippa.Style? = None,
+  line_style? : @pippa.Style? = None,
 ) -> Component[ViewportModel, ViewportMsg] {
   {
     init: fn() {
       @pippa.UpdateResult::new(
-        model={
+        model=viewport_normalize({
           content: "",
-          width: if width > 0 {
-            width
-          } else {
-            0
-          },
-          height: if height > 0 {
-            height
-          } else {
-            0
-          },
+          width,
+          height,
           offset: 0,
-          total_lines: 1, // Empty string has one line ""
-        },
+          x_offset: 0,
+          total_lines: 1,
+          horizontal_step,
+          soft_wrap,
+          fill_height,
+          mouse_wheel_enabled,
+          mouse_wheel_delta,
+          gutter,
+          highlights,
+          selected_highlight: viewport_selected_highlight(highlights),
+          content_style,
+          line_style,
+        }),
         cmd=@pippa.Cmd::none(),
       )
     },
-    update: fn(model : ViewportModel, msg : ViewportMsg) {
-      let mut offset = model.offset
-      let mut content = model.content
-      let mut width = model.width
-      let mut height = model.height
-      let mut total_lines = model.total_lines
-
-      match msg {
-        SetContent(c) => {
-          content = c
-          total_lines = @pippa.line_count(content)
-          offset = 0
-        }
-        Resize(w, h) => {
-          width = if w > 0 { w } else { 0 }
-          height = if h > 0 { h } else { 0 }
-        }
-        _ => ()
-      }
-
-      let max_offset = if total_lines > height {
-        total_lines - height
-      } else {
-        0
-      }
-
-      match msg {
-        ScrollUp => offset = offset - 1
-        ScrollDown => offset = offset + 1
-        PageUp => offset = offset - height
-        PageDown => offset = offset + height
-        ScrollToTop => offset = 0
-        ScrollToBottom => offset = max_offset
-        _ => ()
-      }
-
-      if offset > max_offset {
-        offset = max_offset
-      }
-      if offset < 0 {
-        offset = 0
-      }
-
-      @pippa.UpdateResult::new(
-        model={ content, width, height, offset, total_lines },
-        cmd=@pippa.Cmd::none(),
-      )
-    },
-    view: fn(model : ViewportModel) {
-      let lines = @pippa.split_lines(model.content)
-      let buf = StringBuilder::new()
-      for i in 0..<model.height {
-        let line_idx = model.offset + i
-        let raw_line = if line_idx < lines.length() {
-          lines[line_idx]
-        } else {
-          ""
-        }
-        let truncated = @internal.truncate_width(raw_line, model.width)
-        let padded = @internal.pad_right_width(truncated, model.width)
-        buf.write_string(padded)
-        if i < model.height - 1 {
-          buf.write_char('\n')
-        }
-      }
-      buf.to_string()
-    },
+    update: viewport_update,
+    view: viewport_view,
   }
 }
