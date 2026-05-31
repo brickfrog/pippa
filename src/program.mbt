@@ -341,22 +341,32 @@ pub fn[Model, Msg] Program::with_exec_runner(
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn append_exec_arg(argv : Array[Byte], value : String) -> Bool {
+  let bytes = @utf8.encode(value)
+  for byte in bytes.to_array() {
+    if byte == b'\x00' {
+      return false
+    }
+    argv.push(byte)
+  }
+  argv.push(b'\x00')
+  true
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 fn default_exec_runner(process : ExecProcess) -> ExecResult {
   if process.command == "" {
     return ExecError("empty command")
   }
   let argv : Array[Byte] = []
-  let command = @utf8.encode(process.command)
-  for byte in command.to_array() {
-    argv.push(byte)
+  if !append_exec_arg(argv, process.command) {
+    return ExecError("command contains NUL byte")
   }
-  argv.push(b'\x00')
   for arg in process.args {
-    let bytes = @utf8.encode(arg)
-    for byte in bytes.to_array() {
-      argv.push(byte)
+    if !append_exec_arg(argv, arg) {
+      return ExecError("argument contains NUL byte")
     }
-    argv.push(b'\x00')
   }
   let buf = Bytes::from_array(argv)
   let code = pippa_exec_process(buf, buf.length(), process.args.length() + 1)
@@ -590,7 +600,8 @@ fn current_window_size() -> WindowSize {
 /// Run the program.
 ///
 /// On `native` and `llvm` targets this enters raw terminal mode and drives
-/// the main event loop. On other targets this is a no-op.
+/// the main event loop. On other targets this initializes the model, exposes
+/// an already-closed handle to `run_with_handle`, and returns `RunCompleted`.
 pub fn[Model, Msg] Program::run(
   program : Program[Model, Msg],
 ) -> RunResult[Model] {
@@ -1165,7 +1176,7 @@ fn[Model, Msg] apply_input_events(
         current_model = next_model
         queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
         updated = true
-        if should_quit {
+        if should_quit && reason is None {
           reason = Some(RuntimeExitQuit)
         }
       }

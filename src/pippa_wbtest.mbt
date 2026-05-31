@@ -1163,6 +1163,37 @@ test "pippa catch_interrupt true force-quits on ctrl-c before sub sees it" {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+test "pippa catch_interrupt keeps interrupted result when ctrl-c sub quits" {
+  let polled = Ref::new(false)
+  let program : Program[String, String] = Program::new(
+      init=fn() { UpdateResult::new(model="", cmd=Cmd::none()) },
+      update=fn(_model, msg) { UpdateResult::new(model=msg, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+      sub=fn(evt) {
+        match evt {
+          Key(Modified("ctrl", "c")) => Some("quit")
+          _ => None
+        }
+      },
+      should_quit=fn(model) { model == "quit" },
+    )
+    .headless()
+    .with_input(fn() {
+      if polled.val {
+        []
+      } else {
+        polled.val = true
+        [Key(Modified("ctrl", "c"))]
+      }
+    })
+  match program.run() {
+    RunInterrupted(model) => assert_eq(model, "quit")
+    _ => fail("expected RunInterrupted")
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "pippa run result returns final model for clean quit" {
   let program : Program[Int, Int] = Program::new(
     init=fn() { UpdateResult::new(model=0, cmd=Cmd::msg(3)) },
@@ -1297,6 +1328,23 @@ test "pippa exec delivers success cancel and error results" {
   assert_exec_runner_result(ExecCompleted(0), ExecCompleted(0))
   assert_exec_runner_result(ExecCancelled, ExecCancelled)
   assert_exec_runner_result(ExecError("nope"), ExecError("nope"))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa default exec runner rejects embedded nul bytes" {
+  match
+    default_exec_runner(ExecProcess::new(command="fake\u0000split", args=[])) {
+    ExecError(message) => assert_eq(message, "command contains NUL byte")
+    _ => fail("expected command NUL error")
+  }
+  match
+    default_exec_runner(
+      ExecProcess::new(command="fake", args=["ok\u0000split"]),
+    ) {
+    ExecError(message) => assert_eq(message, "argument contains NUL byte")
+    _ => fail("expected argument NUL error")
+  }
 }
 
 ///|
