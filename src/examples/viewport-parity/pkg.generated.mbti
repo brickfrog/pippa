@@ -1,0 +1,39 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/examples/viewport-parity"
+
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/component",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn viewport_parity_init() -> @pippa.UpdateResult[Model, Msg]
+
+pub fn viewport_parity_run_script(Array[@pippa.InputEvent]) -> Model
+
+pub fn viewport_parity_snapshot(Model) -> String
+
+pub fn viewport_parity_sub(@pippa.InputEvent) -> Msg?
+
+pub fn viewport_parity_update(Model, Msg) -> @pippa.UpdateResult[Model, Msg]
+
+pub fn viewport_parity_view(Model) -> String
+
+// Errors
+
+// Types and methods
+pub(all) struct Model {
+  pager : @component.ViewportModel
+  quitting : Bool
+} derive(@debug.Debug)
+
+pub(all) enum Msg {
+  PagerMsg(@component.ViewportMsg)
+  Quit
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
+

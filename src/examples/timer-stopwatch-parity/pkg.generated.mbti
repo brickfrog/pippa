@@ -1,0 +1,42 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/examples/timer-stopwatch-parity"
+
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/component",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn timer_stopwatch_parity_init() -> @pippa.UpdateResult[Model, Msg]
+
+pub fn timer_stopwatch_parity_sub(@pippa.InputEvent) -> Msg?
+
+pub fn timer_stopwatch_parity_tick_both(Model) -> Model
+
+pub fn timer_stopwatch_parity_update(Model, Msg) -> @pippa.UpdateResult[Model, Msg]
+
+pub fn timer_stopwatch_parity_view(Model) -> String
+
+// Errors
+
+// Types and methods
+pub(all) struct Model {
+  timer : @component.TimerModel
+  stopwatch : @component.StopwatchModel
+  quitting : Bool
+} derive(@debug.Debug)
+
+pub(all) enum Msg {
+  TimerMsg(@component.TimerMsg)
+  StopwatchMsg(@component.StopwatchMsg)
+  StartBoth
+  PauseBoth
+  ResetBoth
+  Quit
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
+

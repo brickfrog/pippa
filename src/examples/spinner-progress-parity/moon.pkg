@@ -1,0 +1,8 @@
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/component",
+}
+
+options(
+  "is-main": true,
+)
