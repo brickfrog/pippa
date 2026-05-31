@@ -41,6 +41,9 @@ extern "C" fn pippa_exec_process(
 ) -> Int = "pippa_exec_process"
 
 ///|
+extern "C" fn pippa_suspend_process() -> Unit = "pippa_suspend_process"
+
+///|
 extern "C" fn pippa_get_rows() -> Int = "pippa_get_rows"
 
 ///|

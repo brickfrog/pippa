@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <signal.h>
 #include <termios.h>
 #include <unistd.h>
@@ -16,6 +18,10 @@ static struct termios orig_termios;
 static volatile sig_atomic_t pippa_resize_flag = 0;
 static int pippa_wakeup_pipe[2] = { -1, -1 };
 
+#define PIPPA_EXEC_ERR_GENERIC (-1)
+#define PIPPA_EXEC_ERR_EXEC_FAILED_BASE (-1000)
+#define PIPPA_EXEC_ERR_SIGNAL_BASE (-2000)
+
 static void pippa_close_wakeup_pipe(void) {
     if (pippa_wakeup_pipe[0] >= 0) {
         close(pippa_wakeup_pipe[0]);
@@ -33,6 +39,36 @@ static int pippa_make_nonblocking(int fd) {
         return -1;
     }
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
+static int pippa_make_cloexec(int fd) {
+    int flags = fcntl(fd, F_GETFD, 0);
+    if (flags < 0) {
+        return -1;
+    }
+    return fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+}
+
+static int pippa_pipe_cloexec(int fds[2]) {
+#if defined(__linux__) && defined(O_CLOEXEC)
+    if (pipe2(fds, O_CLOEXEC) == 0) {
+        return 0;
+    }
+    if (errno != ENOSYS && errno != EINVAL) {
+        return -1;
+    }
+#endif
+    if (pipe(fds) != 0) {
+        return -1;
+    }
+    if (pippa_make_cloexec(fds[0]) != 0 || pippa_make_cloexec(fds[1]) != 0) {
+        close(fds[0]);
+        close(fds[1]);
+        fds[0] = -1;
+        fds[1] = -1;
+        return -1;
+    }
+    return 0;
 }
 
 static void sigwinch_handler(int sig) {
@@ -59,7 +95,7 @@ int pippa_check_resize(void) {
 
 void pippa_init_wakeup(void) {
     pippa_close_wakeup_pipe();
-    if (pipe(pippa_wakeup_pipe) != 0) {
+    if (pippa_pipe_cloexec(pippa_wakeup_pipe) != 0) {
         fprintf(stderr, "Warning: failed to create wakeup pipe: %s\n",
                 strerror(errno));
         pippa_wakeup_pipe[0] = -1;
@@ -72,6 +108,19 @@ void pippa_init_wakeup(void) {
                 strerror(errno));
         pippa_close_wakeup_pipe();
     }
+}
+
+void pippa_suspend_process(void) {
+    struct sigaction old_action;
+    struct sigaction stop_action = {0};
+    stop_action.sa_handler = SIG_DFL;
+    sigemptyset(&stop_action.sa_mask);
+    stop_action.sa_flags = 0;
+    if (sigaction(SIGTSTP, &stop_action, &old_action) != 0) {
+        return;
+    }
+    raise(SIGTSTP);
+    sigaction(SIGTSTP, &old_action, NULL);
 }
 
 void pippa_close_wakeup(void) {
@@ -195,7 +244,7 @@ void pippa_write_bytes(const unsigned char* buf, int len) {
 
 int pippa_exec_process(const unsigned char *argv_buf, int argv_len, int argc) {
     if (argv_buf == NULL || argv_len <= 0 || argc <= 0) {
-        return -1;
+        return PIPPA_EXEC_ERR_GENERIC;
     }
 
     char *storage = (char *)malloc((size_t)argv_len);
@@ -203,7 +252,7 @@ int pippa_exec_process(const unsigned char *argv_buf, int argv_len, int argc) {
     if (storage == NULL || argv == NULL) {
         free(storage);
         free(argv);
-        return -1;
+        return PIPPA_EXEC_ERR_GENERIC;
     }
     memcpy(storage, argv_buf, (size_t)argv_len);
 
@@ -212,7 +261,7 @@ int pippa_exec_process(const unsigned char *argv_buf, int argv_len, int argc) {
         if (pos >= argv_len) {
             free(storage);
             free(argv);
-            return -1;
+            return PIPPA_EXEC_ERR_GENERIC;
         }
         argv[i] = storage + pos;
         while (pos < argv_len && storage[pos] != '\0') {
@@ -221,7 +270,7 @@ int pippa_exec_process(const unsigned char *argv_buf, int argv_len, int argc) {
         if (pos >= argv_len) {
             free(storage);
             free(argv);
-            return -1;
+            return PIPPA_EXEC_ERR_GENERIC;
         }
         pos++;
     }
@@ -229,28 +278,55 @@ int pippa_exec_process(const unsigned char *argv_buf, int argv_len, int argc) {
     if (argv[0][0] == '\0') {
         free(storage);
         free(argv);
-        return -1;
+        return PIPPA_EXEC_ERR_GENERIC;
+    }
+
+    int exec_pipe[2] = { -1, -1 };
+    if (pippa_pipe_cloexec(exec_pipe) != 0) {
+        free(storage);
+        free(argv);
+        return PIPPA_EXEC_ERR_GENERIC;
     }
 
     pid_t pid = fork();
     if (pid < 0) {
+        close(exec_pipe[0]);
+        close(exec_pipe[1]);
         free(storage);
         free(argv);
-        return -1;
+        return PIPPA_EXEC_ERR_GENERIC;
     }
     if (pid == 0) {
+        close(exec_pipe[0]);
         execvp(argv[0], argv);
+        int exec_errno = errno;
+        ssize_t ignored = write(exec_pipe[1], &exec_errno, sizeof(exec_errno));
+        (void)ignored;
         _exit(127);
     }
 
+    close(exec_pipe[1]);
     int status = 0;
     while (waitpid(pid, &status, 0) < 0) {
         if (errno == EINTR) {
             continue;
         }
+        close(exec_pipe[0]);
         free(storage);
         free(argv);
-        return -1;
+        return PIPPA_EXEC_ERR_GENERIC;
+    }
+
+    int exec_errno = 0;
+    ssize_t exec_read = -1;
+    do {
+        exec_read = read(exec_pipe[0], &exec_errno, sizeof(exec_errno));
+    } while (exec_read < 0 && errno == EINTR);
+    close(exec_pipe[0]);
+    if (exec_read > 0) {
+        free(storage);
+        free(argv);
+        return PIPPA_EXEC_ERR_EXEC_FAILED_BASE - exec_errno;
     }
 
     free(storage);
@@ -260,9 +336,9 @@ int pippa_exec_process(const unsigned char *argv_buf, int argv_len, int argc) {
         return WEXITSTATUS(status);
     }
     if (WIFSIGNALED(status)) {
-        return 128 + WTERMSIG(status);
+        return PIPPA_EXEC_ERR_SIGNAL_BASE - WTERMSIG(status);
     }
-    return -1;
+    return PIPPA_EXEC_ERR_GENERIC;
 }
 
 int pippa_get_rows(void) {

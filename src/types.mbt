@@ -67,6 +67,8 @@ pub(all) enum ExecResult {
   ExecCompleted(Int)
   /// The child process was cancelled before completion.
   ExecCancelled
+  /// The child process was terminated by a signal.
+  ExecSignaled(Int)
   /// The child process could not be started or failed at the runner boundary.
   ExecError(String)
 } derive(Debug, Eq)
@@ -80,10 +82,6 @@ pub(all) enum RunResult[Model] {
   RunQuit(Model)
   /// The program was interrupted and carries the final model.
   RunInterrupted(Model)
-  /// The program suspended and carries the model at suspension.
-  RunSuspended(Model)
-  /// The program resumed and carries the model after resume.
-  RunResumed(Model)
   /// The runtime stopped with an error.
   RunRuntimeError(String)
   /// The program quit in response to an external process result.

@@ -66,6 +66,8 @@ pub(all) struct Program[Model, Msg] {
   on_lifecycle : (LifecycleMsg) -> Msg?
   /// Run an external process while Pippa has released the terminal.
   exec_runner : (ExecProcess) -> ExecResult
+  /// Stop the process for terminal suspension and return after continue.
+  suspend_runner : () -> Unit
 }
 
 ///|
@@ -168,6 +170,7 @@ pub fn[Model, Msg] Program::new(
   on_window_size? : (WindowSize) -> Msg? = fn(_size) { None },
   on_lifecycle? : (LifecycleMsg) -> Msg? = fn(_msg) { None },
   exec_runner? : (ExecProcess) -> ExecResult = default_exec_runner,
+  suspend_runner? : () -> Unit = default_suspend_runner,
 ) -> Program[Model, Msg] {
   {
     init,
@@ -195,6 +198,7 @@ pub fn[Model, Msg] Program::new(
     catch_interrupt,
     on_lifecycle,
     exec_runner,
+    suspend_runner,
   }
 }
 
@@ -340,6 +344,14 @@ pub fn[Model, Msg] Program::with_exec_runner(
 }
 
 ///|
+pub fn[Model, Msg] Program::with_suspend_runner(
+  self : Program[Model, Msg],
+  suspend_runner : () -> Unit,
+) -> Program[Model, Msg] {
+  { ..self, suspend_runner, }
+}
+
+///|
 #cfg(any(target="native", target="llvm"))
 fn append_exec_arg(argv : Array[Byte], value : String) -> Bool {
   let bytes = @utf8.encode(value)
@@ -374,6 +386,10 @@ fn default_exec_runner(process : ExecProcess) -> ExecResult {
     ExecCompleted(code)
   } else if code == -2 {
     ExecCancelled
+  } else if code <= -2000 {
+    ExecSignaled(-2000 - code)
+  } else if code <= -1000 {
+    ExecError("failed to exec " + process.command)
   } else {
     ExecError("failed to run process: " + process.command)
   }
@@ -383,6 +399,18 @@ fn default_exec_runner(process : ExecProcess) -> ExecResult {
 #cfg(not(any(target="native", target="llvm")))
 fn default_exec_runner(process : ExecProcess) -> ExecResult {
   ExecError("external process execution is unavailable: " + process.command)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn default_suspend_runner() -> Unit {
+  pippa_suspend_process()
+}
+
+///|
+#cfg(not(any(target="native", target="llvm")))
+fn default_suspend_runner() -> Unit {
+
 }
 
 ///|
@@ -688,8 +716,6 @@ priv enum RuntimeExitReason {
   RuntimeExitCompleted
   RuntimeExitQuit
   RuntimeExitInterrupted
-  RuntimeExitSuspended
-  RuntimeExitResumed
   RuntimeExitError(String)
   RuntimeExitExec(ExecResult)
 }
@@ -1124,8 +1150,6 @@ fn[Model] run_result_from_reason(
     RuntimeExitCompleted => RunCompleted(model)
     RuntimeExitQuit => RunQuit(model)
     RuntimeExitInterrupted => RunInterrupted(model)
-    RuntimeExitSuspended => RunSuspended(model)
-    RuntimeExitResumed => RunResumed(model)
     RuntimeExitError(message) => RunRuntimeError(message)
     RuntimeExitExec(result) => RunExec(model, result)
   }
@@ -1145,8 +1169,14 @@ fn[Model, Msg] apply_input_events(
   let mut reason : RuntimeExitReason? = None
   let mut updated = false
   for evt in events {
+    let mut deliver_to_sub = true
+    let mut stop_input = false
     match evt {
-      Key(Modified("ctrl", "z")) => pending.push(RuntimeLifecycle(Suspend))
+      Key(Modified("ctrl", "z")) => {
+        pending.push(RuntimeLifecycle(Suspend))
+        deliver_to_sub = false
+        stop_input = true
+      }
       _ => ()
     }
     if program.catch_interrupt {
@@ -1164,25 +1194,28 @@ fn[Model, Msg] apply_input_events(
           }
           ignore(should_quit)
           reason = Some(RuntimeExitInterrupted)
+          deliver_to_sub = false
         }
         _ => ()
       }
     }
-    match (program.sub)(evt) {
-      Some(msg) => {
-        let (next_model, should_quit, cmd) = apply_msg(
-          program, current_model, msg,
-        )
-        current_model = next_model
-        queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
-        updated = true
-        if should_quit && reason is None {
-          reason = Some(RuntimeExitQuit)
+    if deliver_to_sub {
+      match (program.sub)(evt) {
+        Some(msg) => {
+          let (next_model, should_quit, cmd) = apply_msg(
+            program, current_model, msg,
+          )
+          current_model = next_model
+          queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+          updated = true
+          if should_quit && reason is None {
+            reason = Some(RuntimeExitQuit)
+          }
         }
+        None => ()
       }
-      None => ()
     }
-    if reason is Some(_) {
+    if reason is Some(_) || stop_input {
       break
     }
   }
@@ -1439,10 +1472,11 @@ fn[Model, Msg] drain_runtime(
                 sequences,
               )
               if suspend_quit {
-                reason = Some(RuntimeExitSuspended)
+                reason = Some(RuntimeExitQuit)
               } else {
                 let current_view = desired_view(program, current_model)
                 current_state = release_terminal_state(program, current_state)
+                (program.suspend_runner)()
                 current_state = restore_terminal_state(
                   program, current_state, current_view,
                 )
@@ -1463,7 +1497,7 @@ fn[Model, Msg] drain_runtime(
                   sequences,
                 )
                 if resume_quit {
-                  reason = Some(RuntimeExitResumed)
+                  reason = Some(RuntimeExitQuit)
                 }
               }
             }
@@ -1479,7 +1513,7 @@ fn[Model, Msg] drain_runtime(
               }
               queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
               if should_quit {
-                reason = Some(RuntimeExitResumed)
+                reason = Some(RuntimeExitQuit)
               }
             }
           }

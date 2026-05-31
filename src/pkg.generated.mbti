@@ -288,6 +288,7 @@ pub fn ExecProcess::new(command~ : String, args? : Array[String]) -> Self
 pub(all) enum ExecResult {
   ExecCompleted(Int)
   ExecCancelled
+  ExecSignaled(Int)
   ExecError(String)
 } derive(Eq, @debug.Debug)
 
@@ -401,9 +402,10 @@ pub(all) struct Program[Model, Msg] {
   catch_interrupt : Bool
   on_lifecycle : (LifecycleMsg) -> Msg?
   exec_runner : (ExecProcess) -> ExecResult
+  suspend_runner : () -> Unit
 }
 pub fn[Model, Msg] Program::headless(Self[Model, Msg]) -> Self[Model, Msg]
-pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, alt_screen? : Bool, focus_reporting? : Bool, bracketed_paste? : Bool, hide_cursor? : Bool, rendering? : Bool, read_stdin? : Bool, input? : (() -> Array[InputEvent])?, raw_input? : (() -> Bytes)?, cancelled? : (() -> Bool)?, fps? : Int, window_width? : Int, window_height? : Int, output? : (String) -> Unit, on_resize? : (Int, Int) -> Msg?, should_quit? : (Model) -> Bool, catch_interrupt? : Bool, on_window_size? : (WindowSize) -> Msg?, on_lifecycle? : (LifecycleMsg) -> Msg?, exec_runner? : (ExecProcess) -> ExecResult) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, alt_screen? : Bool, focus_reporting? : Bool, bracketed_paste? : Bool, hide_cursor? : Bool, rendering? : Bool, read_stdin? : Bool, input? : (() -> Array[InputEvent])?, raw_input? : (() -> Bytes)?, cancelled? : (() -> Bool)?, fps? : Int, window_width? : Int, window_height? : Int, output? : (String) -> Unit, on_resize? : (Int, Int) -> Msg?, should_quit? : (Model) -> Bool, catch_interrupt? : Bool, on_window_size? : (WindowSize) -> Msg?, on_lifecycle? : (LifecycleMsg) -> Msg?, exec_runner? : (ExecProcess) -> ExecResult, suspend_runner? : () -> Unit) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::run(Self[Model, Msg]) -> RunResult[Model]
 pub fn[Model, Msg] Program::run_with_handle(Self[Model, Msg], (ProgramHandle[Msg]) -> Unit) -> RunResult[Model]
 pub fn[Model, Msg] Program::with_alt_screen(Self[Model, Msg], Bool) -> Self[Model, Msg]
@@ -420,6 +422,7 @@ pub fn[Model, Msg] Program::with_output(Self[Model, Msg], (String) -> Unit) -> S
 pub fn[Model, Msg] Program::with_raw_input(Self[Model, Msg], () -> Bytes) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_rendering(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_stdin(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_suspend_runner(Self[Model, Msg], () -> Unit) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_window_size(Self[Model, Msg], Int, Int) -> Self[Model, Msg]
 
 type ProgramHandle[Msg]
@@ -432,8 +435,6 @@ pub(all) enum RunResult[Model] {
   RunCompleted(Model)
   RunQuit(Model)
   RunInterrupted(Model)
-  RunSuspended(Model)
-  RunResumed(Model)
   RunRuntimeError(String)
   RunExec(Model, ExecResult)
 } derive(@debug.Debug)
