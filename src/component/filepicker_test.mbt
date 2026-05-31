@@ -315,6 +315,33 @@ test "filepicker back restores previous cursor and window" {
 }
 
 ///|
+test "filepicker set directory and load failure clear navigation history" {
+  let c = filepicker(height=2)
+  let model = filepicker_test_model(
+    current_directory="/repo",
+    entries=[
+      filepicker_test_entry("sub", "/repo/sub", true, permissions="drwxr-xr-x"),
+    ],
+    cursor=0,
+    height=2,
+    show_hidden=true,
+  )
+  let entered = (c.update)(model, Open).model
+  assert_eq(entered.selected_stack, [0])
+
+  let replaced = (c.update)(entered, SetDirectory("/tmp")).model
+  assert_eq(replaced.current_directory, "/tmp")
+  assert_eq(replaced.selected_stack, [])
+  assert_eq(replaced.min_stack, [])
+  assert_eq(replaced.max_stack, [])
+
+  let failed = (c.update)({ ..entered, entries: [] }, LoadFailed("boom")).model
+  assert_eq(failed.selected_stack, [])
+  assert_eq(failed.min_stack, [])
+  assert_eq(failed.max_stack, [])
+}
+
+///|
 test "filepicker keymap can be overridden disabled and rendered as help" {
   let keymap = filepicker_keymap_disable(
     filepicker_keymap_override(

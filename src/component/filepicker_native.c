@@ -1,10 +1,14 @@
+#define _GNU_SOURCE
+
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #if defined(_WIN32)
@@ -140,18 +144,23 @@ static int pippa_filepicker_fill_metadata(
     }
 
     struct stat lst;
+    int saved_errno = errno;
     if (lstat(full_path, &lst) != 0) {
+        errno = saved_errno;
         free(full_path);
         return 0;
     }
+    errno = saved_errno;
 
     int is_dir = S_ISDIR(lst.st_mode);
     int is_symlink = S_ISLNK(lst.st_mode);
     if (is_symlink) {
         struct stat target;
+        saved_errno = errno;
         if (stat(full_path, &target) == 0 && S_ISDIR(target.st_mode)) {
             is_dir = 1;
         }
+        errno = saved_errno;
     }
 
     meta->kind = is_dir ? 'D' : 'F';
@@ -168,6 +177,166 @@ static int pippa_filepicker_fill_metadata(
     meta->hidden = pippa_filepicker_is_hidden_entry(entry->d_name, &lst);
     free(full_path);
     return 0;
+}
+
+static int pippa_filepicker_write_text_file(
+    const char *path,
+    const char *content,
+    mode_t mode
+) {
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, mode);
+    if (fd < 0) {
+        return -1;
+    }
+    size_t len = strlen(content);
+    size_t written_total = 0;
+    while (written_total < len) {
+        ssize_t written = write(fd, content + written_total, len - written_total);
+        if (written < 0) {
+            close(fd);
+            return -1;
+        }
+        written_total += (size_t)written;
+    }
+    if (close(fd) != 0) {
+        return -1;
+    }
+    return chmod(path, mode);
+}
+
+static void pippa_filepicker_fixture_unlink_name(const char *root, const char *name) {
+    char *path = pippa_filepicker_join_path(root, name);
+    if (path != NULL) {
+        unlink(path);
+        free(path);
+    }
+}
+
+static void pippa_filepicker_fixture_rmdir_name(const char *root, const char *name) {
+    char *path = pippa_filepicker_join_path(root, name);
+    if (path != NULL) {
+        rmdir(path);
+        free(path);
+    }
+}
+
+static void pippa_filepicker_remove_test_fixture(const char *root) {
+    char name[32];
+    for (int i = 0; i < 70; i++) {
+        snprintf(name, sizeof(name), "extra-%02d.txt", i);
+        pippa_filepicker_fixture_unlink_name(root, name);
+    }
+    pippa_filepicker_fixture_unlink_name(root, "regular.txt");
+    pippa_filepicker_fixture_unlink_name(root, ".hidden");
+    pippa_filepicker_fixture_unlink_name(root, "link-file");
+    pippa_filepicker_fixture_unlink_name(root, "link-dir");
+    pippa_filepicker_fixture_unlink_name(root, "broken-link");
+    pippa_filepicker_fixture_rmdir_name(root, "subdir");
+    rmdir(root);
+}
+
+static int pippa_filepicker_fixture_write_file(
+    const char *root,
+    const char *name,
+    const char *content,
+    mode_t mode
+) {
+    char *path = pippa_filepicker_join_path(root, name);
+    if (path == NULL) {
+        return -1;
+    }
+    int result = pippa_filepicker_write_text_file(path, content, mode);
+    free(path);
+    return result;
+}
+
+static int pippa_filepicker_fixture_mkdir(
+    const char *root,
+    const char *name,
+    mode_t mode
+) {
+    char *path = pippa_filepicker_join_path(root, name);
+    if (path == NULL) {
+        return -1;
+    }
+    int result = mkdir(path, mode);
+    if (result == 0) {
+        result = chmod(path, mode);
+    }
+    free(path);
+    return result;
+}
+
+static int pippa_filepicker_fixture_symlink(
+    const char *root,
+    const char *name,
+    const char *target
+) {
+    char *path = pippa_filepicker_join_path(root, name);
+    if (path == NULL) {
+        return -1;
+    }
+    int result = symlink(target, path);
+    free(path);
+    return result;
+}
+
+static int pippa_filepicker_populate_test_fixture(const char *root) {
+    if (pippa_filepicker_fixture_mkdir(root, "subdir", 0750) != 0 ||
+        pippa_filepicker_fixture_write_file(root, "regular.txt", "regular\n", 0640) != 0 ||
+        pippa_filepicker_fixture_write_file(root, ".hidden", "hidden\n", 0600) != 0 ||
+        pippa_filepicker_fixture_symlink(root, "link-file", "regular.txt") != 0 ||
+        pippa_filepicker_fixture_symlink(root, "link-dir", "subdir") != 0 ||
+        pippa_filepicker_fixture_symlink(root, "broken-link", "missing-target") != 0) {
+        return -1;
+    }
+    char name[32];
+    for (int i = 0; i < 70; i++) {
+        snprintf(name, sizeof(name), "extra-%02d.txt", i);
+        if (pippa_filepicker_fixture_write_file(root, name, "x", 0644) != 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int pippa_filepicker_test_fixture_create(unsigned char *out_buf, int out_len) {
+    if (out_buf == NULL || out_len <= 0) {
+        return -1;
+    }
+    char template_path[PATH_MAX];
+    int len = snprintf(
+        template_path,
+        sizeof(template_path),
+        "/tmp/pippa-filepicker-%ld-XXXXXX",
+        (long)getpid()
+    );
+    if (len <= 0 || len >= (int)sizeof(template_path)) {
+        return -1;
+    }
+    char *root = mkdtemp(template_path);
+    if (root == NULL) {
+        return -1;
+    }
+    if (pippa_filepicker_populate_test_fixture(root) != 0) {
+        pippa_filepicker_remove_test_fixture(root);
+        return -1;
+    }
+    size_t root_len = strlen(root);
+    if (root_len > (size_t)INT_MAX || root_len > (size_t)out_len) {
+        pippa_filepicker_remove_test_fixture(root);
+        return -1;
+    }
+    memcpy(out_buf, root, root_len);
+    return (int)root_len;
+}
+
+void pippa_filepicker_test_fixture_cleanup(const unsigned char *path, int path_len) {
+    char *root = pippa_filepicker_copy_path(path, path_len);
+    if (root != NULL) {
+        pippa_filepicker_remove_test_fixture(root);
+        free(root);
+    }
 }
 
 static int pippa_filepicker_should_skip(const char *name) {

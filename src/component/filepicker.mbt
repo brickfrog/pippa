@@ -853,6 +853,17 @@ fn filepicker_pop_view(
 }
 
 ///|
+fn filepicker_clear_history(model : FilepickerModel) -> FilepickerModel {
+  {
+    ..model,
+    selected_stack: [],
+    min_stack: [],
+    max_stack: [],
+    pending_restore: None,
+  }
+}
+
+///|
 fn filepicker_begin_loading(
   model : FilepickerModel,
   path : String,
@@ -1209,7 +1220,7 @@ pub fn filepicker(
           )
         SetDirectory(path) => {
           let directory = if path == "" { "." } else { path }
-          filepicker_begin_loading(model, directory)
+          filepicker_begin_loading(filepicker_clear_history(model), directory)
         }
         SetHeight(height) =>
           @pippa.UpdateResult::new(
@@ -1368,6 +1379,7 @@ pub fn filepicker(
           }
         LoadFailed(err) => {
           filepicker_close_active_scan(model)
+          let model = filepicker_clear_history(model)
           @pippa.UpdateResult::new(
             model=filepicker_normalize({
               ..model,

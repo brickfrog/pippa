@@ -14,6 +14,85 @@ fn filepicker_wbtest_entry(
 
 ///|
 #cfg(any(target="native", target="llvm"))
+#borrow(out_buf)
+extern "C" fn pippa_filepicker_test_fixture_create(
+  out_buf : Bytes,
+  out_len : Int,
+) -> Int = "pippa_filepicker_test_fixture_create"
+
+///|
+#cfg(any(target="native", target="llvm"))
+#borrow(path_buf)
+extern "C" fn pippa_filepicker_test_fixture_cleanup(
+  path_buf : Bytes,
+  path_len : Int,
+) -> Unit = "pippa_filepicker_test_fixture_cleanup"
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn filepicker_create_native_test_fixture() -> String? {
+  let out = Bytes::new(4096)
+  let written = pippa_filepicker_test_fixture_create(out, out.length())
+  if written > 0 {
+    Some(@utf8.decode_lossy(out[0:written]))
+  } else {
+    None
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn filepicker_cleanup_native_test_fixture(path : String) -> Unit {
+  let path_buf = @utf8.encode(path[:])
+  pippa_filepicker_test_fixture_cleanup(path_buf, path_buf.length())
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn filepicker_wbtest_scan_all(
+  path : String,
+  max_entries : Int,
+) -> Result[(Array[FileEntry], Int), String] {
+  match filepicker_open_scan(path) {
+    Some(handle) => {
+      defer filepicker_close_scan(handle)
+      let entries : Array[FileEntry] = []
+      let mut chunks = 0
+      let mut done = false
+      while !done {
+        match filepicker_scan_next(path, handle, max_entries) {
+          Ok(Some(chunk)) => {
+            chunks = chunks + 1
+            for entry in chunk {
+              entries.push(entry)
+            }
+          }
+          Ok(None) => done = true
+          Err(err) => return Err(err)
+        }
+      }
+      Ok((filepicker_sort_entries(entries), chunks))
+    }
+    None => Err("failed to open fixture scan")
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn filepicker_wbtest_find_entry(
+  entries : Array[FileEntry],
+  name : String,
+) -> FileEntry? {
+  for entry in entries {
+    if entry.name == name {
+      return Some(entry)
+    }
+  }
+  None
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "filepicker native scanner can stream chunks" {
   match filepicker_open_scan(".") {
     Some(handle) => {
@@ -25,6 +104,86 @@ test "filepicker native scanner can stream chunks" {
           assert_true(entries[0].size >= 0)
         }
         _ => assert_true(false)
+      }
+    }
+    None => assert_true(false)
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "filepicker native scanner populates deterministic metadata and continues past 64 entries" {
+  match filepicker_create_native_test_fixture() {
+    Some(root) => {
+      defer filepicker_cleanup_native_test_fixture(root)
+      match filepicker_wbtest_scan_all(root, 64) {
+        Ok((entries, chunks)) => {
+          assert_true(chunks >= 2)
+          assert_true(entries.length() >= 76)
+          match filepicker_wbtest_find_entry(entries, "regular.txt") {
+            Some(entry) => {
+              assert_false(entry.is_dir)
+              assert_false(entry.is_symlink)
+              assert_eq(entry.permissions, "-rw-r-----")
+              assert_eq(entry.size, 8)
+              assert_false(entry.hidden)
+            }
+            None => assert_true(false)
+          }
+          match filepicker_wbtest_find_entry(entries, "subdir") {
+            Some(entry) => {
+              assert_true(entry.is_dir)
+              assert_false(entry.is_symlink)
+              assert_eq(entry.permissions, "drwxr-x---")
+            }
+            None => assert_true(false)
+          }
+          match filepicker_wbtest_find_entry(entries, ".hidden") {
+            Some(entry) => {
+              assert_false(entry.is_dir)
+              assert_eq(entry.permissions, "-rw-------")
+              assert_eq(entry.size, 7)
+              assert_true(entry.hidden)
+            }
+            None => assert_true(false)
+          }
+          match filepicker_wbtest_find_entry(entries, "link-file") {
+            Some(entry) => {
+              assert_false(entry.is_dir)
+              assert_true(entry.is_symlink)
+              assert_true(entry.permissions.has_prefix("l"))
+              assert_eq(entry.size, "regular.txt".length())
+            }
+            None => assert_true(false)
+          }
+          match filepicker_wbtest_find_entry(entries, "link-dir") {
+            Some(entry) => {
+              assert_true(entry.is_dir)
+              assert_true(entry.is_symlink)
+              assert_true(entry.permissions.has_prefix("l"))
+              assert_eq(entry.size, "subdir".length())
+            }
+            None => assert_true(false)
+          }
+          match filepicker_wbtest_find_entry(entries, "broken-link") {
+            Some(entry) => {
+              assert_false(entry.is_dir)
+              assert_true(entry.is_symlink)
+              assert_true(entry.permissions.has_prefix("l"))
+              assert_eq(entry.size, "missing-target".length())
+            }
+            None => assert_true(false)
+          }
+          match filepicker_wbtest_find_entry(entries, "extra-69.txt") {
+            Some(entry) => {
+              assert_false(entry.is_dir)
+              assert_false(entry.is_symlink)
+              assert_eq(entry.size, 1)
+            }
+            None => assert_true(false)
+          }
+        }
+        Err(_) => assert_true(false)
       }
     }
     None => assert_true(false)
