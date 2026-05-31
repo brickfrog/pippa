@@ -209,14 +209,17 @@ pub fn[Msg] Cmd::enable_bracketed_paste() -> Self[Msg]
 pub fn[Msg] Cmd::enable_focus_reporting() -> Self[Msg]
 pub fn[Msg] Cmd::enter_alt_screen() -> Self[Msg]
 pub fn[Msg] Cmd::every(Int, (TimerTick) -> Msg) -> Self[Msg]
+pub fn[Msg] Cmd::exec_process(ExecProcess, (ExecResult) -> Msg) -> Self[Msg]
 pub fn[Msg] Cmd::exit_alt_screen() -> Self[Msg]
 pub fn[Msg] Cmd::force_redraw() -> Self[Msg]
 pub fn[Msg] Cmd::hide_cursor() -> Self[Msg]
+pub fn[Msg] Cmd::interrupt() -> Self[Msg]
 pub fn[Msg] Cmd::is_none(Self[Msg]) -> Bool
 pub fn[A, B] Cmd::map((A) -> B, Self[A]) -> Self[B]
 pub fn[Msg] Cmd::msg(Msg) -> Self[Msg]
 pub fn[Msg] Cmd::none() -> Self[Msg]
 pub fn[Msg] Cmd::perform(() -> Msg?) -> Self[Msg]
+pub fn[Msg] Cmd::quit() -> Self[Msg]
 pub fn[Msg] Cmd::repaint() -> Self[Msg]
 pub fn[Msg] Cmd::request_background_color() -> Self[Msg]
 pub fn[Msg] Cmd::request_capability(String) -> Self[Msg]
@@ -226,8 +229,11 @@ pub fn[Msg] Cmd::request_device_attributes() -> Self[Msg]
 pub fn[Msg] Cmd::request_foreground_color() -> Self[Msg]
 pub fn[Msg] Cmd::request_secondary_device_attributes() -> Self[Msg]
 pub fn[Msg] Cmd::request_window_size((WindowSize) -> Msg) -> Self[Msg]
+pub fn[Msg] Cmd::resume() -> Self[Msg]
+pub fn[Msg] Cmd::runtime_error(String) -> Self[Msg]
 pub fn[Msg] Cmd::sequence(Array[Self[Msg]]) -> Self[Msg]
 pub fn[Msg] Cmd::show_cursor() -> Self[Msg]
+pub fn[Msg] Cmd::suspend() -> Self[Msg]
 pub fn[Msg] Cmd::tick(Int) -> Self[Msg]
 pub impl[Msg] @debug.Debug for Cmd[Msg]
 
@@ -273,6 +279,19 @@ pub(all) struct EnhancedKeyMsg {
   text_codepoints : Array[Int]
 } derive(Eq, @debug.Debug)
 
+pub(all) struct ExecProcess {
+  command : String
+  args : Array[String]
+} derive(Eq, @debug.Debug)
+pub fn ExecProcess::new(command~ : String, args? : Array[String]) -> Self
+
+pub(all) enum ExecResult {
+  ExecCompleted(Int)
+  ExecCancelled
+  ExecSignaled(Int)
+  ExecError(String)
+} derive(Eq, @debug.Debug)
+
 pub(all) struct HelpModel {
   bindings : Array[Binding]
   show_full : Bool
@@ -292,6 +311,7 @@ pub(all) enum InputEvent {
 pub(all) enum InternalMsg {
   KeyPress(Array[Byte])
   WindowResize(WindowSize)
+  Lifecycle(LifecycleMsg)
   QuitRequested
 } derive(Eq, @debug.Debug)
 
@@ -300,6 +320,13 @@ pub(all) enum KeyMsg {
   Text(String)
   Special(String)
   Modified(String, String)
+} derive(Eq, @debug.Debug)
+
+pub(all) enum LifecycleMsg {
+  Quit
+  Interrupt
+  Suspend
+  Resume
 } derive(Eq, @debug.Debug)
 
 pub(all) enum MouseAction {
@@ -373,23 +400,29 @@ pub(all) struct Program[Model, Msg] {
   on_resize : (Int, Int) -> Msg?
   should_quit : (Model) -> Bool
   catch_interrupt : Bool
+  on_lifecycle : (LifecycleMsg) -> Msg?
+  exec_runner : (ExecProcess) -> ExecResult
+  suspend_runner : () -> Unit
 }
 pub fn[Model, Msg] Program::headless(Self[Model, Msg]) -> Self[Model, Msg]
-pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, alt_screen? : Bool, focus_reporting? : Bool, bracketed_paste? : Bool, hide_cursor? : Bool, rendering? : Bool, read_stdin? : Bool, input? : (() -> Array[InputEvent])?, raw_input? : (() -> Bytes)?, cancelled? : (() -> Bool)?, fps? : Int, window_width? : Int, window_height? : Int, output? : (String) -> Unit, on_resize? : (Int, Int) -> Msg?, should_quit? : (Model) -> Bool, catch_interrupt? : Bool, on_window_size? : (WindowSize) -> Msg?) -> Self[Model, Msg]
-pub fn[Model, Msg] Program::run(Self[Model, Msg]) -> Unit
-pub fn[Model, Msg] Program::run_with_handle(Self[Model, Msg], (ProgramHandle[Msg]) -> Unit) -> Unit
+pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, alt_screen? : Bool, focus_reporting? : Bool, bracketed_paste? : Bool, hide_cursor? : Bool, rendering? : Bool, read_stdin? : Bool, input? : (() -> Array[InputEvent])?, raw_input? : (() -> Bytes)?, cancelled? : (() -> Bool)?, fps? : Int, window_width? : Int, window_height? : Int, output? : (String) -> Unit, on_resize? : (Int, Int) -> Msg?, should_quit? : (Model) -> Bool, catch_interrupt? : Bool, on_window_size? : (WindowSize) -> Msg?, on_lifecycle? : (LifecycleMsg) -> Msg?, exec_runner? : (ExecProcess) -> ExecResult, suspend_runner? : () -> Unit) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::run(Self[Model, Msg]) -> RunResult[Model]
+pub fn[Model, Msg] Program::run_with_handle(Self[Model, Msg], (ProgramHandle[Msg]) -> Unit) -> RunResult[Model]
 pub fn[Model, Msg] Program::with_alt_screen(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_bracketed_paste(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_cancelled(Self[Model, Msg], () -> Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_catch_interrupt(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_exec_runner(Self[Model, Msg], (ExecProcess) -> ExecResult) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_focus_reporting(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_fps(Self[Model, Msg], Int) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_hide_cursor(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_input(Self[Model, Msg], () -> Array[InputEvent]) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_lifecycle(Self[Model, Msg], (LifecycleMsg) -> Msg?) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_output(Self[Model, Msg], (String) -> Unit) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_raw_input(Self[Model, Msg], () -> Bytes) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_rendering(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_stdin(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_suspend_runner(Self[Model, Msg], () -> Unit) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_window_size(Self[Model, Msg], Int, Int) -> Self[Model, Msg]
 
 type ProgramHandle[Msg]
@@ -397,6 +430,14 @@ pub fn[Msg] ProgramHandle::is_closed(Self[Msg]) -> Bool
 pub fn[Msg] ProgramHandle::release_terminal(Self[Msg]) -> Bool
 pub fn[Msg] ProgramHandle::restore_terminal(Self[Msg]) -> Bool
 pub fn[Msg] ProgramHandle::send(Self[Msg], Msg) -> Bool
+
+pub(all) enum RunResult[Model] {
+  RunCompleted(Model)
+  RunQuit(Model)
+  RunInterrupted(Model)
+  RunRuntimeError(String)
+  RunExec(Model, ExecResult)
+} derive(@debug.Debug)
 
 pub(all) struct Style {
   fg : Int?

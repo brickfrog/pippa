@@ -75,6 +75,57 @@ test "pippa cmd every stores a typed aligned callback" {
 }
 
 ///|
+test "pippa lifecycle command constructors store typed actions" {
+  let cmd : Cmd[Int] = Cmd::batch([
+    Cmd::quit(),
+    Cmd::interrupt(),
+    Cmd::suspend(),
+    Cmd::resume(),
+  ])
+  assert_eq(cmd.actions.length(), 4)
+  match cmd.actions[0] {
+    LifecycleAction(Quit) => ()
+    _ => fail("expected Quit lifecycle action")
+  }
+  match cmd.actions[1] {
+    LifecycleAction(Interrupt) => ()
+    _ => fail("expected Interrupt lifecycle action")
+  }
+  match cmd.actions[2] {
+    LifecycleAction(Suspend) => ()
+    _ => fail("expected Suspend lifecycle action")
+  }
+  match cmd.actions[3] {
+    LifecycleAction(Resume) => ()
+    _ => fail("expected Resume lifecycle action")
+  }
+}
+
+///|
+test "pippa exec command stores process and typed result callback" {
+  let process = ExecProcess::new(command="fake", args=["--flag"])
+  let cmd : Cmd[String] = Cmd::exec_process(process, fn(result) {
+    match result {
+      ExecCompleted(code) => "completed:" + code.to_string()
+      ExecCancelled => "cancelled"
+      ExecSignaled(signal) => "signaled:" + signal.to_string()
+      ExecError(message) => "error:" + message
+    }
+  })
+  assert_eq(cmd.actions.length(), 1)
+  match cmd.actions[0] {
+    ExecProcessAction(stored, to_msg) => {
+      @test.assert_eq(stored, process)
+      assert_eq(to_msg(ExecCompleted(7)), "completed:7")
+      assert_eq(to_msg(ExecCancelled), "cancelled")
+      assert_eq(to_msg(ExecSignaled(15)), "signaled:15")
+      assert_eq(to_msg(ExecError("boom")), "error:boom")
+    }
+    _ => fail("expected ExecProcess action")
+  }
+}
+
+///|
 test "pippa screen command constructors store typed actions" {
   let cmd : Cmd[Int] = Cmd::batch([
     Cmd::enter_alt_screen(),
@@ -429,7 +480,7 @@ test "pippa sequence waits for immediate effects to settle before next step" {
     timers,
     sequences,
   )
-  let (model, quit, updated, _state) = drain_runtime(
+  let (model, reason, updated, _state) = drain_runtime(
     program,
     [],
     state,
@@ -439,7 +490,7 @@ test "pippa sequence waits for immediate effects to settle before next step" {
     sequences,
   )
   assert_eq(model, [1, 10, 2])
-  assert_eq(quit, false)
+  assert_true(reason is None)
   assert_eq(updated, true)
   assert_true(pending.is_empty())
   assert_true(sequences.is_empty())
@@ -497,10 +548,10 @@ test "pippa every command fires once without runtime recurrence" {
     .headless()
     .with_cancelled(fn() {
       let elapsed = pippa_now_ms() - started_at.val
-      started_at.val > 0L && (elapsed >= 200L ||
-        (seen.val.length() >= 1 && elapsed >= 40L))
+      started_at.val > 0L &&
+      (elapsed >= 200L || (seen.val.length() >= 1 && elapsed >= 40L))
     })
-  program.run()
+  ignore(program.run())
   assert_eq(seen.val.length(), 1)
   assert_true(seen.val[0] >= 1L)
 }
@@ -511,31 +562,31 @@ test "pippa every recurrence is app driven by reissuing the command" {
   let seen : Ref[Array[Int64]] = Ref::new([])
   let started_at = Ref::new(0L)
   let program : Program[Int, Int64] = Program::new(
-    init=fn() {
-      started_at.val = pippa_now_ms()
-      UpdateResult::new(
-        model=0,
-        cmd=Cmd::every(3, fn(tick) { tick.elapsed_ms }),
-      )
-    },
-    update=fn(model, msg) {
-      seen.val = [..seen.val, msg]
-      let next = model + 1
-      let cmd = if next < 3 {
-        Cmd::every(3, fn(tick) { tick.elapsed_ms })
-      } else {
-        Cmd::none()
-      }
-      UpdateResult::new(model=next, cmd~)
-    },
-    view=fn(_model) { "" },
-    should_quit=fn(model) { model >= 3 },
-  )
-  .headless()
-  .with_cancelled(fn() {
-    started_at.val > 0L && pippa_now_ms() - started_at.val >= 200L
-  })
-  program.run()
+      init=fn() {
+        started_at.val = pippa_now_ms()
+        UpdateResult::new(
+          model=0,
+          cmd=Cmd::every(3, fn(tick) { tick.elapsed_ms }),
+        )
+      },
+      update=fn(model, msg) {
+        seen.val = [..seen.val, msg]
+        let next = model + 1
+        let cmd = if next < 3 {
+          Cmd::every(3, fn(tick) { tick.elapsed_ms })
+        } else {
+          Cmd::none()
+        }
+        UpdateResult::new(model=next, cmd~)
+      },
+      view=fn(_model) { "" },
+      should_quit=fn(model) { model >= 3 },
+    )
+    .headless()
+    .with_cancelled(fn() {
+      started_at.val > 0L && pippa_now_ms() - started_at.val >= 200L
+    })
+  ignore(program.run())
   assert_eq(seen.val.length(), 3)
   assert_true(seen.val[0] >= 1L)
   assert_true(seen.val[1] >= 1L)
@@ -566,7 +617,7 @@ test "pippa screen commands emit ANSI and update runtime shutdown state" {
     .with_alt_screen(false)
     .with_hide_cursor(false)
     .with_output(fn(output) { chunks.val = [..chunks.val, output] })
-  program.run()
+  ignore(program.run())
   let captured = chunks.val.join("")
   assert_true(captured.contains(enter_alt_screen()))
   assert_true(captured.contains(hide_cursor()))
@@ -596,7 +647,7 @@ test "pippa exit and show cursor commands update runtime state" {
     )
     .with_stdin(false)
     .with_output(fn(output) { chunks.val = [..chunks.val, output] })
-  program.run()
+  ignore(program.run())
   let captured = chunks.val.join("")
   assert_true(captured.contains(enter_alt_screen()))
   assert_true(captured.contains(hide_cursor()))
@@ -625,7 +676,7 @@ test "pippa repaint command invalidates the render cache" {
     .with_alt_screen(false)
     .with_hide_cursor(false)
     .with_output(fn(output) { chunks.val = [..chunks.val, output] })
-  program.run_with_handle(handle => ignore(handle.send(1)))
+  ignore(program.run_with_handle(handle => ignore(handle.send(1))))
   let mut paint_chunks = 0
   for chunk in chunks.val {
     if chunk.contains("paint") {
@@ -656,7 +707,7 @@ test "pippa force redraw command invalidates the render cache" {
     .with_alt_screen(false)
     .with_hide_cursor(false)
     .with_output(fn(output) { chunks.val = [..chunks.val, output] })
-  program.run_with_handle(handle => ignore(handle.send(1)))
+  ignore(program.run_with_handle(handle => ignore(handle.send(1))))
   let mut paint_chunks = 0
   for chunk in chunks.val {
     if chunk.contains("paint") {
@@ -684,7 +735,7 @@ test "pippa request window size delivers a typed message" {
     view=fn(_model) { "" },
     should_quit=fn(model) { model == 1 },
   ).headless()
-  program.run()
+  ignore(program.run())
   match seen.val {
     Some(size) => {
       assert_true(size.width > 0)
@@ -715,7 +766,7 @@ test "pippa typed window size hook receives initial resize and on_resize still w
     )
     .headless()
     .with_window_size(90, 31)
-  program.run()
+  ignore(program.run())
   @test.assert_eq(typed_seen.val, Some({ width: 90, height: 31 }))
   assert_eq(legacy_seen.val, 90031)
 }
@@ -828,7 +879,7 @@ test "pippa custom output captures rendered views" {
     .with_alt_screen(false)
     .with_hide_cursor(false)
     .with_output(fn(output) { captured.val = captured.val + output })
-  program.run_with_handle(handle => sent.val = handle.send(1))
+  ignore(program.run_with_handle(handle => sent.val = handle.send(1)))
   assert_true(sent.val)
   assert_true(captured.val.contains("zero"))
   assert_true(captured.val.contains("one"))
@@ -864,7 +915,7 @@ test "pippa custom input drives sub in headless mode" {
         [Key(Char('a')), Key(Char('b'))]
       }
     })
-  program.run()
+  ignore(program.run())
   assert_eq(seen.val, [1, 2])
 }
 
@@ -899,7 +950,7 @@ test "pippa custom input can render updates without stdin" {
     .with_alt_screen(false)
     .with_hide_cursor(false)
     .with_output(fn(output) { captured.val = captured.val + output })
-  program.run()
+  ignore(program.run())
   assert_true(captured.val.contains("idle"))
   assert_true(captured.val.contains("typed"))
 }
@@ -934,7 +985,7 @@ test "pippa raw input source drives parsing without stdin" {
         @utf8.encode("ab")
       }
     })
-  program.run()
+  ignore(program.run())
   assert_eq(seen.val, [1, 2])
 }
 
@@ -954,7 +1005,7 @@ test "pippa window size option seeds initial resize message" {
     )
     .headless()
     .with_window_size(80, 24)
-  program.run()
+  ignore(program.run())
   @test.assert_eq(seen.val, Some(80024))
 }
 
@@ -972,7 +1023,7 @@ test "pippa cancellation hook stops a headless program" {
       polls.val = polls.val + 1
       polls.val >= 2
     })
-  program.run()
+  ignore(program.run())
   assert_true(polls.val >= 2)
 }
 
@@ -1012,7 +1063,7 @@ test "pippa handle can release and restore terminal" {
       }
     })
     .with_output(fn(output) { captured.val = captured.val + output })
-  program.run_with_handle(handle => handle_ref.val = Some(handle))
+  ignore(program.run_with_handle(handle => handle_ref.val = Some(handle)))
   assert_true(captured.val.contains(enter_alt_screen()))
   assert_true(captured.val.contains(exit_alt_screen()))
   assert_true(captured.val.contains("zero"))
@@ -1033,7 +1084,7 @@ test "pippa headless run_with_handle can quit from injected message" {
     view=fn(_model) { "" },
     should_quit=fn(model) { model == 7 },
   ).headless()
-  program.run_with_handle(handle => sent.val = handle.send(7))
+  ignore(program.run_with_handle(handle => sent.val = handle.send(7)))
   assert_true(sent.val)
   assert_eq(seen.val, 7)
 }
@@ -1069,7 +1120,7 @@ test "pippa catch_interrupt false delivers ctrl-c to sub" {
         [Key(Modified("ctrl", "c")), Key(Char('q'))]
       }
     })
-  program.run()
+  ignore(program.run())
   // With catch_interrupt=false the runtime does NOT force-quit on Ctrl+C,
   // so both events reach sub and update sees them both.
   assert_eq(seen.val, ["ctrl-c", "q"])
@@ -1105,9 +1156,356 @@ test "pippa catch_interrupt true force-quits on ctrl-c before sub sees it" {
         [Key(Modified("ctrl", "c")), Key(Char('q'))]
       }
     })
-  program.run()
-  // With catch_interrupt=true the runtime force-quits on Ctrl+C.
-  // sub still fires for the Ctrl+C event (it runs before the quit check breaks
-  // the loop), but 'q' is never reached because we already broke out.
-  assert_eq(seen.val, ["ctrl-c"])
+  ignore(program.run())
+  // With catch_interrupt=true the runtime intercepts Ctrl+C before `sub`;
+  // 'q' is never reached because we already broke out.
+  assert_eq(seen.val, [])
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa catch_interrupt skips sub even when ctrl-c sub would quit" {
+  let polled = Ref::new(false)
+  let sub_seen = Ref::new(false)
+  let program : Program[String, String] = Program::new(
+      init=fn() { UpdateResult::new(model="", cmd=Cmd::none()) },
+      update=fn(_model, msg) { UpdateResult::new(model=msg, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+      sub=fn(evt) {
+        match evt {
+          Key(Modified("ctrl", "c")) => {
+            sub_seen.val = true
+            Some("quit")
+          }
+          _ => None
+        }
+      },
+      should_quit=fn(model) { model == "quit" },
+    )
+    .headless()
+    .with_input(fn() {
+      if polled.val {
+        []
+      } else {
+        polled.val = true
+        [Key(Modified("ctrl", "c"))]
+      }
+    })
+  match program.run() {
+    RunInterrupted(model) => assert_eq(model, "")
+    _ => fail("expected RunInterrupted")
+  }
+  assert_false(sub_seen.val)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa run result returns final model for clean quit" {
+  let program : Program[Int, Int] = Program::new(
+    init=fn() { UpdateResult::new(model=0, cmd=Cmd::msg(3)) },
+    update=fn(_model, msg) { UpdateResult::new(model=msg, cmd=Cmd::none()) },
+    view=fn(_model) { "" },
+    should_quit=fn(model) { model == 3 },
+  ).headless()
+  match program.run() {
+    RunQuit(model) => assert_eq(model, 3)
+    _ => fail("expected RunQuit")
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa run result distinguishes interrupt and delivers lifecycle message" {
+  let polled = Ref::new(false)
+  let seen : Ref[Array[LifecycleMsg]] = Ref::new([])
+  let program : Program[Array[LifecycleMsg], LifecycleMsg] = Program::new(
+      init=fn() { UpdateResult::new(model=[], cmd=Cmd::none()) },
+      update=fn(model, msg) {
+        let next = [..model, msg]
+        seen.val = next
+        UpdateResult::new(model=next, cmd=Cmd::none())
+      },
+      view=fn(_model) { "" },
+      on_lifecycle=fn(msg) { Some(msg) },
+    )
+    .headless()
+    .with_input(fn() {
+      if polled.val {
+        []
+      } else {
+        polled.val = true
+        [Key(Modified("ctrl", "c"))]
+      }
+    })
+  match program.run() {
+    RunInterrupted(model) => @test.assert_eq(model, [Interrupt])
+    _ => fail("expected RunInterrupted")
+  }
+  @test.assert_eq(seen.val, [Interrupt])
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa lifecycle commands deliver suspend resume and quit messages" {
+  let seen : Ref[Array[LifecycleMsg]] = Ref::new([])
+  let program : Program[Array[LifecycleMsg], LifecycleMsg] = Program::new(
+      init=fn() {
+        UpdateResult::new(
+          model=[],
+          cmd=Cmd::sequence([Cmd::suspend(), Cmd::quit()]),
+        )
+      },
+      update=fn(model, msg) {
+        let next = [..model, msg]
+        seen.val = next
+        UpdateResult::new(model=next, cmd=Cmd::none())
+      },
+      view=fn(_model) { "" },
+      on_lifecycle=fn(msg) { Some(msg) },
+    )
+    .headless()
+    .with_suspend_runner(fn() { () })
+  match program.run() {
+    RunQuit(model) => @test.assert_eq(model, [Suspend, Resume, Quit])
+    _ => fail("expected RunQuit")
+  }
+  @test.assert_eq(seen.val, [Suspend, Resume, Quit])
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa ctrl-z triggers lifecycle suspend before sub" {
+  let polled = Ref::new(false)
+  let sub_seen = Ref::new(false)
+  let suspended = Ref::new(false)
+  let program : Program[Array[LifecycleMsg], LifecycleMsg] = Program::new(
+      init=fn() { UpdateResult::new(model=[], cmd=Cmd::none()) },
+      update=fn(model, msg) {
+        let next = [..model, msg]
+        let cmd = if msg == Resume { Cmd::quit() } else { Cmd::none() }
+        UpdateResult::new(model=next, cmd~)
+      },
+      view=fn(_model) { "" },
+      sub=fn(evt) {
+        match evt {
+          Key(Modified("ctrl", "z")) => {
+            sub_seen.val = true
+            Some(Suspend)
+          }
+          _ => None
+        }
+      },
+      on_lifecycle=fn(msg) { Some(msg) },
+    )
+    .headless()
+    .with_suspend_runner(fn() { suspended.val = true })
+    .with_input(fn() {
+      if polled.val {
+        []
+      } else {
+        polled.val = true
+        [Key(Modified("ctrl", "z"))]
+      }
+    })
+  match program.run() {
+    RunQuit(model) => @test.assert_eq(model, [Suspend, Resume, Quit])
+    _ => fail("expected RunQuit")
+  }
+  assert_true(suspended.val)
+  assert_false(sub_seen.val)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa runtime error result carries typed message" {
+  let program : Program[Int, Int] = Program::new(
+    init=fn() { UpdateResult::new(model=0, cmd=Cmd::runtime_error("boom")) },
+    update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+    view=fn(_model) { "" },
+  ).headless()
+  match program.run() {
+    RunRuntimeError(message) => assert_eq(message, "boom")
+    _ => fail("expected RunRuntimeError")
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn assert_exec_runner_result(
+  fake_result : ExecResult,
+  expected : ExecResult,
+) -> Unit raise {
+  let seen : Ref[ExecResult?] = Ref::new(None)
+  let ran_process : Ref[ExecProcess?] = Ref::new(None)
+  let program : Program[Int, ExecResult] = Program::new(
+      init=fn() {
+        UpdateResult::new(
+          model=0,
+          cmd=Cmd::exec_process(
+            ExecProcess::new(command="fake", args=["arg"]),
+            fn(result) { result },
+          ),
+        )
+      },
+      update=fn(_model, msg) {
+        seen.val = Some(msg)
+        UpdateResult::new(model=1, cmd=Cmd::none())
+      },
+      view=fn(_model) { "" },
+      should_quit=fn(model) { model == 1 },
+    )
+    .headless()
+    .with_exec_runner(fn(process) {
+      ran_process.val = Some(process)
+      fake_result
+    })
+  match program.run() {
+    RunExec(model, result) => {
+      assert_eq(model, 1)
+      @test.assert_eq(result, expected)
+    }
+    _ => fail("expected RunExec")
+  }
+  @test.assert_eq(seen.val, Some(expected))
+  @test.assert_eq(
+    ran_process.val,
+    Some(ExecProcess::new(command="fake", args=["arg"])),
+  )
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa exec delivers success cancel and error results" {
+  assert_exec_runner_result(ExecCompleted(0), ExecCompleted(0))
+  assert_exec_runner_result(ExecCancelled, ExecCancelled)
+  assert_exec_runner_result(ExecSignaled(15), ExecSignaled(15))
+  assert_exec_runner_result(ExecError("nope"), ExecError("nope"))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa default exec runner reports exit exec failure and signals" {
+  match default_exec_runner(ExecProcess::new(command="false", args=[])) {
+    ExecCompleted(code) => assert_eq(code, 1)
+    _ => fail("expected false to exit with status 1")
+  }
+  match
+    default_exec_runner(
+      ExecProcess::new(command="pippa-command-that-should-not-exist", args=[]),
+    ) {
+    ExecError(message) =>
+      assert_eq(message, "failed to exec pippa-command-that-should-not-exist")
+    _ => fail("expected missing command to report exec failure")
+  }
+  match
+    default_exec_runner(
+      ExecProcess::new(command="sh", args=["-c", "kill -TERM $$"]),
+    ) {
+    ExecSignaled(signal) => assert_eq(signal, 15)
+    _ => fail("expected signal termination")
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa default exec runner rejects embedded nul bytes" {
+  match
+    default_exec_runner(ExecProcess::new(command="fake\u0000split", args=[])) {
+    ExecError(message) => assert_eq(message, "command contains NUL byte")
+    _ => fail("expected command NUL error")
+  }
+  match
+    default_exec_runner(
+      ExecProcess::new(command="fake", args=["ok\u0000split"]),
+    ) {
+    ExecError(message) => assert_eq(message, "argument contains NUL byte")
+    _ => fail("expected argument NUL error")
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa exec releases terminal before runner and restores after" {
+  let release_before_run = Ref::new(false)
+  let release_seen_by_runner = Ref::new(false)
+  let restore_after_run = Ref::new(false)
+  let ran = Ref::new(false)
+  let program : Program[Int, ExecResult] = Program::new(
+      init=fn() {
+        UpdateResult::new(
+          model=0,
+          cmd=Cmd::exec_process(ExecProcess::new(command="fake", args=[]), fn(
+            result,
+          ) {
+            result
+          }),
+        )
+      },
+      update=fn(_model, _msg) { UpdateResult::new(model=1, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+      should_quit=fn(model) { model == 1 },
+    )
+    .with_stdin(false)
+    .with_hide_cursor(false)
+    .with_focus_reporting(false)
+    .with_bracketed_paste(false)
+    .with_output(fn(output) {
+      if output.contains(exit_alt_screen()) && !ran.val {
+        release_before_run.val = true
+      }
+      if output.contains(enter_alt_screen()) && ran.val {
+        restore_after_run.val = true
+      }
+    })
+    .with_exec_runner(fn(_process) {
+      release_seen_by_runner.val = release_before_run.val
+      ran.val = true
+      ExecCompleted(0)
+    })
+  match program.run() {
+    RunExec(model, ExecCompleted(0)) => assert_eq(model, 1)
+    _ => fail("expected successful RunExec")
+  }
+  assert_true(release_seen_by_runner.val)
+  assert_true(restore_after_run.val)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa exec restores terminal after runner error" {
+  let restored = Ref::new(false)
+  let ran = Ref::new(false)
+  let program : Program[Int, ExecResult] = Program::new(
+      init=fn() {
+        UpdateResult::new(
+          model=0,
+          cmd=Cmd::exec_process(ExecProcess::new(command="fake", args=[]), fn(
+            result,
+          ) {
+            result
+          }),
+        )
+      },
+      update=fn(_model, _msg) { UpdateResult::new(model=1, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+      should_quit=fn(model) { model == 1 },
+    )
+    .with_stdin(false)
+    .with_hide_cursor(false)
+    .with_focus_reporting(false)
+    .with_bracketed_paste(false)
+    .with_output(fn(output) {
+      if output.contains(enter_alt_screen()) && ran.val {
+        restored.val = true
+      }
+    })
+    .with_exec_runner(fn(_process) {
+      ran.val = true
+      ExecError("nope")
+    })
+  match program.run() {
+    RunExec(model, ExecError("nope")) => assert_eq(model, 1)
+    _ => fail("expected error RunExec")
+  }
+  assert_true(restored.val)
 }

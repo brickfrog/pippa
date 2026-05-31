@@ -30,6 +30,65 @@ pub(all) struct TimerTick {
 } derive(Debug, Eq)
 
 ///|
+/// Lifecycle messages emitted by the runtime and lifecycle commands.
+pub(all) enum LifecycleMsg {
+  /// The program should quit cleanly.
+  Quit
+  /// The program was interrupted, typically by Ctrl+C / SIGINT.
+  Interrupt
+  /// The program is temporarily releasing the terminal for suspension.
+  Suspend
+  /// The program has resumed and re-acquired the terminal.
+  Resume
+} derive(Debug, Eq)
+
+///|
+/// External process request run by `Cmd::exec_process`.
+pub(all) struct ExecProcess {
+  /// Executable name or path passed to `execvp`.
+  command : String
+  /// Arguments passed after `command`.
+  args : Array[String]
+} derive(Debug, Eq)
+
+///|
+/// Create an external process request.
+pub fn ExecProcess::new(
+  command~ : String,
+  args? : Array[String] = [],
+) -> ExecProcess {
+  { command, args }
+}
+
+///|
+/// Result of an external process run.
+pub(all) enum ExecResult {
+  /// The child process exited and supplied an exit code.
+  ExecCompleted(Int)
+  /// The child process was cancelled before completion.
+  ExecCancelled
+  /// The child process was terminated by a signal.
+  ExecSignaled(Int)
+  /// The child process could not be started or failed at the runner boundary.
+  ExecError(String)
+} derive(Debug, Eq)
+
+///|
+/// Typed result returned by `Program::run`.
+pub(all) enum RunResult[Model] {
+  /// The program ended without a quit, interrupt, runtime error, or exec result.
+  RunCompleted(Model)
+  /// The program quit cleanly and carries the final model.
+  RunQuit(Model)
+  /// The program was interrupted and carries the final model.
+  RunInterrupted(Model)
+  /// The runtime stopped with an error.
+  RunRuntimeError(String)
+  /// The program quit in response to an external process result.
+  RunExec(Model, ExecResult)
+} derive(Debug)
+
+///|
 /// A batch of I/O commands to be performed by the runtime.
 ///
 /// `Cmd[Msg]` represents one-shot runtime effects that may later produce a
@@ -91,6 +150,12 @@ priv enum CmdAction[Msg] {
   SetFocusReporting(Bool)
   // Enable or disable bracketed paste mode.
   SetBracketedPaste(Bool)
+  // Deliver a typed lifecycle message through the runtime.
+  LifecycleAction(LifecycleMsg)
+  // Run an external process while the terminal is released.
+  ExecProcessAction(ExecProcess, (ExecResult) -> Msg)
+  // Stop the runtime with a typed error result.
+  RuntimeErrorAction(String)
   // Run commands in order, waiting for immediate effects from each step to settle
   // before starting the next one.
   Sequence(Array[Cmd[Msg]])
@@ -105,6 +170,9 @@ pub impl[Msg] Debug for Cmd[Msg] with fn to_repr(self) {
   let mut screen_count = 0
   let mut window_size_count = 0
   let mut terminal_count = 0
+  let mut lifecycle_count = 0
+  let mut exec_count = 0
+  let mut error_count = 0
   let mut sequence_count = 0
   for action in self.actions {
     match action {
@@ -129,6 +197,9 @@ pub impl[Msg] Debug for Cmd[Msg] with fn to_repr(self) {
       | RequestClipboard(_)
       | SetFocusReporting(_)
       | SetBracketedPaste(_) => terminal_count = terminal_count + 1
+      LifecycleAction(_) => lifecycle_count = lifecycle_count + 1
+      ExecProcessAction(_, _) => exec_count = exec_count + 1
+      RuntimeErrorAction(_) => error_count = error_count + 1
       Sequence(_) => sequence_count = sequence_count + 1
     }
   }
@@ -162,6 +233,18 @@ pub impl[Msg] Debug for Cmd[Msg] with fn to_repr(self) {
   if terminal_count > 0 {
     buf.write_string(", terminal=")
     buf.write_string(terminal_count.to_string())
+  }
+  if lifecycle_count > 0 {
+    buf.write_string(", lifecycle=")
+    buf.write_string(lifecycle_count.to_string())
+  }
+  if exec_count > 0 {
+    buf.write_string(", exec=")
+    buf.write_string(exec_count.to_string())
+  }
+  if error_count > 0 {
+    buf.write_string(", error=")
+    buf.write_string(error_count.to_string())
   }
   if sequence_count > 0 {
     buf.write_string(", sequence=")
@@ -204,6 +287,8 @@ pub(all) enum InternalMsg {
   KeyPress(Array[Byte])
   /// The terminal was resized.
   WindowResize(WindowSize)
+  /// A typed lifecycle event.
+  Lifecycle(LifecycleMsg)
   /// An explicit quit request.
   QuitRequested
 } derive(Debug, Eq)

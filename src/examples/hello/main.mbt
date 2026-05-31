@@ -89,5 +89,5 @@ fn main {
     sub=hello_sub,
     should_quit=fn(model) { model.quitting },
   )
-  @pippa.Program::run(program)
+  ignore(@pippa.Program::run(program))
 }

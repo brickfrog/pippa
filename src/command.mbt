@@ -13,6 +13,45 @@ pub fn[Msg] Cmd::msg(msg : Msg) -> Cmd[Msg] {
 }
 
 ///|
+/// Ask the runtime to quit cleanly.
+pub fn[Msg] Cmd::quit() -> Cmd[Msg] {
+  { _phantom: [], actions: [LifecycleAction(Quit)] }
+}
+
+///|
+/// Ask the runtime to stop as interrupted.
+pub fn[Msg] Cmd::interrupt() -> Cmd[Msg] {
+  { _phantom: [], actions: [LifecycleAction(Interrupt)] }
+}
+
+///|
+/// Ask the runtime to release and then re-acquire the terminal.
+pub fn[Msg] Cmd::suspend() -> Cmd[Msg] {
+  { _phantom: [], actions: [LifecycleAction(Suspend)] }
+}
+
+///|
+/// Ask the runtime to deliver a resume lifecycle message.
+pub fn[Msg] Cmd::resume() -> Cmd[Msg] {
+  { _phantom: [], actions: [LifecycleAction(Resume)] }
+}
+
+///|
+/// Stop the runtime with a typed runtime error result.
+pub fn[Msg] Cmd::runtime_error(message : String) -> Cmd[Msg] {
+  { _phantom: [], actions: [RuntimeErrorAction(message)] }
+}
+
+///|
+/// Run an external process while the runtime releases the terminal.
+pub fn[Msg] Cmd::exec_process(
+  process : ExecProcess,
+  to_msg : (ExecResult) -> Msg,
+) -> Cmd[Msg] {
+  { _phantom: [], actions: [ExecProcessAction(process, to_msg)] }
+}
+
+///|
 /// Execute a runtime effect immediately after the current update cycle.
 ///
 /// The runtime runs `f` on the event loop thread and feeds the resulting
@@ -229,6 +268,10 @@ pub fn[A, B] Cmd::map(f : (A) -> B, cmd : Cmd[A]) -> Cmd[B] {
       RequestClipboard(selection) => actions.push(RequestClipboard(selection))
       SetFocusReporting(enabled) => actions.push(SetFocusReporting(enabled))
       SetBracketedPaste(enabled) => actions.push(SetBracketedPaste(enabled))
+      LifecycleAction(msg) => actions.push(LifecycleAction(msg))
+      ExecProcessAction(process, task) =>
+        actions.push(ExecProcessAction(process, fn(result) { f(task(result)) }))
+      RuntimeErrorAction(message) => actions.push(RuntimeErrorAction(message))
       Sequence(cmds) =>
         actions.push(Sequence(cmds.map(fn(inner) { Cmd::map(f, inner) })))
     }

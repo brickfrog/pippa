@@ -697,5 +697,5 @@ fn main {
     sub=showcase_sub,
     should_quit=fn(model) { model.tab < 0 },
   )
-  @pippa.Program::run(program)
+  ignore(@pippa.Program::run(program))
 }
