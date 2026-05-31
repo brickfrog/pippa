@@ -42,6 +42,10 @@ pub fn clear_screen() -> String
 
 pub fn clear_screen_below() -> String
 
+pub fn clear_terminal_progress() -> String
+
+pub fn clear_window_title() -> String
+
 pub fn color_ansi(Int) -> Color
 
 pub fn color_hex(String) -> Color
@@ -132,9 +136,17 @@ pub fn request_secondary_device_attributes() -> String
 
 pub fn reset() -> String
 
+pub fn reset_background_color() -> String
+
+pub fn reset_foreground_color() -> String
+
 pub fn reverse() -> String
 
 pub fn right_binding() -> Binding
+
+pub fn set_terminal_progress(Int, Int) -> String
+
+pub fn set_window_title(String) -> String
 
 pub fn show_cursor() -> String
 
