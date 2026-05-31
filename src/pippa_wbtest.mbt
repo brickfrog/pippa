@@ -719,6 +719,60 @@ test "pippa force redraw command invalidates the render cache" {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+test "pippa desired_view wraps plain string views and flushes the same frame" {
+  let chunks : Ref[Array[String]] = Ref::new([])
+  let program : Program[Int, Int] = Program::new(
+    init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+    update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+    view=fn(model) { "plain \{model}" },
+    output=fn(output) { chunks.val = [..chunks.val, output] },
+  )
+  let next = desired_view(program, 7)
+  @test.assert_eq(next, View::text("plain 7"))
+  let (rendered, lines, _last_render_ms, due_at) = flush_view(
+    program, "", next, 0, true, 0L, true, true,
+  )
+  assert_eq(rendered, "plain 7")
+  assert_eq(lines, 1)
+  assert_true(due_at is None)
+  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Kplain 7")
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa structured_view carries state while rendering content unchanged" {
+  let chunks : Ref[Array[String]] = Ref::new([])
+  let program : Program[Int, Int] = Program::new(
+    init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+    update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+    view=fn(_model) { "legacy" },
+    output=fn(output) { chunks.val = [..chunks.val, output] },
+  ).with_structured_view(fn(model) {
+    View::text("structured \{model}")
+    .with_cursor_position(row=2, col=4)
+    .with_cursor_visible(true)
+    .with_window_title("Structured")
+    .with_progress(ViewProgressIndeterminate)
+    .with_mouse_mode(ViewMousePress)
+  })
+  let next = desired_view(program, 5)
+  assert_eq(next.content, "structured 5")
+  @test.assert_eq(next.cursor_position, Some({ row: 2, col: 4 }))
+  @test.assert_eq(next.cursor_visible, Some(true))
+  @test.assert_eq(next.window_title, Some("Structured"))
+  @test.assert_eq(next.progress, Some(ViewProgressIndeterminate))
+  @test.assert_eq(next.mouse_mode, Some(ViewMousePress))
+  let (rendered, lines, _last_render_ms, due_at) = flush_view(
+    program, "", next, 0, true, 0L, true, true,
+  )
+  assert_eq(rendered, "structured 5")
+  assert_eq(lines, 1)
+  assert_true(due_at is None)
+  assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Kstructured 5")
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "pippa request window size delivers a typed message" {
   let seen : Ref[WindowSize?] = Ref::new(None)
   let program : Program[Int, WindowSize] = Program::new(

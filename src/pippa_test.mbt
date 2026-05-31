@@ -30,6 +30,51 @@ test "pippa create program with on_resize" {
 }
 
 ///|
+test "pippa View text carries content with empty terminal state" {
+  let view = View::text("hello")
+  assert_eq(view.content, "hello")
+  assert_true(view.cursor_position is None)
+  assert_true(view.cursor_visible is None)
+  assert_true(view.window_title is None)
+  assert_true(view.foreground_color is None)
+  assert_true(view.background_color is None)
+  assert_true(view.progress is None)
+  assert_true(view.mouse_mode is None)
+}
+
+///|
+test "pippa View round-trips optional terminal state fields" {
+  let view = View::text("body")
+    .with_cursor_position(row=3, col=9)
+    .with_cursor_visible(false)
+    .with_window_title("Pippa")
+    .with_foreground_color(color_rgb(1, 2, 3))
+    .with_background_color(color_ansi(4))
+    .with_progress(ViewProgressPercent(42))
+    .with_mouse_mode(ViewMouseAllMotion)
+  assert_eq(view.content, "body")
+  @test.assert_eq(view.cursor_position, Some({ row: 3, col: 9 }))
+  @test.assert_eq(view.cursor_visible, Some(false))
+  @test.assert_eq(view.window_title, Some("Pippa"))
+  @test.assert_eq(view.foreground_color, Some(color_rgb(1, 2, 3)))
+  @test.assert_eq(view.background_color, Some(color_ansi(4)))
+  @test.assert_eq(view.progress, Some(ViewProgressPercent(42)))
+  @test.assert_eq(view.mouse_mode, Some(ViewMouseAllMotion))
+}
+
+///|
+test "pippa View cursor positions are clamped to terminal coordinates" {
+  let from_builder = View::text("body").with_cursor_position(row=0, col=-4)
+  @test.assert_eq(from_builder.cursor_position, Some({ row: 1, col: 1 }))
+
+  let from_new = View::new(
+    content="body",
+    cursor_position=Some({ row: -8, col: 0 }),
+  )
+  @test.assert_eq(from_new.cursor_position, Some({ row: 1, col: 1 }))
+}
+
+///|
 test "pippa update result" {
   let result : UpdateResult[Int, Unit] = UpdateResult::new(
     model=10,

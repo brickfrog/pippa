@@ -1,0 +1,19 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/examples/structured-view"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+type Model derive(@debug.Debug)
+
+type Msg derive(@debug.Debug)
+
+// Type aliases
+
+// Traits

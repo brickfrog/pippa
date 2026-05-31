@@ -7,6 +7,8 @@
 /// - **Msg**: typed messages that describe events (key presses, resizes, etc.).
 /// - **update**: a pure function that produces the next Model and optional Cmds.
 /// - **view**: a pure function that renders the Model to a string of ANSI output.
+///   Apps that need per-render terminal state can opt into `View` without
+///   changing the common string-view shape.
 ///
 /// The runtime (Program) handles raw terminal mode, input parsing, and
 /// efficient diffing / re-rendering.
@@ -87,6 +89,157 @@ pub(all) enum RunResult[Model] {
   /// The program quit in response to an external process result.
   RunExec(Model, ExecResult)
 } derive(Debug)
+
+///|
+/// Cursor position requested by a structured `View`.
+pub(all) struct ViewCursorPosition {
+  /// 1-based terminal row.
+  row : Int
+  /// 1-based terminal column.
+  col : Int
+} derive(Debug, Eq)
+
+///|
+fn view_cursor_coordinate(value : Int) -> Int {
+  if value < 1 {
+    1
+  } else {
+    value
+  }
+}
+
+///|
+/// Create a 1-based cursor position, clamping invalid terminal coordinates to 1.
+pub fn ViewCursorPosition::new(row~ : Int, col~ : Int) -> ViewCursorPosition {
+  { row: view_cursor_coordinate(row), col: view_cursor_coordinate(col) }
+}
+
+///|
+/// Per-render terminal progress state carried by a structured `View`.
+pub(all) enum ViewProgress {
+  /// Clear or suppress terminal progress reporting for this frame.
+  ViewProgressNone
+  /// Show an indeterminate progress indicator.
+  ViewProgressIndeterminate
+  /// Show progress as an integer percentage.
+  ViewProgressPercent(Int)
+  /// Show paused progress with an optional integer percentage.
+  ViewProgressPaused(Int?)
+  /// Show errored progress with an optional integer percentage.
+  ViewProgressError(Int?)
+} derive(Debug, Eq)
+
+///|
+/// Mouse reporting mode requested by a structured `View`.
+pub(all) enum ViewMouseMode {
+  /// Disable per-frame mouse reporting.
+  ViewMouseOff
+  /// Enable mouse press/release reporting.
+  ViewMousePress
+  /// Enable full mouse motion reporting.
+  ViewMouseAllMotion
+} derive(Debug, Eq)
+
+///|
+/// Structured render output for a single frame.
+///
+/// `content` is rendered exactly like the string returned by a traditional
+/// `view` function. The optional fields describe terminal state that should
+/// travel with the frame; emitting escape sequences for those fields is handled
+/// by later render plumbing.
+pub(all) struct View {
+  /// The frame content to diff and render.
+  content : String
+  /// Optional cursor position for this frame.
+  cursor_position : ViewCursorPosition?
+  /// Optional cursor visibility for this frame.
+  cursor_visible : Bool?
+  /// Optional terminal window title for this frame.
+  window_title : String?
+  /// Optional default foreground color for this frame.
+  foreground_color : Color?
+  /// Optional default background color for this frame.
+  background_color : Color?
+  /// Optional terminal progress state for this frame.
+  progress : ViewProgress?
+  /// Optional mouse reporting mode for this frame.
+  mouse_mode : ViewMouseMode?
+} derive(Debug, Eq)
+
+///|
+/// Create a structured `View` with explicit optional terminal state.
+pub fn View::new(
+  content~ : String,
+  cursor_position? : ViewCursorPosition? = None,
+  cursor_visible? : Bool? = None,
+  window_title? : String? = None,
+  foreground_color? : Color? = None,
+  background_color? : Color? = None,
+  progress? : ViewProgress? = None,
+  mouse_mode? : ViewMouseMode? = None,
+) -> View {
+  let cursor_position = cursor_position.map(fn(pos) {
+    ViewCursorPosition::new(row=pos.row, col=pos.col)
+  })
+  {
+    content,
+    cursor_position,
+    cursor_visible,
+    window_title,
+    foreground_color,
+    background_color,
+    progress,
+    mouse_mode,
+  }
+}
+
+///|
+/// Wrap plain string content as a structured `View`.
+pub fn View::text(content : String) -> View {
+  View::new(content~)
+}
+
+///|
+/// Set the cursor position for this frame.
+pub fn View::with_cursor_position(self : View, row~ : Int, col~ : Int) -> View {
+  { ..self, cursor_position: Some(ViewCursorPosition::new(row~, col~)) }
+}
+
+///|
+/// Set cursor visibility for this frame.
+pub fn View::with_cursor_visible(self : View, visible : Bool) -> View {
+  { ..self, cursor_visible: Some(visible) }
+}
+
+///|
+/// Set the terminal window title for this frame.
+pub fn View::with_window_title(self : View, title : String) -> View {
+  { ..self, window_title: Some(title) }
+}
+
+///|
+/// Set the default foreground color for this frame.
+pub fn View::with_foreground_color(self : View, color : Color) -> View {
+  { ..self, foreground_color: Some(color) }
+}
+
+///|
+/// Set the default background color for this frame.
+pub fn View::with_background_color(self : View, color : Color) -> View {
+  { ..self, background_color: Some(color) }
+}
+
+///|
+/// Set terminal progress state for this frame.
+pub fn View::with_progress(self : View, progress : ViewProgress) -> View {
+  { ..self, progress: Some(progress) }
+}
+
+///|
+/// Set the mouse reporting mode for this frame.
+pub fn View::with_mouse_mode(self : View, mouse_mode : ViewMouseMode) -> View {
+  { ..self, mouse_mode: Some(mouse_mode) }
+}
 
 ///|
 /// A batch of I/O commands to be performed by the runtime.
