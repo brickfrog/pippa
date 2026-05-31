@@ -8,7 +8,7 @@ test "filepicker parity renders metadata columns and navigates" {
   let selected = filepicker_parity_update(moved, PickerMsg(@component.Select)).model
 
   assert_eq(selected.picker.cursor, 1)
-  assert_eq(selected.picker.selected_path, Some("./notes.md"))
+  @test.assert_eq(selected.picker.selected_path, Some("./notes.md"))
   let view = @pippa.strip_ansi(filepicker_parity_view(selected))
   assert_true(view.contains("-rw-r--r--"))
   assert_true(view.contains("notes.md"))

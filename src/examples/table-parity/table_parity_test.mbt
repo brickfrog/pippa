@@ -7,7 +7,10 @@ test "table parity scripts focus paging and selection" {
   ])
 
   assert_eq(@component.table_cursor(model.table), 4)
-  assert_eq(@component.table_selected_row(model.table), Some(["E", "echo"]))
+  @test.assert_eq(
+    @component.table_selected_row(model.table),
+    Some(["E", "echo"]),
+  )
   assert_true(
     @pippa.strip_ansi(table_parity_view(model)).contains("E  │ echo"),
   )

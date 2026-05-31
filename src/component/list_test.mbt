@@ -48,8 +48,8 @@ test "list fuzzy ranks results and exposes matched indexes" {
   assert_eq(visible[0].item.id, "tight")
   assert_eq(visible[1].item.id, "spread")
   assert_eq(visible[2].item.id, "far")
-  assert_eq(visible[0].matched_indexes, [0, 1, 2])
-  assert_eq(visible[1].matched_indexes, [0, 2, 4])
+  @test.assert_eq(visible[0].matched_indexes, [0, 1, 2])
+  @test.assert_eq(visible[1].matched_indexes, [0, 2, 4])
   assert_true(visible[0].score > visible[1].score)
   assert_true(visible[1].score > visible[2].score)
 }
@@ -107,7 +107,7 @@ test "list selection remains stable by item identity across filters and SetItems
   let mut model = (c.init)().model
   model = (c.update)(model, CursorDown).model
   model = (c.update)(model, Select).model
-  assert_eq(model.selected_id, Some("beta"))
+  @test.assert_eq(model.selected_id, Some("beta"))
 
   model = (c.update)(model, SetFilter("gm")).model
   assert_eq(list_visible_items(model).length(), 1)
@@ -157,19 +157,19 @@ test "list status messages expire by generation and reject stale ticks" {
     instance_id: model.status_instance_id,
     generation: model.status_generation,
   }
-  assert_eq(model.status_message, Some("first"))
+  @test.assert_eq(model.status_message, Some("first"))
 
   model = (c.update)(model, ResetStatus).model
-  assert_eq(model.status_message, None)
+  @test.assert_eq(model.status_message, None)
   model = (c.update)(model, SetStatus("second", 50)).model
   let current : ListStatusToken = {
     instance_id: model.status_instance_id,
     generation: model.status_generation,
   }
   model = (c.update)(model, StatusExpired(stale)).model
-  assert_eq(model.status_message, Some("second"))
+  @test.assert_eq(model.status_message, Some("second"))
   model = (c.update)(model, StatusExpired(current)).model
-  assert_eq(model.status_message, None)
+  @test.assert_eq(model.status_message, None)
 }
 
 ///|

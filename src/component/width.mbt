@@ -300,16 +300,6 @@ fn component_remove_char_range(
 }
 
 ///|
-fn component_without_last_grapheme(s : String) -> String {
-  let count = component_grapheme_count(s)
-  if count <= 0 {
-    ""
-  } else {
-    @internal.grapheme_slice(s, 0, count - 1)
-  }
-}
-
-///|
 fn component_prefix_display_width(s : String, cursor : Int) -> Int {
   @internal.display_width(component_char_slice(s, 0, cursor))
 }

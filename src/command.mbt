@@ -32,7 +32,7 @@ pub fn[Msg] Cmd::suspend() -> Cmd[Msg] {
 
 ///|
 /// Ask the runtime to deliver a resume lifecycle message.
-pub fn[Msg] Cmd::resume() -> Cmd[Msg] {
+pub fn[Msg] Cmd::resume_program() -> Cmd[Msg] {
   { _phantom: [], actions: [LifecycleAction(Resume)] }
 }
 

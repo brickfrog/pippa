@@ -80,7 +80,7 @@ test "pippa lifecycle command constructors store typed actions" {
     Cmd::quit(),
     Cmd::interrupt(),
     Cmd::suspend(),
-    Cmd::resume(),
+    Cmd::resume_program(),
   ])
   assert_eq(cmd.actions.length(), 4)
   match cmd.actions[0] {
@@ -167,16 +167,16 @@ test "pippa synchronized output helpers use DEC private mode 2026" {
 ///|
 #cfg(any(target="native", target="llvm"))
 fn assert_terminal_cmd_emits(cmd : Cmd[Int], expected : String) -> Unit raise {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program : Program[Int, Int] = Program::new(
     init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
     update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
     view=fn(_model) { "" },
     output=fn(output) { chunks.val = [..chunks.val, output] },
   )
-  let sent_msgs = @queue.Queue::new()
-  let pending = @queue.Queue::new()
-  let sequences = @deque.Deque::new()
+  let sent_msgs = @queue.Queue([])
+  let pending = @queue.Queue([])
+  let sequences = @deque.Deque([])
   let timers = []
   let state = initial_render_state(program, true)
   queue_cmd_effects(cmd, 0L, pending, timers, sequences)
@@ -434,9 +434,9 @@ test "pippa cmd map transforms every and request window size callbacks lazily" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa program handle send queues messages until closed" {
-  let pending_msgs = @queue.Queue::new()
-  let pending_controls = @queue.Queue::new()
-  let closed = Ref::new(false)
+  let pending_msgs = @queue.Queue([])
+  let pending_controls = @queue.Queue([])
+  let closed = Ref(false)
   let handle : ProgramHandle[Int] = {
     pending_msgs,
     pending_controls,
@@ -474,9 +474,9 @@ test "pippa sequence waits for immediate effects to settle before next step" {
     },
     view=fn(_model) { "" },
   )
-  let sent_msgs = @queue.Queue::new()
-  let pending = @queue.Queue::new()
-  let sequences = @deque.Deque::new()
+  let sent_msgs = @queue.Queue([])
+  let pending = @queue.Queue([])
+  let sequences = @deque.Deque([])
   let timers = []
   let state = initial_render_state(program, false)
   queue_cmd_effects(
@@ -495,7 +495,7 @@ test "pippa sequence waits for immediate effects to settle before next step" {
     timers,
     sequences,
   )
-  assert_eq(model, [1, 10, 2])
+  @test.assert_eq(model, [1, 10, 2])
   assert_true(reason is None)
   assert_eq(updated, true)
   assert_true(pending.is_empty())
@@ -510,8 +510,8 @@ test "pippa every alignment snaps to the next strict interval boundary" {
   assert_eq(next_aligned_every_deadline(10L, 10), 20L)
   assert_eq(next_aligned_every_deadline(1011L, 10), 1020L)
 
-  let pending = @queue.Queue::new()
-  let sequences = @deque.Deque::new()
+  let pending = @queue.Queue([])
+  let sequences = @deque.Deque([])
   let timers = []
   queue_cmd_effects(
     Cmd::every(10, fn(tick) { tick.elapsed_ms.to_int() }),
@@ -534,8 +534,8 @@ test "pippa every alignment snaps to the next strict interval boundary" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa every command fires once without runtime recurrence" {
-  let seen : Ref[Array[Int64]] = Ref::new([])
-  let started_at = Ref::new(0L)
+  let seen : Ref[Array[Int64]] = Ref([])
+  let started_at = Ref(0L)
   let program : Program[Int, Int64] = Program::new(
       init=fn() {
         started_at.val = pippa_now_ms()
@@ -565,8 +565,8 @@ test "pippa every command fires once without runtime recurrence" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa every recurrence is app driven by reissuing the command" {
-  let seen : Ref[Array[Int64]] = Ref::new([])
-  let started_at = Ref::new(0L)
+  let seen : Ref[Array[Int64]] = Ref([])
+  let started_at = Ref(0L)
   let program : Program[Int, Int64] = Program::new(
       init=fn() {
         started_at.val = pippa_now_ms()
@@ -602,7 +602,7 @@ test "pippa every recurrence is app driven by reissuing the command" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa screen commands emit ANSI and update runtime shutdown state" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program : Program[Int, Int] = Program::new(
       init=fn() {
         UpdateResult::new(
@@ -635,7 +635,7 @@ test "pippa screen commands emit ANSI and update runtime shutdown state" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa exit and show cursor commands update runtime state" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program : Program[Int, Int] = Program::new(
       init=fn() {
         UpdateResult::new(
@@ -664,7 +664,7 @@ test "pippa exit and show cursor commands update runtime state" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa repaint command invalidates the render cache" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program : Program[Int, Int] = Program::new(
       init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
       update=fn(model, msg) {
@@ -695,7 +695,7 @@ test "pippa repaint command invalidates the render cache" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa force redraw command invalidates the render cache" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program : Program[Int, Int] = Program::new(
       init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
       update=fn(model, msg) {
@@ -774,7 +774,7 @@ fn sync_frame(output : String) -> String {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa desired_view wraps plain string views and flushes the same frame" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program = test_render_program(chunks)
   let next = desired_view(program, 7)
   @test.assert_eq(next, View::text("plain 7"))
@@ -798,7 +798,7 @@ test "pippa desired_view wraps plain string views and flushes the same frame" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa flush_view synchronizes content frames without wrapping no-ops or disabled programs" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program = test_render_program(chunks)
   let (rendered, lines, last_render_ms, due_at, terminal_state) = flush_view(
     program,
@@ -854,7 +854,7 @@ test "pippa flush_view synchronizes content frames without wrapping no-ops or di
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa structured_view carries state while rendering content unchanged" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program = test_render_program(chunks).with_structured_view(fn(model) {
     View::text("structured \{model}")
     .with_cursor_position(row=2, col=4)
@@ -896,7 +896,7 @@ test "pippa structured_view carries state while rendering content unchanged" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa flush_view emits cursor state once and reconciles unchanged frames" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program = test_render_program(chunks)
   let view = View::text("one")
     .with_cursor_position(row=4, col=7)
@@ -945,7 +945,7 @@ test "pippa flush_view emits cursor state once and reconciles unchanged frames" 
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa flush_view sets changes and clears window title" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program = test_render_program(chunks)
   let state0 = runtime_view_terminal_state_empty()
   let (rendered1, lines1, last1, _d1, state1) = flush_view(
@@ -1002,7 +1002,7 @@ test "pippa flush_view sets changes and clears window title" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa flush_view applies and resets default foreground and background colors" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program = test_render_program(chunks)
   let (rendered1, lines1, last1, _d1, state1) = flush_view(
     program,
@@ -1058,7 +1058,7 @@ test "pippa flush_view applies and resets default foreground and background colo
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa flush_view maps every ViewProgress variant to OSC 9;4" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program = test_render_program(chunks)
   let state0 = runtime_view_terminal_state_empty()
 
@@ -1171,7 +1171,7 @@ test "pippa flush_view maps every ViewProgress variant to OSC 9;4" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa flush_view reconciles mouse mode transitions" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program = test_render_program(chunks)
   let (rendered1, lines1, last1, _d1, state1) = flush_view(
     program,
@@ -1271,7 +1271,7 @@ test "pippa flush_view reconciles mouse mode transitions" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa initial view terminal cache reflects program-managed cursor and mouse" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program : Program[Int, Int] = Program::new(
     init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
     update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
@@ -1304,7 +1304,7 @@ test "pippa initial view terminal cache reflects program-managed cursor and mous
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa runtime screen commands keep structured cursor cache honest" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program = test_render_program(chunks)
     .with_alt_screen(false)
     .with_hide_cursor(false)
@@ -1362,7 +1362,7 @@ test "pippa runtime screen commands keep structured cursor cache honest" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa runtime hide cursor command updates structured cursor cache" {
-  let chunks : Ref[Array[String]] = Ref::new([])
+  let chunks : Ref[Array[String]] = Ref([])
   let program = test_render_program(chunks)
     .with_alt_screen(false)
     .with_hide_cursor(false)
@@ -1398,8 +1398,8 @@ test "pippa runtime hide cursor command updates structured cursor cache" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa interrupt cleanup resets structured terminal state at runtime" {
-  let chunks : Ref[Array[String]] = Ref::new([])
-  let polled = Ref::new(false)
+  let chunks : Ref[Array[String]] = Ref([])
+  let polled = Ref(false)
   let program : Program[Int, Int] = Program::new(
       init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
       update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
@@ -1442,7 +1442,7 @@ test "pippa interrupt cleanup resets structured terminal state at runtime" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa request window size delivers a typed message" {
-  let seen : Ref[WindowSize?] = Ref::new(None)
+  let seen : Ref[WindowSize?] = Ref(None)
   let program : Program[Int, WindowSize] = Program::new(
     init=fn() {
       UpdateResult::new(
@@ -1470,8 +1470,8 @@ test "pippa request window size delivers a typed message" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa typed window size hook receives initial resize and on_resize still works" {
-  let typed_seen : Ref[WindowSize?] = Ref::new(None)
-  let legacy_seen = Ref::new(0)
+  let typed_seen : Ref[WindowSize?] = Ref(None)
+  let legacy_seen = Ref(0)
   let program : Program[Int, WindowSize] = Program::new(
       init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
       update=fn(_model, msg) {
@@ -1644,12 +1644,12 @@ fn runtime_pacing_next_deadline(
 ///|
 #cfg(any(target="native", target="llvm"))
 fn runtime_pacing_frame_times() -> Array[Int64] raise {
-  let now = Ref::new(0L)
+  let now = Ref(0L)
   let previous_clock = runtime_clock_override.val
   runtime_clock_override.val = Some(fn() { now.val })
   defer restore_runtime_clock(previous_clock)
 
-  let frame_times : Ref[Array[Int64]] = Ref::new([])
+  let frame_times : Ref[Array[Int64]] = Ref([])
   let program : Program[Int, RuntimePacingMsg] = Program::new(
       init=fn() {
         UpdateResult::new(
@@ -1676,9 +1676,9 @@ fn runtime_pacing_frame_times() -> Array[Int64] raise {
 
   let init_res = (program.init)()
   let mut model = init_res.model
-  let sent_msgs = @queue.Queue::new()
-  let pending = @queue.Queue::new()
-  let sequences = @deque.Deque::new()
+  let sent_msgs = @queue.Queue([])
+  let pending = @queue.Queue([])
+  let sequences = @deque.Deque([])
   let mut timers : Array[RuntimeTimer[RuntimePacingMsg]] = []
   queue_cmd_effects(init_res.cmd, runtime_now_ms(), pending, timers, sequences)
 
@@ -1820,8 +1820,8 @@ test "pippa 16ms after animation paces to 60 evenly spaced fps-capped frames" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa custom output captures rendered views" {
-  let captured = Ref::new("")
-  let sent = Ref::new(false)
+  let captured = Ref("")
+  let sent = Ref(false)
   let program : Program[Int, Int] = Program::new(
       init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
       update=fn(_model, msg) { UpdateResult::new(model=msg, cmd=Cmd::none()) },
@@ -1841,8 +1841,8 @@ test "pippa custom output captures rendered views" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa custom input drives sub in headless mode" {
-  let polled = Ref::new(false)
-  let seen : Ref[Array[Int]] = Ref::new([])
+  let polled = Ref(false)
+  let seen : Ref[Array[Int]] = Ref([])
   let program : Program[Int, Int] = Program::new(
       init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
       update=fn(_model, msg) {
@@ -1869,14 +1869,14 @@ test "pippa custom input drives sub in headless mode" {
       }
     })
   ignore(program.run())
-  assert_eq(seen.val, [1, 2])
+  @test.assert_eq(seen.val, [1, 2])
 }
 
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa custom input can render updates without stdin" {
-  let polled = Ref::new(false)
-  let captured = Ref::new("")
+  let polled = Ref(false)
+  let captured = Ref("")
   let program : Program[Int, Int] = Program::new(
       init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
       update=fn(_model, msg) {
@@ -1911,8 +1911,8 @@ test "pippa custom input can render updates without stdin" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa raw input source drives parsing without stdin" {
-  let polled = Ref::new(false)
-  let seen : Ref[Array[Int]] = Ref::new([])
+  let polled = Ref(false)
+  let seen : Ref[Array[Int]] = Ref([])
   let program : Program[Int, Int] = Program::new(
       init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
       update=fn(_model, msg) {
@@ -1939,13 +1939,13 @@ test "pippa raw input source drives parsing without stdin" {
       }
     })
   ignore(program.run())
-  assert_eq(seen.val, [1, 2])
+  @test.assert_eq(seen.val, [1, 2])
 }
 
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa window size option seeds initial resize message" {
-  let seen = Ref::new(None)
+  let seen = Ref(None)
   let program : Program[Int, Int] = Program::new(
       init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
       update=fn(_model, msg) {
@@ -1965,7 +1965,7 @@ test "pippa window size option seeds initial resize message" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa cancellation hook stops a headless program" {
-  let polls = Ref::new(0)
+  let polls = Ref(0)
   let program : Program[Int, Int] = Program::new(
       init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
       update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
@@ -1983,9 +1983,9 @@ test "pippa cancellation hook stops a headless program" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa handle can release and restore terminal" {
-  let handle_ref : Ref[ProgramHandle[Int]?] = Ref::new(None)
-  let polled = Ref::new(false)
-  let captured = Ref::new("")
+  let handle_ref : Ref[ProgramHandle[Int]?] = Ref(None)
+  let polled = Ref(false)
+  let captured = Ref("")
   let program : Program[Int, Int] = Program::new(
       init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
       update=fn(_model, msg) {
@@ -2026,8 +2026,8 @@ test "pippa handle can release and restore terminal" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa restore seeds structured cache from program cursor and mouse flags" {
-  let ran = Ref::new(false)
-  let restore_chunks : Ref[Array[String]] = Ref::new([])
+  let ran = Ref(false)
+  let restore_chunks : Ref[Array[String]] = Ref([])
   let program : Program[Int, Int] = Program::new(
       init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
       update=fn(_model, msg) {
@@ -2076,8 +2076,8 @@ test "pippa restore seeds structured cache from program cursor and mouse flags" 
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa headless run_with_handle can quit from injected message" {
-  let seen = Ref::new(0)
-  let sent = Ref::new(false)
+  let seen = Ref(0)
+  let sent = Ref(false)
   let program : Program[Int, Int] = Program::new(
     init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
     update=fn(_model, msg) {
@@ -2095,8 +2095,8 @@ test "pippa headless run_with_handle can quit from injected message" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa catch_interrupt false delivers ctrl-c to sub" {
-  let polled = Ref::new(false)
-  let seen : Ref[Array[String]] = Ref::new([])
+  let polled = Ref(false)
+  let seen : Ref[Array[String]] = Ref([])
   let program : Program[String, String] = Program::new(
       init=fn() { UpdateResult::new(model="", cmd=Cmd::none()) },
       update=fn(_model, msg) {
@@ -2126,14 +2126,14 @@ test "pippa catch_interrupt false delivers ctrl-c to sub" {
   ignore(program.run())
   // With catch_interrupt=false the runtime does NOT force-quit on Ctrl+C,
   // so both events reach sub and update sees them both.
-  assert_eq(seen.val, ["ctrl-c", "q"])
+  @test.assert_eq(seen.val, ["ctrl-c", "q"])
 }
 
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa catch_interrupt true force-quits on ctrl-c before sub sees it" {
-  let polled = Ref::new(false)
-  let seen : Ref[Array[String]] = Ref::new([])
+  let polled = Ref(false)
+  let seen : Ref[Array[String]] = Ref([])
   let program : Program[String, String] = Program::new(
       init=fn() { UpdateResult::new(model="", cmd=Cmd::none()) },
       update=fn(_model, msg) {
@@ -2162,14 +2162,14 @@ test "pippa catch_interrupt true force-quits on ctrl-c before sub sees it" {
   ignore(program.run())
   // With catch_interrupt=true the runtime intercepts Ctrl+C before `sub`;
   // 'q' is never reached because we already broke out.
-  assert_eq(seen.val, [])
+  @test.assert_eq(seen.val, [])
 }
 
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa catch_interrupt skips sub even when ctrl-c sub would quit" {
-  let polled = Ref::new(false)
-  let sub_seen = Ref::new(false)
+  let polled = Ref(false)
+  let sub_seen = Ref(false)
   let program : Program[String, String] = Program::new(
       init=fn() { UpdateResult::new(model="", cmd=Cmd::none()) },
       update=fn(_model, msg) { UpdateResult::new(model=msg, cmd=Cmd::none()) },
@@ -2219,8 +2219,8 @@ test "pippa run result returns final model for clean quit" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa run result distinguishes interrupt and delivers lifecycle message" {
-  let polled = Ref::new(false)
-  let seen : Ref[Array[LifecycleMsg]] = Ref::new([])
+  let polled = Ref(false)
+  let seen : Ref[Array[LifecycleMsg]] = Ref([])
   let program : Program[Array[LifecycleMsg], LifecycleMsg] = Program::new(
       init=fn() { UpdateResult::new(model=[], cmd=Cmd::none()) },
       update=fn(model, msg) {
@@ -2250,7 +2250,7 @@ test "pippa run result distinguishes interrupt and delivers lifecycle message" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa lifecycle commands deliver suspend resume and quit messages" {
-  let seen : Ref[Array[LifecycleMsg]] = Ref::new([])
+  let seen : Ref[Array[LifecycleMsg]] = Ref([])
   let program : Program[Array[LifecycleMsg], LifecycleMsg] = Program::new(
       init=fn() {
         UpdateResult::new(
@@ -2278,9 +2278,9 @@ test "pippa lifecycle commands deliver suspend resume and quit messages" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa ctrl-z triggers lifecycle suspend before sub" {
-  let polled = Ref::new(false)
-  let sub_seen = Ref::new(false)
-  let suspended = Ref::new(false)
+  let polled = Ref(false)
+  let sub_seen = Ref(false)
+  let suspended = Ref(false)
   let program : Program[Array[LifecycleMsg], LifecycleMsg] = Program::new(
       init=fn() { UpdateResult::new(model=[], cmd=Cmd::none()) },
       update=fn(model, msg) {
@@ -2338,8 +2338,8 @@ fn assert_exec_runner_result(
   fake_result : ExecResult,
   expected : ExecResult,
 ) -> Unit raise {
-  let seen : Ref[ExecResult?] = Ref::new(None)
-  let ran_process : Ref[ExecProcess?] = Ref::new(None)
+  let seen : Ref[ExecResult?] = Ref(None)
+  let ran_process : Ref[ExecProcess?] = Ref(None)
   let program : Program[Int, ExecResult] = Program::new(
       init=fn() {
         UpdateResult::new(
@@ -2413,7 +2413,7 @@ test "pippa default exec runner reports exit exec failure and signals" {
 #cfg(any(target="native", target="llvm"))
 test "pippa default exec runner restores terminal after missing command error" {
   let missing = "/nonexistent/pippa-d1s-no-such-binary"
-  let captured = Ref::new("")
+  let captured = Ref("")
   let program : Program[Int, ExecResult] = Program::new(
       init=fn() {
         UpdateResult::new(
@@ -2464,10 +2464,10 @@ test "pippa default exec runner rejects embedded nul bytes" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa exec releases terminal before runner and restores after" {
-  let release_before_run = Ref::new(false)
-  let release_seen_by_runner = Ref::new(false)
-  let restore_after_run = Ref::new(false)
-  let ran = Ref::new(false)
+  let release_before_run = Ref(false)
+  let release_seen_by_runner = Ref(false)
+  let restore_after_run = Ref(false)
+  let ran = Ref(false)
   let program : Program[Int, ExecResult] = Program::new(
       init=fn() {
         UpdateResult::new(
@@ -2511,8 +2511,8 @@ test "pippa exec releases terminal before runner and restores after" {
 ///|
 #cfg(any(target="native", target="llvm"))
 test "pippa exec restores terminal after runner error" {
-  let restored = Ref::new(false)
-  let ran = Ref::new(false)
+  let restored = Ref(false)
+  let ran = Ref(false)
   let program : Program[Int, ExecResult] = Program::new(
       init=fn() {
         UpdateResult::new(

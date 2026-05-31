@@ -460,7 +460,7 @@ fn default_output(_output : String) -> Unit {
 
 ///|
 #cfg(any(target="native", target="llvm"))
-let runtime_clock_override : Ref[(() -> Int64)?] = Ref::new(None)
+let runtime_clock_override : Ref[(() -> Int64)?] = Ref(None)
 
 ///|
 #cfg(any(target="native", target="llvm"))
@@ -743,10 +743,10 @@ fn[Model, Msg] run_internal(
   let init_res = (program.init)()
   on_start(
     ProgramHandle::new(
-      @queue.Queue::new(),
-      @queue.Queue::new(),
+      @queue.Queue([]),
+      @queue.Queue([]),
       fn() { () },
-      Ref::new(true),
+      Ref(true),
     ),
   )
   RunCompleted(init_res.model)
@@ -2083,14 +2083,14 @@ fn[Model, Msg] run_internal(
 
   let init_res = (program.init)()
   let mut model = init_res.model
-  let sent_msgs = @queue.Queue::new()
-  let pending_controls = @queue.Queue::new()
-  let handle_closed = Ref::new(false)
+  let sent_msgs = @queue.Queue([])
+  let pending_controls = @queue.Queue([])
+  let handle_closed = Ref(false)
   let handle = ProgramHandle::new(
     sent_msgs, pending_controls, pippa_signal_wakeup, handle_closed,
   )
-  let pending = @queue.Queue::new()
-  let sequences = @deque.Deque::new()
+  let pending = @queue.Queue([])
+  let sequences = @deque.Deque([])
   let mut timers : Array[RuntimeTimer[Msg]] = []
   queue_cmd_effects(init_res.cmd, runtime_now_ms(), pending, timers, sequences)
 
