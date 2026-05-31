@@ -16,6 +16,8 @@ pub const OSC : String = "\x1b]"
 
 pub const ST : String = "\x1b\\"
 
+pub fn begin_sync_update() -> String
+
 pub fn bg_color(Int) -> String
 
 pub fn bg_rgb(Int, Int, Int) -> String
@@ -73,6 +75,8 @@ pub fn enable_focus_reporting() -> String
 pub fn enable_mouse() -> String
 
 pub fn enable_mouse_motion() -> String
+
+pub fn end_sync_update() -> String
 
 pub fn enter_alt_screen() -> String
 
@@ -434,6 +438,7 @@ pub(all) struct Program[Model, Msg] {
   focus_reporting : Bool
   bracketed_paste : Bool
   hide_cursor : Bool
+  synchronized_output : Bool
   rendering : Bool
   read_stdin : Bool
   input : (() -> Array[InputEvent])?
@@ -452,7 +457,7 @@ pub(all) struct Program[Model, Msg] {
   suspend_runner : () -> Unit
 }
 pub fn[Model, Msg] Program::headless(Self[Model, Msg]) -> Self[Model, Msg]
-pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, alt_screen? : Bool, focus_reporting? : Bool, bracketed_paste? : Bool, hide_cursor? : Bool, rendering? : Bool, read_stdin? : Bool, input? : (() -> Array[InputEvent])?, raw_input? : (() -> Bytes)?, cancelled? : (() -> Bool)?, fps? : Int, window_width? : Int, window_height? : Int, output? : (String) -> Unit, on_resize? : (Int, Int) -> Msg?, should_quit? : (Model) -> Bool, catch_interrupt? : Bool, on_window_size? : (WindowSize) -> Msg?, on_lifecycle? : (LifecycleMsg) -> Msg?, exec_runner? : (ExecProcess) -> ExecResult, suspend_runner? : () -> Unit) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::new(init~ : () -> UpdateResult[Model, Msg], update~ : (Model, Msg) -> UpdateResult[Model, Msg], view~ : (Model) -> String, sub? : (InputEvent) -> Msg?, on_tick? : () -> Msg?, mouse? : Bool, alt_screen? : Bool, focus_reporting? : Bool, bracketed_paste? : Bool, hide_cursor? : Bool, synchronized_output? : Bool, rendering? : Bool, read_stdin? : Bool, input? : (() -> Array[InputEvent])?, raw_input? : (() -> Bytes)?, cancelled? : (() -> Bool)?, fps? : Int, window_width? : Int, window_height? : Int, output? : (String) -> Unit, on_resize? : (Int, Int) -> Msg?, should_quit? : (Model) -> Bool, catch_interrupt? : Bool, on_window_size? : (WindowSize) -> Msg?, on_lifecycle? : (LifecycleMsg) -> Msg?, exec_runner? : (ExecProcess) -> ExecResult, suspend_runner? : () -> Unit) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::run(Self[Model, Msg]) -> RunResult[Model]
 pub fn[Model, Msg] Program::run_with_handle(Self[Model, Msg], (ProgramHandle[Msg]) -> Unit) -> RunResult[Model]
 pub fn[Model, Msg] Program::with_alt_screen(Self[Model, Msg], Bool) -> Self[Model, Msg]
@@ -471,6 +476,7 @@ pub fn[Model, Msg] Program::with_rendering(Self[Model, Msg], Bool) -> Self[Model
 pub fn[Model, Msg] Program::with_stdin(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_structured_view(Self[Model, Msg], (Model) -> View) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_suspend_runner(Self[Model, Msg], () -> Unit) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_synchronized_output(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_window_size(Self[Model, Msg], Int, Int) -> Self[Model, Msg]
 
 type ProgramHandle[Msg]

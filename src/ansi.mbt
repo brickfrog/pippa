@@ -74,6 +74,18 @@ pub fn show_cursor() -> String {
 }
 
 ///|
+/// Begin synchronized output mode (CSI ? 2026 h).
+pub fn begin_sync_update() -> String {
+  "\{CSI}?2026h"
+}
+
+///|
+/// End synchronized output mode (CSI ? 2026 l).
+pub fn end_sync_update() -> String {
+  "\{CSI}?2026l"
+}
+
+///|
 /// Enter the alternate screen buffer (CSI ? 1049 h).
 pub fn enter_alt_screen() -> String {
   "\{CSI}?1049h"
