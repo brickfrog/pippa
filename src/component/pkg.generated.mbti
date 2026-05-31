@@ -7,6 +7,8 @@ import {
 }
 
 // Values
+pub fn default_table_keymap() -> TableKeymap
+
 pub fn default_text_input_keymap() -> TextInputKeymap
 
 pub fn filepicker(current_directory? : String, height? : Int, show_hidden? : Bool, allow_files? : Bool, allow_directories? : Bool, allowed_extensions? : Array[String]) -> Component[FilepickerModel, FilepickerMsg]
@@ -25,7 +27,23 @@ pub fn spring_step(Double, Double, Double, Double, Double, Double) -> (Double, D
 
 pub fn stopwatch(interval_ms? : Int) -> Component[StopwatchModel, StopwatchMsg]
 
-pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg]
+pub fn table(columns~ : Array[Column], width? : Int, height? : Int, keymap? : TableKeymap, focused? : Bool) -> Component[TableModel, TableMsg]
+
+pub fn table_cursor(TableModel) -> Int
+
+pub fn table_help_model(keymap? : TableKeymap, show_full? : Bool, width? : Int) -> @pippa.HelpModel
+
+pub fn table_help_view(keymap? : TableKeymap, show_full? : Bool, width? : Int) -> String
+
+pub fn table_keymap_disable(TableKeymap, TableAction) -> TableKeymap
+
+pub fn table_keymap_help(TableKeymap) -> @pippa.KeyMap
+
+pub fn table_keymap_override(TableKeymap, TableAction, @pippa.Binding) -> TableKeymap
+
+pub fn table_msg_from_input_event(@pippa.InputEvent, keymap? : TableKeymap) -> TableMsg?
+
+pub fn table_selected_row(TableModel) -> Array[String]?
 
 pub fn text_input(placeholder~ : String, prompt? : String, width? : Int, echo_mode? : TextInputEchoMode, char_limit? : Int?, suggestions? : Array[String], keymap? : TextInputKeymap, disabled? : Bool, validator? : (String) -> Result[Unit, String]) -> Component[TextInputModel, TextInputMsg]
 
@@ -221,18 +239,56 @@ pub(all) struct StopwatchTickToken {
   generation : Int64
 } derive(Eq, @debug.Debug)
 
+pub(all) enum TableAction {
+  TableActionCursorUp
+  TableActionCursorDown
+  TableActionPageUp
+  TableActionPageDown
+  TableActionHalfPageUp
+  TableActionHalfPageDown
+  TableActionMoveToTop
+  TableActionMoveToBottom
+  TableActionSelect
+} derive(Eq, @debug.Debug)
+
+pub(all) struct TableKeyBinding {
+  binding : @pippa.Binding
+  action : TableAction
+} derive(Eq, @debug.Debug)
+
+pub(all) struct TableKeymap {
+  bindings : Array[TableKeyBinding]
+} derive(Eq, @debug.Debug)
+
 pub(all) struct TableModel {
   columns : Array[Column]
   rows : Array[Array[String]]
   cursor : Int
   selected : Int
+  width : Int
+  height : Int
+  focused : Bool
+  viewport : ViewportModel
 } derive(@debug.Debug)
 
 pub(all) enum TableMsg {
   CursorUp
   CursorDown
+  PageUp
+  PageDown
+  HalfPageUp
+  HalfPageDown
+  MoveToTop
+  MoveToBottom
   Select
+  SetColumns(Array[Column])
   SetRows(Array[Array[String]])
+  SetWidth(Int)
+  SetHeight(Int)
+  SetCursor(Int)
+  Focus
+  Blur
+  HandleInput(@pippa.InputEvent)
 } derive(@debug.Debug)
 
 pub(all) enum TextInputEchoMode {
