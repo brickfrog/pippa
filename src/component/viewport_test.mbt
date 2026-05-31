@@ -259,10 +259,7 @@ test "viewport gutter measures all soft-wrapped visual rows" {
     gutter=Some(fn(ctx) { "\{ctx.visual_line + 1}|" }),
   )
   let mut m = (vp.init)().model
-  m = (vp.update)(
-      m,
-      SetContent("abcdefghijklmnopqrstuvwxyzabcdefghijklmn"),
-    ).model
+  m = (vp.update)(m, SetContent("abcdefghijklmnopqrstuvwxyzabcdefghijklmn")).model
   assert_eq(
     (vp.view)(m),
     "1| abc\n2| def\n3| ghi\n4| jkl\n5| mno\n6| pqr\n7| stu\n8| vwx\n9| yza\n10|bcd",
@@ -295,20 +292,70 @@ test "viewport highlights render and next previous scroll selected range into vi
 }
 
 ///|
+test "viewport highlights use display-cell columns for wide glyphs" {
+  let vp = viewport(width=5, height=1, highlights=[
+    viewport_highlight(line=0, start_col=1, end_col=3),
+  ])
+  let mut m = (vp.init)().model
+  m = (vp.update)(m, SetContent("a界b")).model
+  assert_eq((vp.view)(m), "a\u001b[7m界\u001b[0mb ")
+}
+
+///|
+test "viewport highlights preserve active ANSI state after selected range" {
+  let vp = viewport(width=6, height=1, highlights=[
+    viewport_highlight(line=0, start_col=2, end_col=4),
+  ])
+  let mut m = (vp.init)().model
+  m = (vp.update)(m, SetContent("\u001b[31mabcdef\u001b[0m")).model
+  assert_eq(
+    (vp.view)(m),
+    "\u001b[31mab\u001b[7mcd\u001b[0m\u001b[31mef\u001b[0m",
+  )
+}
+
+///|
+test "viewport multi-line highlight scrolls horizontal view to selected start" {
+  let vp = viewport(width=5, height=1)
+  let mut m = (vp.init)().model
+  m = (vp.update)(m, SetContent("0123456789abcdef\nsecond line")).model
+  m = (vp.update)(
+      m,
+      SetHighlights([
+        viewport_highlight_range(
+          start_line=0,
+          start_col=2,
+          end_line=1,
+          end_col=80,
+        ),
+      ]),
+    ).model
+  assert_eq(m.x_offset, 2)
+  assert_eq((vp.view)(m), "\u001b[7m23456\u001b[0m")
+}
+
+///|
 test "viewport reversed multi-line highlights normalize endpoint columns" {
   let vp = viewport(width=8, height=4, highlights=[
-    viewport_highlight_range(
-      start_line=3,
-      start_col=4,
-      end_line=1,
-      end_col=2,
-    ),
+    viewport_highlight_range(start_line=3, start_col=4, end_line=1, end_col=2),
   ])
   let mut m = (vp.init)().model
   m = (vp.update)(m, SetContent("000000\nabcdef!\nuvwxyz\n123456!")).model
   let view = (vp.view)(m)
   assert_true(view.contains("ab\u001b[7mc"))
   assert_true(view.contains("\u001b[7muvwxyz"))
+  assert_true(view.contains("\u001b[7m1234\u001b[0m56"))
+}
+
+///|
+test "viewport reversed multi-line highlights normalize display-cell endpoints" {
+  let vp = viewport(width=7, height=4, highlights=[
+    viewport_highlight_range(start_line=3, start_col=4, end_line=1, end_col=3),
+  ])
+  let mut m = (vp.init)().model
+  m = (vp.update)(m, SetContent("000000\na界b!\nuvwxyz\n123456")).model
+  let view = (vp.view)(m)
+  assert_true(view.contains("a界\u001b[7mb!"))
   assert_true(view.contains("\u001b[7m1234\u001b[0m56"))
 }
 

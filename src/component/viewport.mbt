@@ -15,7 +15,7 @@ pub(all) struct ViewportGutterContext {
 ///|
 /// Highlight range in logical content coordinates.
 ///
-/// Columns are character offsets and are clamped to grapheme boundaries before
+/// Columns are display-cell offsets and are clamped to grapheme boundaries before
 /// rendering so highlight styling never splits a cluster.
 pub(all) struct ViewportHighlight {
   start_line : Int
@@ -246,7 +246,7 @@ fn viewport_highlight_forward_range(
 }
 
 ///|
-fn viewport_line_highlight_bounds(
+fn viewport_line_highlight_cell_bounds(
   highlight : ViewportHighlight,
   line_index : Int,
   line : String,
@@ -257,21 +257,13 @@ fn viewport_line_highlight_bounds(
   if line_index < first_line || line_index > last_line {
     return None
   }
-  let line_len = component_char_len(line)
-  let raw_start = if line_index == first_line {
-    first_col
-  } else {
-    0
-  }
-  let raw_end = if line_index == last_line {
-    last_col
-  } else {
-    line_len
-  }
-  let start = component_clamp_grapheme_boundary(line, raw_start)
-  let end_ = component_clamp_grapheme_boundary(line, raw_end)
-  let from = start.min(end_).max(0).min(line_len)
-  let to = start.max(end_).max(from).min(line_len)
+  let line_width = @internal.display_width(line)
+  let raw_start = if line_index == first_line { first_col } else { 0 }
+  let raw_end = if line_index == last_line { last_col } else { line_width }
+  let start = raw_start.max(0).min(line_width)
+  let end_ = raw_end.max(0).min(line_width)
+  let from = start.min(end_).max(0).min(line_width)
+  let to = start.max(end_).max(from).min(line_width)
   if to <= from {
     None
   } else {
@@ -309,10 +301,10 @@ fn viewport_next_highlight_start(
   cursor : Int,
 ) -> (Int, Int, Int)? {
   let mut best_index = -1
-  let mut best_start = component_char_len(line) + 1
+  let mut best_start = @internal.display_width(line) + 1
   let mut best_end = best_start
   for i, highlight in model.highlights {
-    match viewport_line_highlight_bounds(highlight, line_index, line) {
+    match viewport_line_highlight_cell_bounds(highlight, line_index, line) {
       Some((start, end_)) =>
         if end_ > cursor && start < best_start {
           best_index = i
@@ -330,6 +322,35 @@ fn viewport_next_highlight_start(
 }
 
 ///|
+fn viewport_char_for_cell(line : String, cell : Int) -> Int {
+  component_cell_to_grapheme_boundary(line, cell)
+}
+
+///|
+fn viewport_original_cell_slice(
+  line : String,
+  start_cell : Int,
+  end_cell : Int,
+) -> String {
+  let start = viewport_char_for_cell(line, start_cell)
+  let end_ = viewport_char_for_cell(line, end_cell)
+  component_char_slice(line, start, end_)
+}
+
+///|
+fn viewport_sgr_state_after_cell_range(
+  chars : Array[Char],
+  line : String,
+  start_cell : Int,
+  end_cell : Int,
+  state : String,
+) -> String {
+  let start = viewport_char_for_cell(line, start_cell)
+  let end_ = viewport_char_for_cell(line, end_cell)
+  component_sgr_state_after_range(chars, start, end_, state)
+}
+
+///|
 fn viewport_apply_highlights(
   model : ViewportModel,
   line_index : Int,
@@ -338,31 +359,45 @@ fn viewport_apply_highlights(
   if model.highlights.length() == 0 {
     return line
   }
-  let line_len = component_char_len(line)
+  let line_width = @internal.display_width(line)
+  let chars = line.to_array()
   let buf = StringBuilder::new(size_hint=line.to_array().length() + 16)
   let mut cursor = 0
-  while cursor < line_len {
+  let mut active_style = ""
+  while cursor < line_width {
     match viewport_next_highlight_start(model, line_index, line, cursor) {
       Some((highlight_index, start, end_)) => {
         if start > cursor {
-          buf.write_string(component_char_slice(line, cursor, start))
+          buf.write_string(viewport_original_cell_slice(line, cursor, start))
+          active_style = viewport_sgr_state_after_cell_range(
+            chars, line, cursor, start, active_style,
+          )
         }
-        let segment = component_char_slice(line, start, end_)
+        let segment = viewport_original_cell_slice(line, start, end_)
         let selected = highlight_index == model.selected_highlight
         buf.write_string(
           viewport_highlight_style(model.highlights[highlight_index], selected).render(
             segment,
           ),
         )
+        active_style = viewport_sgr_state_after_cell_range(
+          chars, line, start, end_, active_style,
+        )
+        if active_style != "" {
+          buf.write_string(active_style)
+        }
         cursor = end_
       }
       None => {
-        buf.write_string(component_char_slice(line, cursor, line_len))
-        cursor = line_len
+        buf.write_string(viewport_original_cell_slice(line, cursor, line_width))
+        active_style = viewport_sgr_state_after_cell_range(
+          chars, line, cursor, line_width, active_style,
+        )
+        cursor = line_width
       }
     }
   }
-  if line_len == 0 {
+  if line_width == 0 {
     match viewport_next_highlight_start(model, line_index, line, 0) {
       Some((highlight_index, _, _)) => {
         let selected = highlight_index == model.selected_highlight
@@ -397,13 +432,18 @@ fn viewport_gutter_width(model : ViewportModel, lines : Array[String]) -> Int {
   }
   let mut width = 0
   let mut previous = -1
-  while width != previous {
+  let mut attempts = 0
+  while width != previous && attempts <= model.width.max(0) + 1 {
     previous = width
     width = viewport_gutter_width_for_content_width(
       model,
       lines,
       (model.width - width).max(0),
     )
+    if width < previous {
+      width = previous
+    }
+    attempts = attempts + 1
   }
   width.min(model.width)
 }
@@ -590,15 +630,16 @@ fn viewport_highlight_visual_row(
   rows : Array[ViewportVisualRow],
   highlight : ViewportHighlight,
 ) -> Int {
-  let (first_line, first_col, _, _) = viewport_highlight_forward_range(highlight)
-  let line_index = viewport_clamp(
-    first_line,
-    0,
-    lines.length().max(1) - 1,
+  let (first_line, first_col, _, _) = viewport_highlight_forward_range(
+    highlight,
   )
-  let line = if line_index < lines.length() { lines[line_index] } else { "" }
-  let col = component_clamp_grapheme_boundary(line, first_col)
-  let cell = component_prefix_display_width(line, col)
+  let line_index = viewport_clamp(first_line, 0, lines.length().max(1) - 1)
+  let line_width = if line_index < lines.length() {
+    @internal.display_width(lines[line_index])
+  } else {
+    0
+  }
+  let cell = first_col.max(0).min(line_width)
   let mut fallback = 0
   for row_index, visual in rows {
     if visual.logical_line == line_index {
@@ -648,27 +689,26 @@ fn viewport_scroll_highlight_into_view(model : ViewportModel) -> ViewportModel {
     let (first_line, first_col, last_line, last_col) = viewport_highlight_forward_range(
       highlight,
     )
-    let line_index = viewport_clamp(
-      first_line,
-      0,
-      lines.length().max(1) - 1,
-    )
-    let line = if line_index < lines.length() { lines[line_index] } else { "" }
-    let start_col = component_clamp_grapheme_boundary(line, first_col)
-    let end_col = if first_line == last_line {
-      component_clamp_grapheme_boundary(line, last_col)
+    let line_index = viewport_clamp(first_line, 0, lines.length().max(1) - 1)
+    let line_width = if line_index < lines.length() {
+      @internal.display_width(lines[line_index])
     } else {
-      component_char_len(line)
+      0
     }
-    let start_cell = component_prefix_display_width(
-      line,
-      start_col.min(end_col),
-    )
-    let end_cell = component_prefix_display_width(line, start_col.max(end_col))
+    let start_cell = first_col.max(0).min(line_width)
+    let end_cell = if first_line == last_line {
+      last_col.max(0).min(line_width)
+    } else {
+      line_width
+    }
     if start_cell < x_offset {
       x_offset = start_cell
     } else if end_cell > x_offset + content_width {
-      x_offset = (end_cell - content_width).max(start_cell)
+      if end_cell - start_cell > content_width {
+        x_offset = start_cell
+      } else {
+        x_offset = (end_cell - content_width).max(start_cell)
+      }
     }
   }
   viewport_normalize({ ..normalized, offset, x_offset })
