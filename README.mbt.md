@@ -39,6 +39,29 @@ moon run src/examples/showcase
 The showcase example exercises the runtime, components, styling, spring
 animation, focus handling, and viewport behavior.
 
+## View Surface
+
+The common `Program::new(..., view=fn(model) { "..." })` shape remains a plain
+`Model -> String` function. Apps that need per-render terminal state can opt in
+with one extra builder call:
+
+```moonbit
+let program = Program::new(
+    init=my_init,
+    update=my_update,
+    view=my_string_view,
+  )
+  .with_structured_view(fn(model) {
+    View::text(my_string_view(model))
+    .with_window_title("Pippa")
+    .with_cursor_visible(true)
+  })
+```
+
+For now, the renderer uses `View.content` exactly like the old string view. The
+optional cursor, title, color, progress, and mouse-mode fields are carried with
+the frame for the next renderer pass.
+
 ## Project Structure
 
 ```text
@@ -57,6 +80,7 @@ src/                          # Source root (moon.mod.json → source: "src")
 │   └── styling.mbt
 └── examples/
     ├── hello/                # Minimal example app
+    ├── structured-view/      # View.content plus per-frame terminal state
     └── showcase/             # Rich interactive demo
 ```
 
@@ -69,6 +93,7 @@ moon info           # Refresh generated package interfaces
 moon test           # Run all tests
 moon test --update  # Run tests and update snapshots
 moon run src/examples/hello  # Run the hello example
+moon run src/examples/structured-view  # Run the structured View example
 moon run src/examples/showcase  # Run the showcase demo
 ```
 

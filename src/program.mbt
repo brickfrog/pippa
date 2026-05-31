@@ -5,6 +5,10 @@
 /// Architecture (init, update, view) and drives the main event loop.
 ///
 /// Construct with `Program::new` and run with `Program::run`.
+///
+/// The common `view~ : Model -> String` shape is still the default. Apps that
+/// need per-render terminal state can call `Program::with_structured_view`; when
+/// present, the runtime prefers it and renders its `content`.
 
 ///|
 /// Configuration for a Pippa application.
@@ -16,6 +20,9 @@ pub(all) struct Program[Model, Msg] {
   update : (Model, Msg) -> UpdateResult[Model, Msg]
   /// Pure view function: render the current model to a string.
   view : (Model) -> String
+  /// Optional structured view function carrying content plus per-frame terminal
+  /// state. When set, it is preferred over `view`.
+  structured_view : ((Model) -> View)?
   /// Map input events to messages. Return None to ignore an event.
   sub : (InputEvent) -> Msg?
   /// Produce a message when a tick command fires. Prefer `Cmd::after` for
@@ -176,6 +183,7 @@ pub fn[Model, Msg] Program::new(
     init,
     update,
     view,
+    structured_view: None,
     sub,
     on_tick,
     mouse,
@@ -200,6 +208,16 @@ pub fn[Model, Msg] Program::new(
     exec_runner,
     suspend_runner,
   }
+}
+
+///|
+/// Install an opt-in structured view while preserving the plain string view as
+/// a fallback for callers that do not need per-frame terminal state.
+pub fn[Model, Msg] Program::with_structured_view(
+  self : Program[Model, Msg],
+  structured_view : (Model) -> View,
+) -> Program[Model, Msg] {
+  { ..self, structured_view: Some(structured_view) }
 }
 
 ///|
@@ -1303,7 +1321,7 @@ fn[Model, Msg] drain_controls(
   program : Program[Model, Msg],
   pending_controls : @queue.Queue[RuntimeControl],
   state : RuntimeRenderState,
-  current_view : String,
+  current_view : View,
 ) -> RuntimeRenderState {
   let mut next_state = state
   while !pending_controls.is_empty() {
@@ -1311,7 +1329,11 @@ fn[Model, Msg] drain_controls(
       Some(ReleaseTerminal) =>
         next_state = release_terminal_state(program, next_state)
       Some(RestoreTerminal) =>
-        next_state = restore_terminal_state(program, next_state, current_view)
+        next_state = restore_terminal_state(
+          program,
+          next_state,
+          current_view.content,
+        )
       None => ()
     }
   }
@@ -1323,11 +1345,14 @@ fn[Model, Msg] drain_controls(
 fn[Model, Msg] desired_view(
   program : Program[Model, Msg],
   model : Model,
-) -> String {
+) -> View {
   if program.rendering {
-    (program.view)(model)
+    match program.structured_view {
+      Some(structured_view) => structured_view(model)
+      None => View::text((program.view)(model))
+    }
   } else {
-    ""
+    View::text("")
   }
 }
 
@@ -1336,28 +1361,29 @@ fn[Model, Msg] desired_view(
 fn[Model, Msg] flush_view(
   program : Program[Model, Msg],
   rendered_view : String,
-  next_view : String,
+  next_view : View,
   prev_line_count : Int,
   terminal_active : Bool,
   last_render_ms : Int64,
   force : Bool,
   full_repaint : Bool,
 ) -> (String, Int, Int64, Int64?) {
+  let next_content = next_view.content
   if !program.rendering ||
     !terminal_active ||
-    (!full_repaint && next_view == rendered_view) {
+    (!full_repaint && next_content == rendered_view) {
     (rendered_view, prev_line_count, last_render_ms, None)
   } else {
     let now = pippa_now_ms()
     if force || now - last_render_ms >= render_interval_ms(program) {
-      let ops = diff_views(rendered_view, next_view)
+      let ops = diff_views(rendered_view, next_content)
       let output = if full_repaint || ops.is_empty() {
-        render_full(next_view, prev_line_count)
+        render_full(next_content, prev_line_count)
       } else {
         render_patch(ops)
       }
       emit_output(program, output)
-      (next_view, line_count(next_view), now, None)
+      (next_content, line_count(next_content), now, None)
     } else {
       (
         rendered_view,
@@ -1478,7 +1504,9 @@ fn[Model, Msg] drain_runtime(
                 current_state = release_terminal_state(program, current_state)
                 (program.suspend_runner)()
                 current_state = restore_terminal_state(
-                  program, current_state, current_view,
+                  program,
+                  current_state,
+                  current_view.content,
                 )
                 let (resume_model, resume_quit, resume_cmd, resume_updated) = apply_lifecycle_msg(
                   program,
@@ -1526,7 +1554,9 @@ fn[Model, Msg] drain_runtime(
           let exec_result = (program.exec_runner)(process)
           if was_active {
             current_state = restore_terminal_state(
-              program, current_state, current_view,
+              program,
+              current_state,
+              current_view.content,
             )
           }
           let (next_model, should_quit, cmd) = apply_msg(
