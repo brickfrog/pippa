@@ -1499,7 +1499,7 @@ test "pippa runtime timeout clamps custom polling and render fps" {
     )
     .with_input(fn() { [] })
     .with_fps(500)
-  assert_eq(render_interval_ms(program), 9L)
+  assert_eq(next_render_deadline_after(program, 0L), 9L)
   assert_eq(runtime_timeout_ms(program, [], None), 16)
 }
 

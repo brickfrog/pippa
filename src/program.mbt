@@ -452,6 +452,7 @@ let runtime_clock_override : Ref[(() -> Int64)?] = Ref::new(None)
 
 ///|
 #cfg(any(target="native", target="llvm"))
+#warnings("-unused_value")
 fn restore_runtime_clock(previous : (() -> Int64)?) -> Unit {
   runtime_clock_override.val = previous
 }
@@ -615,14 +616,6 @@ fn[Model, Msg] deactivate_terminal_with_modes(
   if program.read_stdin {
     pippa_exit_raw_mode()
   }
-}
-
-///|
-#cfg(any(target="native", target="llvm"))
-fn[Model, Msg] render_interval_ms(program : Program[Model, Msg]) -> Int64 {
-  let fps = program.fps.max(1).min(120)
-  let interval = (1000 + fps - 1) / fps
-  interval.to_int64()
 }
 
 ///|
