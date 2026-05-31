@@ -153,6 +153,7 @@ fn reference_pad_right_width(s : String, width : Int) -> String {
 ///|
 fn width_identity_cases() -> Array[String] {
   let ascii_combining = String::from_array(['a', '\u{0301}', 'b'])
+  let ascii_variation = String::from_array(['a', '\u{FE0F}', 'b'])
   let devanagari = String::from_array(['\u{0915}', '\u{094D}', 'a'])
   let technologist = String::from_array(['👩', '\u{200D}', '💻'])
   let ascii_zwj = String::from_array(['a', '\u{200D}', 'b'])
@@ -169,6 +170,7 @@ fn width_identity_cases() -> Array[String] {
     "你好世界",
     "a你b界",
     ascii_combining,
+    ascii_variation,
     devanagari,
     technologist,
     "x\{technologist}y",
@@ -176,6 +178,7 @@ fn width_identity_cases() -> Array[String] {
     flag,
     controls,
     "\u001b[31mA\{ascii_combining}界\{technologist}\u001b[0mZ",
+    "\u001b[31m\{ascii_variation}\u001b[0m",
     "\u001b[@ab",
     "tail\u001b[31;0m",
     "tail\u001b[0;31m",
@@ -203,6 +206,31 @@ test "optimized width primitives stay byte-identical to reference cases" {
   for input in width_identity_cases() {
     assert_width_identity(input)
   }
+  let ascii_variation = String::from_array(['a', '\u{FE0F}', 'b'])
+  let ascii_variation_cluster = String::from_array(['a', '\u{FE0F}'])
+  assert_eq(truncate_width(ascii_variation, 1), ascii_variation_cluster)
+  assert_eq(
+    truncate_width("\u001b[31m\{ascii_variation}\u001b[0m", 1),
+    "\u001b[31m\{ascii_variation_cluster}\u001b[0m",
+  )
+}
+
+///|
+test "char_cell_width keeps ASCII controls zero-width" {
+  assert_eq(char_cell_width('\u{0001}'), 0)
+  assert_eq(char_cell_width('\t'), 0)
+  assert_eq(char_cell_width('\u001b'), 0)
+  assert_eq(char_cell_width('\u{007F}'), 0)
+  assert_eq(char_cell_width('A'), 1)
+  let control_after_base = String::from_array(['a', '\u{0001}', 'b'])
+  assert_eq(
+    display_width(control_after_base),
+    reference_display_width(control_after_base),
+  )
+  assert_eq(
+    truncate_width(control_after_base, 1),
+    reference_truncate_width(control_after_base, 1),
+  )
 }
 
 ///|
