@@ -4,3 +4,8 @@ import {
   "moonbitlang/core/debug",
   "moonbitlang/core/string",
 }
+
+options(
+  "native-stub": [ "render_perf_native.c" ],
+  targets: { "render_perf_wbtest.mbt": [ "native", "llvm" ] },
+)
