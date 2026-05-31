@@ -2,6 +2,7 @@ import {
   "brickfrog/pippa",
   "brickfrog/pippa/component",
   "brickfrog/pippa/styling",
+  "moonbitlang/core/debug",
 }
 
 options(
