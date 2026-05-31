@@ -1,0 +1,40 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/examples/text-input-parity"
+
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/component",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn text_input_parity_init() -> @pippa.UpdateResult[Model, Msg]
+
+pub fn text_input_parity_run_script(Array[@pippa.InputEvent]) -> Model
+
+pub fn text_input_parity_sub(@pippa.InputEvent) -> Msg?
+
+pub fn text_input_parity_update(Model, Msg) -> @pippa.UpdateResult[Model, Msg]
+
+pub fn text_input_parity_view(Model) -> String
+
+// Errors
+
+// Types and methods
+pub(all) struct Model {
+  name : @component.TextInputModel
+  password : @component.TextInputModel
+  active : Int
+  quitting : Bool
+} derive(@debug.Debug)
+
+pub(all) enum Msg {
+  Edit(@component.TextInputMsg)
+  SwitchField
+  Quit
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
+

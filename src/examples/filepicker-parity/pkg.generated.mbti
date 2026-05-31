@@ -1,0 +1,37 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/examples/filepicker-parity"
+
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/component",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn filepicker_parity_init() -> @pippa.UpdateResult[Model, Msg]
+
+pub fn filepicker_parity_seeded_model() -> Model
+
+pub fn filepicker_parity_sub(@pippa.InputEvent) -> Msg?
+
+pub fn filepicker_parity_update(Model, Msg) -> @pippa.UpdateResult[Model, Msg]
+
+pub fn filepicker_parity_view(Model) -> String
+
+// Errors
+
+// Types and methods
+pub(all) struct Model {
+  picker : @component.FilepickerModel
+  quitting : Bool
+} derive(@debug.Debug)
+
+pub(all) enum Msg {
+  PickerMsg(@component.FilepickerMsg)
+  Quit
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
+

@@ -1,0 +1,37 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/examples/keymap-help-parity"
+
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/component",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn keymap_help_parity_init() -> @pippa.UpdateResult[Model, Msg]
+
+pub fn keymap_help_parity_sub(@pippa.InputEvent) -> Msg?
+
+pub fn keymap_help_parity_update(Model, Msg) -> @pippa.UpdateResult[Model, Msg]
+
+pub fn keymap_help_parity_view(Model) -> String
+
+// Errors
+
+// Types and methods
+pub(all) struct Model {
+  grid : @component.TableModel
+  show_full_help : Bool
+  quitting : Bool
+} derive(@debug.Debug)
+
+pub(all) enum Msg {
+  GridMsg(@component.TableMsg)
+  ToggleHelp
+  Quit
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
+

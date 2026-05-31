@@ -1,0 +1,37 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/examples/table-parity"
+
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/component",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn table_parity_init() -> @pippa.UpdateResult[Model, Msg]
+
+pub fn table_parity_run_script(Array[@pippa.InputEvent]) -> Model
+
+pub fn table_parity_sub(@pippa.InputEvent) -> Msg?
+
+pub fn table_parity_update(Model, Msg) -> @pippa.UpdateResult[Model, Msg]
+
+pub fn table_parity_view(Model) -> String
+
+// Errors
+
+// Types and methods
+pub(all) struct Model {
+  table : @component.TableModel
+  quitting : Bool
+} derive(@debug.Debug)
+
+pub(all) enum Msg {
+  TableMsg(@component.TableMsg)
+  Quit
+} derive(@debug.Debug)
+
+// Type aliases
+
+// Traits
+
