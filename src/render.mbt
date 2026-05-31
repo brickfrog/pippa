@@ -45,15 +45,18 @@ pub fn diff_views(old_view : String, new_view : String) -> Array[PatchOp] {
       new_start = new_end + 1
     } else if new_has_line {
       let new_end = next_line_end(new_view, new_start)
-      ops.push(PatchOp::{
-        row,
-        col: 1,
-        text: new_view[new_start:new_end].to_owned(),
-      })
+      let new_line = new_view[new_start:new_end]
+      if new_line != "" {
+        ops.push(PatchOp::{ row, col: 1, text: new_line.to_owned() })
+      }
       new_start = new_end + 1
     } else {
-      ops.push(PatchOp::{ row, col: 1, text: "" })
-      old_start = next_line_end(old_view, old_start) + 1
+      let old_end = next_line_end(old_view, old_start)
+      let old_line = old_view[old_start:old_end]
+      if old_line != "" {
+        ops.push(PatchOp::{ row, col: 1, text: "" })
+      }
+      old_start = old_end + 1
     }
     row = row + 1
   }
