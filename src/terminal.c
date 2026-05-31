@@ -7,7 +7,9 @@
 #include <fcntl.h>
 #include <time.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 
 // Save and restore terminal state
 static struct termios orig_termios;
@@ -189,6 +191,78 @@ void pippa_write_byte(int b) {
 
 void pippa_write_bytes(const unsigned char* buf, int len) {
     write(STDOUT_FILENO, buf, (size_t)len);
+}
+
+int pippa_exec_process(const unsigned char *argv_buf, int argv_len, int argc) {
+    if (argv_buf == NULL || argv_len <= 0 || argc <= 0) {
+        return -1;
+    }
+
+    char *storage = (char *)malloc((size_t)argv_len);
+    char **argv = (char **)calloc((size_t)argc + 1, sizeof(char *));
+    if (storage == NULL || argv == NULL) {
+        free(storage);
+        free(argv);
+        return -1;
+    }
+    memcpy(storage, argv_buf, (size_t)argv_len);
+
+    int pos = 0;
+    for (int i = 0; i < argc; i++) {
+        if (pos >= argv_len) {
+            free(storage);
+            free(argv);
+            return -1;
+        }
+        argv[i] = storage + pos;
+        while (pos < argv_len && storage[pos] != '\0') {
+            pos++;
+        }
+        if (pos >= argv_len) {
+            free(storage);
+            free(argv);
+            return -1;
+        }
+        pos++;
+    }
+    argv[argc] = NULL;
+    if (argv[0][0] == '\0') {
+        free(storage);
+        free(argv);
+        return -1;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        free(storage);
+        free(argv);
+        return -1;
+    }
+    if (pid == 0) {
+        execvp(argv[0], argv);
+        _exit(127);
+    }
+
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno == EINTR) {
+            continue;
+        }
+        free(storage);
+        free(argv);
+        return -1;
+    }
+
+    free(storage);
+    free(argv);
+
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    }
+    if (WIFSIGNALED(status)) {
+        return 128 + WTERMSIG(status);
+    }
+    return -1;
 }
 
 int pippa_get_rows(void) {

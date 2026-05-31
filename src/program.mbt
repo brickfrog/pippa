@@ -62,6 +62,10 @@ pub(all) struct Program[Model, Msg] {
   /// Set to false if the application wants to handle Ctrl+C itself (e.g. copy
   /// mode, graceful cancel). Defaults to true.
   catch_interrupt : Bool
+  /// Produce a message for runtime lifecycle events.
+  on_lifecycle : (LifecycleMsg) -> Msg?
+  /// Run an external process while Pippa has released the terminal.
+  exec_runner : (ExecProcess) -> ExecResult
 }
 
 ///|
@@ -162,6 +166,8 @@ pub fn[Model, Msg] Program::new(
   should_quit? : (Model) -> Bool = fn(_model) { false },
   catch_interrupt? : Bool = true,
   on_window_size? : (WindowSize) -> Msg? = fn(_size) { None },
+  on_lifecycle? : (LifecycleMsg) -> Msg? = fn(_msg) { None },
+  exec_runner? : (ExecProcess) -> ExecResult = default_exec_runner,
 ) -> Program[Model, Msg] {
   {
     init,
@@ -187,6 +193,8 @@ pub fn[Model, Msg] Program::new(
     on_resize,
     should_quit,
     catch_interrupt,
+    on_lifecycle,
+    exec_runner,
   }
 }
 
@@ -313,6 +321,58 @@ pub fn[Model, Msg] Program::with_catch_interrupt(
   enabled : Bool,
 ) -> Program[Model, Msg] {
   { ..self, catch_interrupt: enabled }
+}
+
+///|
+pub fn[Model, Msg] Program::with_lifecycle(
+  self : Program[Model, Msg],
+  on_lifecycle : (LifecycleMsg) -> Msg?,
+) -> Program[Model, Msg] {
+  { ..self, on_lifecycle, }
+}
+
+///|
+pub fn[Model, Msg] Program::with_exec_runner(
+  self : Program[Model, Msg],
+  exec_runner : (ExecProcess) -> ExecResult,
+) -> Program[Model, Msg] {
+  { ..self, exec_runner, }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn default_exec_runner(process : ExecProcess) -> ExecResult {
+  if process.command == "" {
+    return ExecError("empty command")
+  }
+  let argv : Array[Byte] = []
+  let command = @utf8.encode(process.command)
+  for byte in command.to_array() {
+    argv.push(byte)
+  }
+  argv.push(b'\x00')
+  for arg in process.args {
+    let bytes = @utf8.encode(arg)
+    for byte in bytes.to_array() {
+      argv.push(byte)
+    }
+    argv.push(b'\x00')
+  }
+  let buf = Bytes::from_array(argv)
+  let code = pippa_exec_process(buf, buf.length(), process.args.length() + 1)
+  if code >= 0 {
+    ExecCompleted(code)
+  } else if code == -2 {
+    ExecCancelled
+  } else {
+    ExecError("failed to run process: " + process.command)
+  }
+}
+
+///|
+#cfg(not(any(target="native", target="llvm")))
+fn default_exec_runner(process : ExecProcess) -> ExecResult {
+  ExecError("external process execution is unavailable: " + process.command)
 }
 
 ///|
@@ -531,7 +591,9 @@ fn current_window_size() -> WindowSize {
 ///
 /// On `native` and `llvm` targets this enters raw terminal mode and drives
 /// the main event loop. On other targets this is a no-op.
-pub fn[Model, Msg] Program::run(program : Program[Model, Msg]) -> Unit {
+pub fn[Model, Msg] Program::run(
+  program : Program[Model, Msg],
+) -> RunResult[Model] {
   run_internal(program, fn(_handle) { () })
 }
 
@@ -541,16 +603,17 @@ pub fn[Model, Msg] Program::run(program : Program[Model, Msg]) -> Unit {
 pub fn[Model, Msg] Program::run_with_handle(
   program : Program[Model, Msg],
   on_start : (ProgramHandle[Msg]) -> Unit,
-) -> Unit {
+) -> RunResult[Model] {
   run_internal(program, on_start)
 }
 
 ///|
 #cfg(not(any(target="native", target="llvm")))
 fn[Model, Msg] run_internal(
-  _program : Program[Model, Msg],
+  program : Program[Model, Msg],
   on_start : (ProgramHandle[Msg]) -> Unit,
-) -> Unit {
+) -> RunResult[Model] {
+  let init_res = (program.init)()
   on_start(
     ProgramHandle::new(
       @queue.Queue::new(),
@@ -559,6 +622,7 @@ fn[Model, Msg] run_internal(
       Ref::new(true),
     ),
   )
+  RunCompleted(init_res.model)
 }
 
 ///|
@@ -602,6 +666,21 @@ priv enum RuntimeEffect[Msg] {
   RuntimeTask(() -> Msg?)
   RuntimeScreen(RuntimeScreenCommand)
   RuntimeTerminal(RuntimeTerminalCommand)
+  RuntimeLifecycle(LifecycleMsg)
+  RuntimeExec(ExecProcess, (ExecResult) -> Msg)
+  RuntimeError(String)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+priv enum RuntimeExitReason {
+  RuntimeExitCompleted
+  RuntimeExitQuit
+  RuntimeExitInterrupted
+  RuntimeExitSuspended
+  RuntimeExitResumed
+  RuntimeExitError(String)
+  RuntimeExitExec(ExecResult)
 }
 
 ///|
@@ -816,6 +895,10 @@ fn[Msg] queue_cmd_effects(
         pending.push(RuntimeTerminal(RuntimeSetFocusReporting(enabled)))
       SetBracketedPaste(enabled) =>
         pending.push(RuntimeTerminal(RuntimeSetBracketedPaste(enabled)))
+      LifecycleAction(msg) => pending.push(RuntimeLifecycle(msg))
+      ExecProcessAction(process, to_msg) =>
+        pending.push(RuntimeExec(process, to_msg))
+      RuntimeErrorAction(message) => pending.push(RuntimeError(message))
       Sequence(cmds) =>
         match cmds {
           [] => ()
@@ -942,9 +1025,9 @@ fn[Model, Msg] apply_window_size(
   pending : @queue.Queue[RuntimeEffect[Msg]],
   timers : Array[RuntimeTimer[Msg]],
   sequences : @deque.Deque[Array[Cmd[Msg]]],
-) -> (Model, Bool, Bool) {
+) -> (Model, RuntimeExitReason?, Bool) {
   let mut current_model = model
-  let mut quit = false
+  let mut reason : RuntimeExitReason? = None
   let mut updated = false
   match (program.on_window_size)(size) {
     Some(msg) => {
@@ -955,7 +1038,7 @@ fn[Model, Msg] apply_window_size(
       queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
       updated = true
       if should_quit {
-        quit = true
+        reason = Some(RuntimeExitQuit)
       }
     }
     None => ()
@@ -969,12 +1052,12 @@ fn[Model, Msg] apply_window_size(
       queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
       updated = true
       if should_quit {
-        quit = true
+        reason = Some(RuntimeExitQuit)
       }
     }
     None => ()
   }
-  (current_model, quit, updated)
+  (current_model, reason, updated)
 }
 
 ///|
@@ -985,11 +1068,11 @@ fn[Model, Msg] apply_initial_window_size(
   pending : @queue.Queue[RuntimeEffect[Msg]],
   timers : Array[RuntimeTimer[Msg]],
   sequences : @deque.Deque[Array[Cmd[Msg]]],
-) -> (Model, Bool, Bool) {
+) -> (Model, RuntimeExitReason?, Bool) {
   match maybe_initial_window_size(program) {
     Some(size) =>
       apply_window_size(program, model, size, pending, timers, sequences)
-    None => (model, false, false)
+    None => (model, None, false)
   }
 }
 
@@ -1006,6 +1089,39 @@ fn[Model, Msg] apply_msg(
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn[Model, Msg] apply_lifecycle_msg(
+  program : Program[Model, Msg],
+  model : Model,
+  msg : LifecycleMsg,
+) -> (Model, Bool, Cmd[Msg], Bool) {
+  match (program.on_lifecycle)(msg) {
+    Some(app_msg) => {
+      let (next_model, should_quit, cmd) = apply_msg(program, model, app_msg)
+      (next_model, should_quit, cmd, true)
+    }
+    None => (model, false, Cmd::none(), false)
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model] run_result_from_reason(
+  model : Model,
+  reason : RuntimeExitReason,
+) -> RunResult[Model] {
+  match reason {
+    RuntimeExitCompleted => RunCompleted(model)
+    RuntimeExitQuit => RunQuit(model)
+    RuntimeExitInterrupted => RunInterrupted(model)
+    RuntimeExitSuspended => RunSuspended(model)
+    RuntimeExitResumed => RunResumed(model)
+    RuntimeExitError(message) => RunRuntimeError(message)
+    RuntimeExitExec(result) => RunExec(model, result)
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 fn[Model, Msg] apply_input_events(
   program : Program[Model, Msg],
   model : Model,
@@ -1013,14 +1129,31 @@ fn[Model, Msg] apply_input_events(
   pending : @queue.Queue[RuntimeEffect[Msg]],
   timers : Array[RuntimeTimer[Msg]],
   sequences : @deque.Deque[Array[Cmd[Msg]]],
-) -> (Model, Bool, Bool) {
+) -> (Model, RuntimeExitReason?, Bool) {
   let mut current_model = model
-  let mut quit = false
+  let mut reason : RuntimeExitReason? = None
   let mut updated = false
   for evt in events {
+    match evt {
+      Key(Modified("ctrl", "z")) => pending.push(RuntimeLifecycle(Suspend))
+      _ => ()
+    }
     if program.catch_interrupt {
       match evt {
-        Key(Modified("ctrl", "c")) => quit = true
+        Key(Modified("ctrl", "c")) => {
+          let (next_model, should_quit, cmd, lifecycle_updated) = apply_lifecycle_msg(
+            program,
+            current_model,
+            Interrupt,
+          )
+          current_model = next_model
+          queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+          if lifecycle_updated {
+            updated = true
+          }
+          ignore(should_quit)
+          reason = Some(RuntimeExitInterrupted)
+        }
         _ => ()
       }
     }
@@ -1033,16 +1166,91 @@ fn[Model, Msg] apply_input_events(
         queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
         updated = true
         if should_quit {
-          quit = true
+          reason = Some(RuntimeExitQuit)
         }
       }
       None => ()
     }
-    if quit {
+    if reason is Some(_) {
       break
     }
   }
-  (current_model, quit, updated)
+  (current_model, reason, updated)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] release_terminal_state(
+  program : Program[Model, Msg],
+  state : RuntimeRenderState,
+) -> RuntimeRenderState {
+  if state.terminal_active {
+    if state.alt_screen == program.alt_screen &&
+      state.cursor_hidden == program.hide_cursor &&
+      state.focus_reporting == (program.read_stdin && program.focus_reporting) &&
+      state.bracketed_paste == (program.read_stdin && program.bracketed_paste) {
+      deactivate_terminal(program)
+    } else {
+      deactivate_terminal_with_modes(
+        program,
+        state.alt_screen,
+        state.cursor_hidden,
+        state.focus_reporting,
+        state.bracketed_paste,
+      )
+    }
+    {
+      ..state,
+      terminal_active: false,
+      rendered: "",
+      prev_line_count: 0,
+      render_due_at: None,
+      force_full_repaint: false,
+    }
+  } else {
+    state
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] restore_terminal_state(
+  program : Program[Model, Msg],
+  state : RuntimeRenderState,
+  current_view : String,
+) -> RuntimeRenderState {
+  if !state.terminal_active {
+    let mut next_state = state
+    if state.alt_screen == program.alt_screen &&
+      state.cursor_hidden == program.hide_cursor &&
+      state.focus_reporting == (program.read_stdin && program.focus_reporting) &&
+      state.bracketed_paste == (program.read_stdin && program.bracketed_paste) {
+      activate_terminal(program)
+    } else {
+      activate_terminal_with_modes(
+        program,
+        state.alt_screen,
+        state.cursor_hidden,
+        state.focus_reporting,
+        state.bracketed_paste,
+      )
+    }
+    next_state = { ..next_state, terminal_active: true }
+    if program.rendering {
+      emit_output(program, render_full(current_view, 0))
+      next_state = {
+        ..next_state,
+        rendered: current_view,
+        prev_line_count: line_count(current_view),
+        last_render_ms: pippa_now_ms(),
+        render_due_at: None,
+        force_full_repaint: false,
+      }
+    }
+    next_state
+  } else {
+    state
+  }
 }
 
 ///|
@@ -1057,63 +1265,9 @@ fn[Model, Msg] drain_controls(
   while !pending_controls.is_empty() {
     match pending_controls.pop() {
       Some(ReleaseTerminal) =>
-        if next_state.terminal_active {
-          if next_state.alt_screen == program.alt_screen &&
-            next_state.cursor_hidden == program.hide_cursor &&
-            next_state.focus_reporting ==
-            (program.read_stdin && program.focus_reporting) &&
-            next_state.bracketed_paste ==
-            (program.read_stdin && program.bracketed_paste) {
-            deactivate_terminal(program)
-          } else {
-            deactivate_terminal_with_modes(
-              program,
-              next_state.alt_screen,
-              next_state.cursor_hidden,
-              next_state.focus_reporting,
-              next_state.bracketed_paste,
-            )
-          }
-          next_state = {
-            ..next_state,
-            terminal_active: false,
-            rendered: "",
-            prev_line_count: 0,
-            render_due_at: None,
-            force_full_repaint: false,
-          }
-        }
+        next_state = release_terminal_state(program, next_state)
       Some(RestoreTerminal) =>
-        if !next_state.terminal_active {
-          if next_state.alt_screen == program.alt_screen &&
-            next_state.cursor_hidden == program.hide_cursor &&
-            next_state.focus_reporting ==
-            (program.read_stdin && program.focus_reporting) &&
-            next_state.bracketed_paste ==
-            (program.read_stdin && program.bracketed_paste) {
-            activate_terminal(program)
-          } else {
-            activate_terminal_with_modes(
-              program,
-              next_state.alt_screen,
-              next_state.cursor_hidden,
-              next_state.focus_reporting,
-              next_state.bracketed_paste,
-            )
-          }
-          next_state = { ..next_state, terminal_active: true }
-          if program.rendering {
-            emit_output(program, render_full(current_view, 0))
-            next_state = {
-              ..next_state,
-              rendered: current_view,
-              prev_line_count: line_count(current_view),
-              last_render_ms: pippa_now_ms(),
-              render_due_at: None,
-              force_full_repaint: false,
-            }
-          }
-        }
+        next_state = restore_terminal_state(program, next_state, current_view)
       None => ()
     }
   }
@@ -1181,15 +1335,15 @@ fn[Model, Msg] drain_runtime(
   pending : @queue.Queue[RuntimeEffect[Msg]],
   timers : Array[RuntimeTimer[Msg]],
   sequences : @deque.Deque[Array[Cmd[Msg]]],
-) -> (Model, Bool, Bool, RuntimeRenderState) {
+) -> (Model, RuntimeExitReason?, Bool, RuntimeRenderState) {
   let mut current_model = model
   let mut current_state = state
-  let mut quit = false
+  let mut reason : RuntimeExitReason? = None
   let mut updated = false
-  while !quit {
+  while reason is None {
     let mut progressed = false
 
-    while !quit && !sent_msgs.is_empty() {
+    while reason is None && !sent_msgs.is_empty() {
       let msg = sent_msgs.pop().unwrap()
       let (next_model, should_quit, cmd) = apply_msg(
         program, current_model, msg,
@@ -1199,11 +1353,11 @@ fn[Model, Msg] drain_runtime(
       progressed = true
       queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
       if should_quit {
-        quit = true
+        reason = Some(RuntimeExitQuit)
       }
     }
 
-    while !quit && !pending.is_empty() {
+    while reason is None && !pending.is_empty() {
       let effect = pending.pop().unwrap()
       progressed = true
       match effect {
@@ -1217,7 +1371,7 @@ fn[Model, Msg] drain_runtime(
               updated = true
               queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
               if should_quit {
-                quit = true
+                reason = Some(RuntimeExitQuit)
               }
             }
             None => ()
@@ -1228,10 +1382,125 @@ fn[Model, Msg] drain_runtime(
           current_state = apply_terminal_command(
             program, current_state, command,
           )
+        RuntimeLifecycle(msg) =>
+          match msg {
+            Quit => {
+              let (next_model, _should_quit, cmd, lifecycle_updated) = apply_lifecycle_msg(
+                program,
+                current_model,
+                Quit,
+              )
+              current_model = next_model
+              if lifecycle_updated {
+                updated = true
+              }
+              queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+              reason = Some(RuntimeExitQuit)
+            }
+            Interrupt => {
+              let (next_model, _should_quit, cmd, lifecycle_updated) = apply_lifecycle_msg(
+                program,
+                current_model,
+                Interrupt,
+              )
+              current_model = next_model
+              if lifecycle_updated {
+                updated = true
+              }
+              queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+              reason = Some(RuntimeExitInterrupted)
+            }
+            Suspend => {
+              let (suspend_model, suspend_quit, suspend_cmd, suspend_updated) = apply_lifecycle_msg(
+                program,
+                current_model,
+                Suspend,
+              )
+              current_model = suspend_model
+              if suspend_updated {
+                updated = true
+              }
+              queue_cmd_effects(
+                suspend_cmd,
+                pippa_now_ms(),
+                pending,
+                timers,
+                sequences,
+              )
+              if suspend_quit {
+                reason = Some(RuntimeExitSuspended)
+              } else {
+                let current_view = desired_view(program, current_model)
+                current_state = release_terminal_state(program, current_state)
+                current_state = restore_terminal_state(
+                  program, current_state, current_view,
+                )
+                let (resume_model, resume_quit, resume_cmd, resume_updated) = apply_lifecycle_msg(
+                  program,
+                  current_model,
+                  Resume,
+                )
+                current_model = resume_model
+                if resume_updated {
+                  updated = true
+                }
+                queue_cmd_effects(
+                  resume_cmd,
+                  pippa_now_ms(),
+                  pending,
+                  timers,
+                  sequences,
+                )
+                if resume_quit {
+                  reason = Some(RuntimeExitResumed)
+                }
+              }
+            }
+            Resume => {
+              let (next_model, should_quit, cmd, lifecycle_updated) = apply_lifecycle_msg(
+                program,
+                current_model,
+                Resume,
+              )
+              current_model = next_model
+              if lifecycle_updated {
+                updated = true
+              }
+              queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+              if should_quit {
+                reason = Some(RuntimeExitResumed)
+              }
+            }
+          }
+        RuntimeExec(process, to_msg) => {
+          let current_view = desired_view(program, current_model)
+          let was_active = current_state.terminal_active
+          if was_active {
+            current_state = release_terminal_state(program, current_state)
+          }
+          let exec_result = (program.exec_runner)(process)
+          if was_active {
+            current_state = restore_terminal_state(
+              program, current_state, current_view,
+            )
+          }
+          let (next_model, should_quit, cmd) = apply_msg(
+            program,
+            current_model,
+            to_msg(exec_result),
+          )
+          current_model = next_model
+          updated = true
+          queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+          if should_quit {
+            reason = Some(RuntimeExitExec(exec_result))
+          }
+        }
+        RuntimeError(message) => reason = Some(RuntimeExitError(message))
       }
     }
 
-    if quit {
+    if reason is Some(_) {
       break
     }
 
@@ -1253,7 +1522,7 @@ fn[Model, Msg] drain_runtime(
       break
     }
   }
-  (current_model, quit, updated, current_state)
+  (current_model, reason, updated, current_state)
 }
 
 ///|
@@ -1261,7 +1530,7 @@ fn[Model, Msg] drain_runtime(
 fn[Model, Msg] run_internal(
   program : Program[Model, Msg],
   on_start : (ProgramHandle[Msg]) -> Unit,
-) -> Unit {
+) -> RunResult[Model] {
   pippa_init_wakeup()
   defer pippa_close_wakeup()
 
@@ -1284,11 +1553,11 @@ fn[Model, Msg] run_internal(
     activate_terminal(program)
   }
 
-  let (initial_model, initial_quit, _initial_updated) = apply_initial_window_size(
+  let (initial_model, initial_reason, _initial_updated) = apply_initial_window_size(
     program, model, pending, timers, sequences,
   )
   model = initial_model
-  let (boot_model, boot_quit, _boot_updated, boot_state) = drain_runtime(
+  let (boot_model, boot_reason, _boot_updated, boot_state) = drain_runtime(
     program, model, render_state, sent_msgs, pending, timers, sequences,
   )
   model = boot_model
@@ -1325,24 +1594,28 @@ fn[Model, Msg] run_internal(
 
   let mut stdin_buf : Array[Byte] = []
   let mut raw_buf : Array[Byte] = []
-  let mut quit = initial_quit || boot_quit
+  let mut exit_reason = match initial_reason {
+    Some(reason) => Some(reason)
+    None => boot_reason
+  }
 
-  while !quit {
+  while exit_reason is None {
     render_state = drain_controls(
       program, pending_controls, render_state, desired,
     )
     if is_cancelled(program) {
-      quit = true
+      exit_reason = Some(RuntimeExitCompleted)
       break
     }
 
-    let (drained_model, drained_quit, drained_updated, drained_render_state) = drain_runtime(
+    let (drained_model, drained_reason, drained_updated, drained_render_state) = drain_runtime(
       program, model, render_state, sent_msgs, pending, timers, sequences,
     )
     model = drained_model
     render_state = drained_render_state
-    if drained_quit {
-      quit = true
+    match drained_reason {
+      Some(reason) => exit_reason = Some(reason)
+      None => ()
     }
     if drained_updated || render_state.force_full_repaint {
       desired = desired_view(program, model)
@@ -1358,7 +1631,7 @@ fn[Model, Msg] run_internal(
         render_state.prev_line_count,
         render_state.terminal_active,
         render_state.last_render_ms,
-        quit || render_state.force_full_repaint,
+        exit_reason is Some(_) || render_state.force_full_repaint,
         render_state.force_full_repaint,
       )
       render_state = {
@@ -1370,12 +1643,12 @@ fn[Model, Msg] run_internal(
         force_full_repaint: false,
       }
     }
-    if quit {
+    if exit_reason is Some(_) {
       break
     }
 
     let mut updated = false
-    let (input_model, input_quit, input_updated) = apply_input_events(
+    let (input_model, input_reason, input_updated) = apply_input_events(
       program,
       model,
       poll_input_events(program),
@@ -1384,25 +1657,27 @@ fn[Model, Msg] run_internal(
       sequences,
     )
     model = input_model
-    if input_quit {
-      quit = true
+    match input_reason {
+      Some(reason) => exit_reason = Some(reason)
+      None => ()
     }
     if input_updated {
       updated = true
     }
     let (raw_events, next_raw_buf) = poll_raw_input_events(program, raw_buf)
     raw_buf = next_raw_buf
-    let (raw_model, raw_quit, raw_updated) = apply_input_events(
+    let (raw_model, raw_reason, raw_updated) = apply_input_events(
       program, model, raw_events, pending, timers, sequences,
     )
     model = raw_model
-    if raw_quit {
-      quit = true
+    match raw_reason {
+      Some(reason) => exit_reason = Some(reason)
+      None => ()
     }
     if raw_updated {
       updated = true
     }
-    if quit {
+    if exit_reason is Some(_) {
       break
     }
 
@@ -1416,6 +1691,7 @@ fn[Model, Msg] run_internal(
         },
       )
       if poll_result < 0 {
+        exit_reason = Some(RuntimeExitError("poll failed"))
         break
       }
 
@@ -1448,6 +1724,7 @@ fn[Model, Msg] run_internal(
           program.read_stdin {
           let b = pippa_read_byte()
           if b < 0 {
+            exit_reason = Some(RuntimeExitError("failed to read stdin"))
             break
           }
 
@@ -1469,12 +1746,13 @@ fn[Model, Msg] run_internal(
 
           stdin_buf = leftover.to_array()
 
-          let (next_model, should_quit, input_updated) = apply_input_events(
+          let (next_model, input_reason, input_updated) = apply_input_events(
             program, model, events, pending, timers, sequences,
           )
           model = next_model
-          if should_quit {
-            quit = true
+          match input_reason {
+            Some(reason) => exit_reason = Some(reason)
+            None => ()
           }
           if input_updated {
             updated = true
@@ -1488,22 +1766,24 @@ fn[Model, Msg] run_internal(
       pippa_check_resize() != 0 {
       let size = current_window_size()
       updated = true
-      let (resize_model, resize_quit, _resize_updated) = apply_window_size(
+      let (resize_model, resize_reason, _resize_updated) = apply_window_size(
         program, model, size, pending, timers, sequences,
       )
       model = resize_model
-      if resize_quit {
-        quit = true
+      match resize_reason {
+        Some(reason) => exit_reason = Some(reason)
+        None => ()
       }
     }
 
-    let (final_model, final_quit, final_updated, final_render_state) = drain_runtime(
+    let (final_model, final_reason, final_updated, final_render_state) = drain_runtime(
       program, model, render_state, sent_msgs, pending, timers, sequences,
     )
     model = final_model
     render_state = final_render_state
-    if final_quit {
-      quit = true
+    match final_reason {
+      Some(reason) => exit_reason = Some(reason)
+      None => ()
     }
     if final_updated {
       updated = true
@@ -1532,7 +1812,7 @@ fn[Model, Msg] run_internal(
         render_state.prev_line_count,
         render_state.terminal_active,
         render_state.last_render_ms,
-        quit || render_state.force_full_repaint,
+        exit_reason is Some(_) || render_state.force_full_repaint,
         render_state.force_full_repaint,
       )
       render_state = {
@@ -1564,5 +1844,9 @@ fn[Model, Msg] run_internal(
         render_state.bracketed_paste,
       )
     }
+  }
+  match exit_reason {
+    Some(reason) => run_result_from_reason(model, reason)
+    None => RunCompleted(model)
   }
 }
