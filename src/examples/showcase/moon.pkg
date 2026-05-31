@@ -2,8 +2,11 @@ import {
   "brickfrog/pippa",
   "brickfrog/pippa/component",
   "brickfrog/pippa/styling",
-  "moonbitlang/core/debug",
 }
+
+import {
+  "moonbitlang/core/debug",
+} for "wbtest"
 
 options(
   "is-main": true,
