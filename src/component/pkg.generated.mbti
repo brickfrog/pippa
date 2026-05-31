@@ -29,6 +29,16 @@ pub fn table(columns~ : Array[Column]) -> Component[TableModel, TableMsg]
 
 pub fn text_input(placeholder~ : String, prompt? : String, width? : Int, echo_mode? : TextInputEchoMode, char_limit? : Int?, suggestions? : Array[String], keymap? : TextInputKeymap, disabled? : Bool, validator? : (String) -> Result[Unit, String]) -> Component[TextInputModel, TextInputMsg]
 
+pub fn text_input_help_model(keymap? : TextInputKeymap, show_full? : Bool, width? : Int) -> @pippa.HelpModel
+
+pub fn text_input_help_view(keymap? : TextInputKeymap, show_full? : Bool, width? : Int) -> String
+
+pub fn text_input_keymap_disable(TextInputKeymap, TextInputEditingAction) -> TextInputKeymap
+
+pub fn text_input_keymap_help(TextInputKeymap) -> @pippa.KeyMap
+
+pub fn text_input_keymap_override(TextInputKeymap, TextInputEditingAction, @pippa.Binding) -> TextInputKeymap
+
 pub fn text_input_msg_from_input_event(@pippa.InputEvent, keymap? : TextInputKeymap) -> TextInputMsg?
 
 pub fn textarea(width~ : Int, height~ : Int, placeholder? : String, min_height? : Int, max_height? : Int, prompt? : String, line_numbers? : Bool, char_limit? : Int?, line_limit? : Int?, disabled? : Bool) -> Component[TextareaModel, TextareaMsg]

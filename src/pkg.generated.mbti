@@ -20,6 +20,8 @@ pub fn bg_color(Int) -> String
 
 pub fn bg_rgb(Int, Int, Int) -> String
 
+pub fn binding(keys? : Array[String], help_key? : String, help? : String) -> Binding
+
 pub fn blink() -> String
 
 pub fn bold() -> String
@@ -94,6 +96,14 @@ pub fn join_horizontal(Array[String], valign? : VerticalAlign) -> String
 
 pub fn join_vertical(Array[String], align? : Align) -> String
 
+pub fn keymap(Array[Binding]) -> KeyMap
+
+pub fn keymap_bindings(KeyMap) -> Array[Binding]
+
+pub fn keymap_from_groups(Array[KeyMapGroup]) -> KeyMap
+
+pub fn keymap_group(String, Array[Binding]) -> KeyMapGroup
+
 pub fn left_binding() -> Binding
 
 pub fn line_count(String) -> Int
@@ -144,6 +154,12 @@ pub fn reverse() -> String
 
 pub fn right_binding() -> Binding
 
+pub fn set_disabled(Binding, Bool) -> Binding
+
+pub fn set_help(Binding, String, String) -> Binding
+
+pub fn set_keys(Binding, Array[String]) -> Binding
+
 pub fn set_terminal_progress(Int, Int) -> String
 
 pub fn set_window_title(String) -> String
@@ -156,7 +172,11 @@ pub fn strip_ansi(String) -> String
 
 pub fn style() -> Style
 
+pub fn toggle_help(HelpModel) -> HelpModel
+
 pub fn truncate(String, Int) -> String
+
+pub fn unbind(Binding) -> Binding
 
 pub fn underline() -> String
 
@@ -175,7 +195,9 @@ pub(all) enum Align {
 
 pub(all) struct Binding {
   keys : Array[String]
+  help_key : String
   help : String
+  enabled : Bool
 } derive(Eq, @debug.Debug)
 
 pub(all) struct Border {
@@ -305,8 +327,9 @@ pub(all) enum ExecResult {
 } derive(Eq, @debug.Debug)
 
 pub(all) struct HelpModel {
-  bindings : Array[Binding]
+  keymap : KeyMap
   show_full : Bool
+  width : Int
 } derive(Eq, @debug.Debug)
 
 pub(all) enum InputEvent {
@@ -325,6 +348,15 @@ pub(all) enum InternalMsg {
   WindowResize(WindowSize)
   Lifecycle(LifecycleMsg)
   QuitRequested
+} derive(Eq, @debug.Debug)
+
+pub(all) struct KeyMap {
+  groups : Array[KeyMapGroup]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct KeyMapGroup {
+  title : String
+  bindings : Array[Binding]
 } derive(Eq, @debug.Debug)
 
 pub(all) enum KeyMsg {

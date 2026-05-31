@@ -629,7 +629,7 @@ test "text_input: input event dispatch lets keymap override printable keys" {
   let keymap : TextInputKeymap = {
     bindings: [
       {
-        binding: { keys: ["x"], help: "start" },
+        binding: @pippa.binding(keys=["x"], help_key="x", help="start"),
         action: TextInputActionMoveToStart,
       },
     ],
@@ -740,7 +740,7 @@ test "text_input: keymap override changes binding action" {
   let keymap : TextInputKeymap = {
     bindings: [
       {
-        binding: { keys: ["left"], help: "word left" },
+        binding: @pippa.binding(keys=["left"], help_key="←", help="word left"),
         action: TextInputActionMoveWordLeft,
       },
     ],
@@ -752,4 +752,37 @@ test "text_input: keymap override changes binding action" {
       HandleInput(@pippa.Key(@pippa.Special("left"))),
     ).model
   assert_eq(moved.cursor, 4)
+}
+
+///|
+test "text_input: default keymap help follows override and disabled bindings" {
+  let keymap = text_input_keymap_disable(
+    text_input_keymap_override(
+      default_text_input_keymap(),
+      TextInputActionMoveCursorLeft,
+      @pippa.binding(keys=["ctrl+b"], help_key="C-b", help="left"),
+    ),
+    TextInputActionDeleteBefore,
+  )
+  let help = text_input_help_view(keymap~, show_full=false, width=0)
+  assert_true(help.contains("C-b left"))
+  assert_false(help.contains("⌫ delete before"))
+  assert_true(
+    text_input_msg_from_input_event(
+      @pippa.Key(@pippa.Modified("ctrl", "b")),
+      keymap~,
+    )
+    is Some(MoveCursorLeft),
+  )
+  assert_true(
+    text_input_msg_from_input_event(@pippa.Key(@pippa.Special("left")), keymap~)
+    is None,
+  )
+  assert_true(
+    text_input_msg_from_input_event(
+      @pippa.Key(@pippa.Special("backspace")),
+      keymap~,
+    )
+    is None,
+  )
 }
