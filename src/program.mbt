@@ -448,6 +448,26 @@ fn default_output(_output : String) -> Unit {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+let runtime_clock_override : Ref[(() -> Int64)?] = Ref::new(None)
+
+///|
+#cfg(any(target="native", target="llvm"))
+#warnings("-unused_value")
+fn restore_runtime_clock(previous : (() -> Int64)?) -> Unit {
+  runtime_clock_override.val = previous
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_now_ms() -> Int64 {
+  match runtime_clock_override.val {
+    Some(now) => now()
+    None => pippa_now_ms()
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 fn[Model, Msg] emit_output(
   program : Program[Model, Msg],
   output : String,
@@ -600,10 +620,55 @@ fn[Model, Msg] deactivate_terminal_with_modes(
 
 ///|
 #cfg(any(target="native", target="llvm"))
-fn[Model, Msg] render_interval_ms(program : Program[Model, Msg]) -> Int64 {
-  let fps = program.fps.max(1).min(120)
-  let interval = (1000 + fps - 1) / fps
-  interval.to_int64()
+fn[Model, Msg] render_fps(program : Program[Model, Msg]) -> Int64 {
+  program.fps.max(1).min(120).to_int64()
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] render_frame_deadline_ms(
+  program : Program[Model, Msg],
+  frame_index : Int64,
+) -> Int64 {
+  let fps = render_fps(program)
+  (frame_index * 1000L + fps - 1L) / fps
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] render_frame_index_at_or_before(
+  program : Program[Model, Msg],
+  timestamp_ms : Int64,
+) -> Int64 {
+  timestamp_ms.max(0L) * render_fps(program) / 1000L
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] render_cadence_mark_at_or_before(
+  program : Program[Model, Msg],
+  timestamp_ms : Int64,
+) -> Int64 {
+  render_frame_deadline_ms(
+    program,
+    render_frame_index_at_or_before(program, timestamp_ms),
+  )
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] next_render_deadline_after(
+  program : Program[Model, Msg],
+  last_render_ms : Int64,
+) -> Int64 {
+  let mut frame_index = render_frame_index_at_or_before(program, last_render_ms) +
+    1L
+  let mut deadline = render_frame_deadline_ms(program, frame_index)
+  while deadline <= last_render_ms {
+    frame_index = frame_index + 1L
+    deadline = render_frame_deadline_ms(program, frame_index)
+  }
+  deadline
 }
 
 ///|
@@ -1264,7 +1329,7 @@ fn[Msg] timers_timeout(timers : Array[RuntimeTimer[Msg]]) -> Int {
   }
   match min_deadline {
     Some(deadline) => {
-      let remaining = deadline - pippa_now_ms()
+      let remaining = deadline - runtime_now_ms()
       if remaining < 0L {
         0
       } else {
@@ -1277,6 +1342,34 @@ fn[Msg] timers_timeout(timers : Array[RuntimeTimer[Msg]]) -> Int {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn[Model, Msg] queue_due_timers(
+  program : Program[Model, Msg],
+  now : Int64,
+  timers : Array[RuntimeTimer[Msg]],
+  pending : @queue.Queue[RuntimeEffect[Msg]],
+) -> Array[RuntimeTimer[Msg]] {
+  let remaining : Array[RuntimeTimer[Msg]] = []
+  for timer in timers {
+    if timer_deadline(timer) <= now {
+      match timer {
+        TickAt(_) => pending.push(RuntimeTask(program.on_tick))
+        AfterAt(_, task) => pending.push(RuntimeTask(task))
+        EveryAt(_, scheduled_at, task) => {
+          let elapsed = now - scheduled_at
+          pending.push(
+            RuntimeTask(fn() { Some(task({ elapsed_ms: elapsed })) }),
+          )
+        }
+      }
+    } else {
+      remaining.push(timer)
+    }
+  }
+  remaining
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 fn[Model, Msg] runtime_timeout_ms(
   program : Program[Model, Msg],
   timers : Array[RuntimeTimer[Msg]],
@@ -1285,7 +1378,7 @@ fn[Model, Msg] runtime_timeout_ms(
   let mut timeout = timers_timeout(timers)
   match render_due_at {
     Some(deadline) => {
-      let remaining = (deadline - pippa_now_ms()).max(0L).to_int()
+      let remaining = (deadline - runtime_now_ms()).max(0L).to_int()
       if timeout < 0 || remaining < timeout {
         timeout = remaining
       }
@@ -1367,7 +1460,7 @@ fn[Model, Msg] apply_window_size(
         program, current_model, msg,
       )
       current_model = next_model
-      queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+      queue_cmd_effects(cmd, runtime_now_ms(), pending, timers, sequences)
       updated = true
       if should_quit {
         reason = Some(RuntimeExitQuit)
@@ -1381,7 +1474,7 @@ fn[Model, Msg] apply_window_size(
         program, current_model, msg,
       )
       current_model = next_model
-      queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+      queue_cmd_effects(cmd, runtime_now_ms(), pending, timers, sequences)
       updated = true
       if should_quit {
         reason = Some(RuntimeExitQuit)
@@ -1483,7 +1576,7 @@ fn[Model, Msg] apply_input_events(
             Interrupt,
           )
           current_model = next_model
-          queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+          queue_cmd_effects(cmd, runtime_now_ms(), pending, timers, sequences)
           if lifecycle_updated {
             updated = true
           }
@@ -1501,7 +1594,7 @@ fn[Model, Msg] apply_input_events(
             program, current_model, msg,
           )
           current_model = next_model
-          queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+          queue_cmd_effects(cmd, runtime_now_ms(), pending, timers, sequences)
           updated = true
           if should_quit && reason is None {
             reason = Some(RuntimeExitQuit)
@@ -1684,10 +1777,11 @@ fn[Model, Msg] flush_view(
         applied_terminal_state,
       )
     }
-    let now = pippa_now_ms()
-    if force ||
-      terminal_changed ||
-      now - last_render_ms >= render_interval_ms(program) {
+    let now = runtime_now_ms()
+    let next_render_deadline = next_render_deadline_after(
+      program, last_render_ms,
+    )
+    if force || terminal_changed || now >= next_render_deadline {
       let content_output = if content_changed {
         let ops = diff_views(rendered_view, next_content)
         if full_repaint || ops.is_empty() {
@@ -1717,7 +1811,7 @@ fn[Model, Msg] flush_view(
           prev_line_count
         },
         if content_changed {
-          now
+          render_cadence_mark_at_or_before(program, now)
         } else {
           last_render_ms
         },
@@ -1729,7 +1823,7 @@ fn[Model, Msg] flush_view(
         rendered_view,
         prev_line_count,
         last_render_ms,
-        Some(last_render_ms + render_interval_ms(program)),
+        Some(next_render_deadline),
         applied_terminal_state,
       )
     }
@@ -1762,7 +1856,7 @@ fn[Model, Msg] drain_runtime(
       current_model = next_model
       updated = true
       progressed = true
-      queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+      queue_cmd_effects(cmd, runtime_now_ms(), pending, timers, sequences)
       if should_quit {
         reason = Some(RuntimeExitQuit)
       }
@@ -1780,7 +1874,13 @@ fn[Model, Msg] drain_runtime(
               )
               current_model = next_model
               updated = true
-              queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+              queue_cmd_effects(
+                cmd,
+                runtime_now_ms(),
+                pending,
+                timers,
+                sequences,
+              )
               if should_quit {
                 reason = Some(RuntimeExitQuit)
               }
@@ -1805,7 +1905,13 @@ fn[Model, Msg] drain_runtime(
               if lifecycle_updated {
                 updated = true
               }
-              queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+              queue_cmd_effects(
+                cmd,
+                runtime_now_ms(),
+                pending,
+                timers,
+                sequences,
+              )
               reason = Some(RuntimeExitQuit)
             }
             Interrupt => {
@@ -1818,7 +1924,13 @@ fn[Model, Msg] drain_runtime(
               if lifecycle_updated {
                 updated = true
               }
-              queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+              queue_cmd_effects(
+                cmd,
+                runtime_now_ms(),
+                pending,
+                timers,
+                sequences,
+              )
               reason = Some(RuntimeExitInterrupted)
             }
             Suspend => {
@@ -1833,7 +1945,7 @@ fn[Model, Msg] drain_runtime(
               }
               queue_cmd_effects(
                 suspend_cmd,
-                pippa_now_ms(),
+                runtime_now_ms(),
                 pending,
                 timers,
                 sequences,
@@ -1858,7 +1970,7 @@ fn[Model, Msg] drain_runtime(
                 }
                 queue_cmd_effects(
                   resume_cmd,
-                  pippa_now_ms(),
+                  runtime_now_ms(),
                   pending,
                   timers,
                   sequences,
@@ -1878,7 +1990,13 @@ fn[Model, Msg] drain_runtime(
               if lifecycle_updated {
                 updated = true
               }
-              queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+              queue_cmd_effects(
+                cmd,
+                runtime_now_ms(),
+                pending,
+                timers,
+                sequences,
+              )
               if should_quit {
                 reason = Some(RuntimeExitQuit)
               }
@@ -1903,7 +2021,7 @@ fn[Model, Msg] drain_runtime(
           )
           current_model = next_model
           updated = true
-          queue_cmd_effects(cmd, pippa_now_ms(), pending, timers, sequences)
+          queue_cmd_effects(cmd, runtime_now_ms(), pending, timers, sequences)
           if should_quit {
             reason = Some(RuntimeExitExec(exec_result))
           }
@@ -1919,7 +2037,7 @@ fn[Model, Msg] drain_runtime(
     if pending.is_empty() && sent_msgs.is_empty() {
       match sequences.pop_front() {
         Some([head, .. tail]) => {
-          queue_cmd_effects(head, pippa_now_ms(), pending, timers, sequences)
+          queue_cmd_effects(head, runtime_now_ms(), pending, timers, sequences)
           if !tail.is_empty() {
             sequences.push_back(tail.to_owned())
           }
@@ -1957,7 +2075,7 @@ fn[Model, Msg] run_internal(
   let pending = @queue.Queue::new()
   let sequences = @deque.Deque::new()
   let mut timers : Array[RuntimeTimer[Msg]] = []
-  queue_cmd_effects(init_res.cmd, pippa_now_ms(), pending, timers, sequences)
+  queue_cmd_effects(init_res.cmd, runtime_now_ms(), pending, timers, sequences)
 
   let terminal_active = program.rendering || program.read_stdin
   let mut render_state = initial_render_state(program, terminal_active)
@@ -2114,25 +2232,8 @@ fn[Model, Msg] run_internal(
       }
 
       if poll_result == 0 {
-        let now = pippa_now_ms()
-        let remaining : Array[RuntimeTimer[Msg]] = []
-        for timer in timers {
-          if timer_deadline(timer) <= now {
-            match timer {
-              TickAt(_) => pending.push(RuntimeTask(program.on_tick))
-              AfterAt(_, task) => pending.push(RuntimeTask(task))
-              EveryAt(_, scheduled_at, task) => {
-                let elapsed = now - scheduled_at
-                pending.push(
-                  RuntimeTask(fn() { Some(task({ elapsed_ms: elapsed })) }),
-                )
-              }
-            }
-          } else {
-            remaining.push(timer)
-          }
-        }
-        timers = remaining
+        let now = runtime_now_ms()
+        timers = queue_due_timers(program, now, timers, pending)
       } else {
         if (poll_result & 4) != 0 {
           pippa_drain_wakeup()
@@ -2214,7 +2315,7 @@ fn[Model, Msg] run_internal(
       render_state.force_full_repaint ||
       (match render_state.render_due_at {
         Some(deadline) =>
-          render_state.terminal_active && pippa_now_ms() >= deadline
+          render_state.terminal_active && runtime_now_ms() >= deadline
         None => false
       })
     if should_flush_view {

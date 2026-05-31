@@ -239,7 +239,28 @@ void pippa_write_byte(int b) {
 }
 
 void pippa_write_bytes(const unsigned char* buf, int len) {
-    write(STDOUT_FILENO, buf, (size_t)len);
+    if (buf == NULL || len <= 0) {
+        return;
+    }
+    size_t total = 0;
+    size_t target = (size_t)len;
+    while (total < target) {
+        ssize_t written = write(STDOUT_FILENO, buf + total, target - total);
+        if (written > 0) {
+            total += (size_t)written;
+            continue;
+        }
+        if (written < 0 && errno == EINTR) {
+            continue;
+        }
+        if (written < 0) {
+            fprintf(stderr, "Warning: failed to write terminal output: %s\n",
+                    strerror(errno));
+        } else {
+            fprintf(stderr, "Warning: failed to make progress writing terminal output\n");
+        }
+        return;
+    }
 }
 
 int pippa_exec_process(const unsigned char *argv_buf, int argv_len, int argc) {
