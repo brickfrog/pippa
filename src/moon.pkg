@@ -12,6 +12,7 @@ import {
 } for "test"
 
 import {
+  "brickfrog/pippa/component",
   "moonbitlang/core/test",
 } for "wbtest"
 
