@@ -256,6 +256,8 @@ void pippa_write_bytes(const unsigned char* buf, int len) {
         if (written < 0) {
             fprintf(stderr, "Warning: failed to write terminal output: %s\n",
                     strerror(errno));
+        } else {
+            fprintf(stderr, "Warning: failed to make progress writing terminal output\n");
         }
         return;
     }
