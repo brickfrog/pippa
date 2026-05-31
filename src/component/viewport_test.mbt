@@ -335,6 +335,24 @@ test "viewport multi-line highlight scrolls horizontal view to selected start" {
 }
 
 ///|
+test "viewport next multi-line highlight scrolls soft-wrap to start row" {
+  let vp = viewport(width=4, height=2, soft_wrap=true, highlights=[
+    viewport_highlight(line=0, start_col=0, end_col=1),
+    viewport_highlight_range(start_line=2, start_col=2, end_line=3, end_col=14),
+  ])
+  let mut m = (vp.init)().model
+  m = (vp.update)(
+      m,
+      SetContent("root\n1111\nabcdefghijklmnop\nqrstuvwxyzabcdef"),
+    ).model
+
+  m = (vp.update)(m, NextHighlight).model
+  assert_eq(m.selected_highlight, 1)
+  assert_eq(m.offset, 1)
+  assert_eq((vp.view)(m), "1111\nab\u001b[7mcd\u001b[0m")
+}
+
+///|
 test "viewport reversed multi-line highlights normalize endpoint columns" {
   let vp = viewport(width=8, height=4, highlights=[
     viewport_highlight_range(start_line=3, start_col=4, end_line=1, end_col=2),
