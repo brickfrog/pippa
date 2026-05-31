@@ -100,6 +100,21 @@ pub(all) struct ViewCursorPosition {
 } derive(Debug, Eq)
 
 ///|
+fn view_cursor_coordinate(value : Int) -> Int {
+  if value < 1 {
+    1
+  } else {
+    value
+  }
+}
+
+///|
+/// Create a 1-based cursor position, clamping invalid terminal coordinates to 1.
+pub fn ViewCursorPosition::new(row~ : Int, col~ : Int) -> ViewCursorPosition {
+  { row: view_cursor_coordinate(row), col: view_cursor_coordinate(col) }
+}
+
+///|
 /// Per-render terminal progress state carried by a structured `View`.
 pub(all) enum ViewProgress {
   /// Clear or suppress terminal progress reporting for this frame.
@@ -163,6 +178,9 @@ pub fn View::new(
   progress? : ViewProgress? = None,
   mouse_mode? : ViewMouseMode? = None,
 ) -> View {
+  let cursor_position = cursor_position.map(fn(pos) {
+    ViewCursorPosition::new(row=pos.row, col=pos.col)
+  })
   {
     content,
     cursor_position,
@@ -184,7 +202,7 @@ pub fn View::text(content : String) -> View {
 ///|
 /// Set the cursor position for this frame.
 pub fn View::with_cursor_position(self : View, row~ : Int, col~ : Int) -> View {
-  { ..self, cursor_position: Some({ row, col }) }
+  { ..self, cursor_position: Some(ViewCursorPosition::new(row~, col~)) }
 }
 
 ///|

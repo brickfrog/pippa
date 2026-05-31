@@ -560,6 +560,7 @@ pub(all) struct ViewCursorPosition {
   row : Int
   col : Int
 } derive(Eq, @debug.Debug)
+pub fn ViewCursorPosition::new(row~ : Int, col~ : Int) -> Self
 
 pub(all) enum ViewMouseMode {
   ViewMouseOff

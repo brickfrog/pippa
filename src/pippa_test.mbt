@@ -63,6 +63,18 @@ test "pippa View round-trips optional terminal state fields" {
 }
 
 ///|
+test "pippa View cursor positions are clamped to terminal coordinates" {
+  let from_builder = View::text("body").with_cursor_position(row=0, col=-4)
+  @test.assert_eq(from_builder.cursor_position, Some({ row: 1, col: 1 }))
+
+  let from_new = View::new(
+    content="body",
+    cursor_position=Some({ row: -8, col: 0 }),
+  )
+  @test.assert_eq(from_new.cursor_position, Some({ row: 1, col: 1 }))
+}
+
+///|
 test "pippa update result" {
   let result : UpdateResult[Int, Unit] = UpdateResult::new(
     model=10,
