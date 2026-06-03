@@ -800,6 +800,30 @@ priv enum RuntimeEffect[Msg] {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+let runtime_print_above_messages : Ref[Array[PrintAboveMessage]] = Ref([])
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_enqueue_print_above(message : PrintAboveMessage) -> Unit {
+  runtime_print_above_messages.val.push(message)
+}
+
+///|
+#cfg(not(any(target="native", target="llvm")))
+fn runtime_enqueue_print_above(message : PrintAboveMessage) -> Unit {
+  ignore(message.message_body)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_take_print_above_messages() -> Array[PrintAboveMessage] {
+  let messages = runtime_print_above_messages.val
+  runtime_print_above_messages.val = []
+  messages
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 priv enum RuntimeExitReason {
   RuntimeExitCompleted
   RuntimeExitQuit
@@ -818,6 +842,7 @@ priv struct RuntimeRenderState {
   bracketed_paste : Bool
   rendered : String
   prev_line_count : Int
+  terminal_height : Int
   last_render_ms : Int64
   render_due_at : Int64?
   force_full_repaint : Bool
@@ -918,6 +943,7 @@ fn[Model, Msg] initial_render_state(
     program.bracketed_paste,
     rendered: "",
     prev_line_count: 0,
+    terminal_height: current_window_size().height.max(1),
     last_render_ms: 0L,
     render_due_at: None,
     force_full_repaint: false,
@@ -1418,6 +1444,102 @@ fn terminal_view_reset_sequence() -> String {
   reset_background_color() +
   clear_terminal_progress() +
   disable_mouse()
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_print_above_lines(
+  messages : Array[PrintAboveMessage],
+) -> Array[String] {
+  let lines : Array[String] = []
+  for message in messages {
+    if message.message_body != "" {
+      for line in split_lines(message.message_body) {
+        lines.push(line)
+      }
+    }
+  }
+  lines
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_print_above_frame_output(
+  lines : Array[String],
+  prev_line_count : Int,
+  current_content : String,
+  terminal_height : Int,
+) -> String {
+  let buf = StringBuilder::new()
+  buf.write_string(render_full("", prev_line_count))
+  buf.write_string(move_cursor(terminal_height.max(1), 1))
+  for line in lines {
+    buf.write_string(line)
+    buf.write_string(clear_line())
+    buf.write_string("\r\n")
+  }
+  buf.write_string(render_full(current_content, 0))
+  buf.to_string()
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_render_state_with_window_size(
+  state : RuntimeRenderState,
+  size : WindowSize,
+) -> RuntimeRenderState {
+  { ..state, terminal_height: size.height.max(1) }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] apply_print_above_messages(
+  program : Program[Model, Msg],
+  state : RuntimeRenderState,
+  model : Model,
+) -> RuntimeRenderState {
+  let lines = runtime_print_above_lines(runtime_take_print_above_messages())
+  if lines.is_empty() ||
+    !state.terminal_active ||
+    !program.rendering ||
+    state.alt_screen {
+    state
+  } else {
+    let current_view = desired_view(program, model)
+    let (terminal_prefix, next_terminal_state) = view_terminal_state_delta(
+      state.view_terminal_state,
+      current_view,
+      state.render_context,
+    )
+    let frame_output = runtime_print_above_frame_output(
+      lines,
+      state.prev_line_count,
+      current_view.content,
+      state.terminal_height,
+    )
+    let terminal_suffix = view_cursor_position_suffix(
+      state.view_terminal_state,
+      next_terminal_state,
+      true,
+    )
+    let output = terminal_prefix + frame_output + terminal_suffix
+    let output = if program.synchronized_output && output != "" {
+      begin_sync_update() + output + end_sync_update()
+    } else {
+      output
+    }
+    emit_output(program, output)
+    let now = runtime_now_ms()
+    {
+      ..state,
+      rendered: current_view.content,
+      prev_line_count: line_count(current_view.content),
+      last_render_ms: render_cadence_mark_at_or_before(program, now),
+      render_due_at: None,
+      force_full_repaint: false,
+      view_terminal_state: next_terminal_state,
+    }
+  }
 }
 
 ///|
@@ -2078,7 +2200,7 @@ fn[Model, Msg] drain_runtime(
       let effect = pending.pop().unwrap()
       progressed = true
       match effect {
-        RuntimeTask(task) =>
+        RuntimeTask(task) => {
           match task() {
             Some(msg) => {
               let (next_model, should_quit, cmd) = apply_msg(
@@ -2099,6 +2221,10 @@ fn[Model, Msg] drain_runtime(
             }
             None => ()
           }
+          current_state = apply_print_above_messages(
+            program, current_state, current_model,
+          )
+        }
         RuntimeScreen(command) =>
           current_state = apply_screen_command(program, current_state, command)
         RuntimeTerminal(command) =>
@@ -2518,6 +2644,7 @@ fn[Model, Msg] run_internal(
       program.read_stdin &&
       pippa_check_resize() != 0 {
       let size = current_window_size()
+      render_state = runtime_render_state_with_window_size(render_state, size)
       updated = true
       let (resize_model, resize_reason, _resize_updated) = apply_window_size(
         program, model, size, pending, timers, sequences,

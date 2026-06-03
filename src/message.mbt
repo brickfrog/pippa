@@ -5,6 +5,12 @@
 /// raw terminal input. Users match on them inside their `update` function.
 
 ///|
+/// Runtime-only request to print unmanaged text above the managed program view.
+priv struct PrintAboveMessage {
+  message_body : String
+}
+
+///|
 /// Represents a keyboard event.
 pub(all) enum KeyMsg {
   /// A printable character was received.
