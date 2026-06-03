@@ -82,6 +82,9 @@ test "style render normalizes invalid custom border pieces" {
 test "style render_with degrades colors and keeps ambient untouched" {
   let s = style().foreground_rgb(255, 0, 0).background_hex("#0000ff").bold()
   let default_ctx = @profile.RenderContext::default()
+  let previous = @profile.ambient_context()
+  defer @profile.set_render_context(previous)
+  @profile.set_render_context(default_ctx)
   assert_eq(s.render("hi"), s.render_with("hi", default_ctx))
 
   let ambient = default_ctx.with_color_profile(@profile.Ansi16)
@@ -92,7 +95,6 @@ test "style render_with degrades colors and keeps ambient untouched" {
   assert_false(actual.contains("\u001b[48;"))
   assert_true(actual.contains(bold()))
   assert_eq(@profile.ambient_context(), ambient)
-  @profile.set_render_context(default_ctx)
 }
 
 ///|

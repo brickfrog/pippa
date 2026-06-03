@@ -66,6 +66,12 @@ test "profile quantization and render degradation" {
 
   let forced = no_color.with_color_policy(Always)
   assert_eq(render_fg(forced, Palette(2)), "\u001b[32m")
+
+  assert_eq(
+    render_fg(RenderContext::default(), Palette(999)),
+    "\u001b[38;5;255m",
+  )
+  assert_eq(render_bg(RenderContext::default(), Palette(-4)), "\u001b[48;5;0m")
 }
 
 ///|
