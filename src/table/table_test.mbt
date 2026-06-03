@@ -152,6 +152,12 @@ test "table wraps all-wide graphemes at odd width without splits" {
 }
 
 ///|
+test "table truncates whole wide grapheme in under-width column" {
+  let actual = new().row(["你"]).width(3).render()
+  assert_eq(actual, "┌─┐\n│ │\n└─┘")
+}
+
+///|
 test "table wraps ansi cell content without splitting escapes" {
   let styled = @pippa.fg_color(1) + "abcdefghij" + @pippa.reset()
   let actual = new().row([styled]).width(8).render()

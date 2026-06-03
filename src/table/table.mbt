@@ -180,6 +180,13 @@ pub fn Table::style_func(
 }
 
 ///|
+/// Set the table's target visible width.
+///
+/// During resizing and final fitting, cell content is truncated to its column
+/// width. If a column is narrower than a cell's widest grapheme display width,
+/// that grapheme is dropped whole rather than split, matching lipgloss/table's
+/// truncate-to-column-width behavior. Columns wide enough to hold the grapheme
+/// preserve it.
 pub fn Table::width(self : Table, width : Int) -> Table {
   { ..self, width: @internal.clamp_non_negative(width) }
 }
@@ -560,6 +567,8 @@ fn render_bottom_border(table : Table, widths : Array[Int]) -> String {
 
 ///|
 fn fit_line_to_width(line : String, width : Int) -> String {
+  // `@pippa.truncate` is grapheme-aware, so under-width wide glyphs are
+  // dropped whole instead of split across terminal cells.
   if width <= 0 {
     ""
   } else {
