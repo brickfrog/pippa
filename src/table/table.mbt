@@ -577,50 +577,310 @@ fn fit_block_to_width(block : String, width : Int) -> String {
 }
 
 ///|
-fn push_wrapped_segment(segments : Array[String], segment : String) -> Unit {
-  segments.push(segment)
+fn table_write_chars(
+  buf : StringBuilder,
+  chars : Array[Char],
+  start : Int,
+  end_index : Int,
+) -> Unit {
+  for i in start..<end_index {
+    buf.write_char(chars[i])
+  }
+}
+
+///|
+fn table_chars_to_string(
+  chars : Array[Char],
+  start : Int,
+  end_index : Int,
+) -> String {
+  let n = chars.length()
+  let from = start.max(0).min(n)
+  let to = end_index.max(from).min(n)
+  let buf = StringBuilder::new(size_hint=to - from)
+  table_write_chars(buf, chars, from, to)
+  buf.to_string()
+}
+
+///|
+fn table_is_csi_terminator(ch : Char) -> Bool {
+  ch >= '@' && ch <= '~'
+}
+
+///|
+fn table_skip_ansi_sequence(chars : Array[Char], start : Int) -> Int {
+  let n = chars.length()
+  let mut i = start + 1
+  if i < n {
+    let next = chars[i]
+    i = i + 1
+    if next == '[' {
+      while i < n && !table_is_csi_terminator(chars[i]) {
+        i = i + 1
+      }
+      if i < n {
+        i = i + 1
+      }
+    }
+  }
+  i
+}
+
+///|
+fn table_is_sgr_sequence(
+  chars : Array[Char],
+  start : Int,
+  end_index : Int,
+) -> Bool {
+  end_index >= start + 3 &&
+  chars[start] == '\u001b' &&
+  chars[start + 1] == '[' &&
+  chars[end_index - 1] == 'm'
+}
+
+///|
+fn table_is_sgr_reset_sequence(
+  chars : Array[Char],
+  start : Int,
+  end_index : Int,
+) -> Bool {
+  if !table_is_sgr_sequence(chars, start, end_index) {
+    return false
+  }
+  if end_index == start + 3 {
+    return true
+  }
+  let mut value = 0
+  let mut saw_digit = false
+  for i in (start + 2)..<(end_index - 1) {
+    let ch = chars[i]
+    if ch >= '0' && ch <= '9' {
+      value = value * 10 + ch.to_int() - '0'.to_int()
+      saw_digit = true
+    } else if ch == ';' {
+      value = 0
+      saw_digit = false
+    } else {
+      return false
+    }
+  }
+  !saw_digit || value == 0
+}
+
+///|
+fn table_sgr_state_after_range(
+  chars : Array[Char],
+  start : Int,
+  end_index : Int,
+  state : String,
+) -> String {
+  let limit = end_index.max(0).min(chars.length())
+  let mut active = state
+  let mut i = start.max(0).min(limit)
+  while i < limit {
+    if chars[i] == '\u001b' {
+      let seq_start = i
+      let next = table_skip_ansi_sequence(chars, i).min(limit)
+      if table_is_sgr_sequence(chars, seq_start, next) {
+        if table_is_sgr_reset_sequence(chars, seq_start, next) {
+          active = ""
+        } else {
+          active = active + table_chars_to_string(chars, seq_start, next)
+        }
+      }
+      i = next
+    } else {
+      i = i + 1
+    }
+  }
+  active
+}
+
+///|
+fn table_write_first_sgr_reset_after(
+  buf : StringBuilder,
+  chars : Array[Char],
+  from : Int,
+) -> Bool {
+  let n = chars.length()
+  let mut i = from.max(0).min(n)
+  while i < n {
+    if chars[i] == '\u001b' {
+      let start = i
+      let next = table_skip_ansi_sequence(chars, i)
+      if table_is_sgr_reset_sequence(chars, start, next) {
+        table_write_chars(buf, chars, start, next)
+        return true
+      }
+      i = next
+    } else {
+      i = i + 1
+    }
+  }
+  false
+}
+
+///|
+fn table_close_sgr_state(
+  buf : StringBuilder,
+  chars : Array[Char],
+  from : Int,
+  state : String,
+) -> Unit {
+  if state != "" && !table_write_first_sgr_reset_after(buf, chars, from) {
+    buf.write_string(@pippa.reset())
+  }
+}
+
+///|
+fn table_visible_cell_slice(
+  s : String,
+  start_cell : Int,
+  width : Int,
+) -> String {
+  if width <= 0 {
+    return ""
+  }
+  let start = start_cell.max(0)
+  if start == 0 {
+    return @pippa.truncate(s, width)
+  }
+  let chars = s.to_array()
+  let boundaries = @internal.grapheme_boundaries(s)
+  let buf = StringBuilder::new(size_hint=chars.length())
+  let mut cell = 0
+  let mut used = 0
+  let mut active_style = ""
+  let mut emitted_style = ""
+  let mut slice_started = false
+  for i in 0..<(boundaries.length() - 1) {
+    if used >= width {
+      table_close_sgr_state(buf, chars, boundaries[i], emitted_style)
+      return buf.to_string()
+    }
+    let cluster = table_chars_to_string(chars, boundaries[i], boundaries[i + 1])
+    let cluster_width = @pippa.visible_width(cluster)
+    if cell + cluster_width <= start {
+      active_style = table_sgr_state_after_range(
+        chars,
+        boundaries[i],
+        boundaries[i + 1],
+        active_style,
+      )
+      cell = cell + cluster_width
+    } else if cell < start {
+      if !slice_started {
+        if active_style != "" {
+          buf.write_string(active_style)
+          emitted_style = active_style
+        }
+        slice_started = true
+      }
+      let visible_tail = cluster_width - (start - cell)
+      let spaces = visible_tail.min(width - used)
+      for _ in 0..<spaces {
+        buf.write_char(' ')
+      }
+      used = used + spaces
+      cell = cell + cluster_width
+    } else if used + cluster_width <= width {
+      if !slice_started {
+        if active_style != "" {
+          buf.write_string(active_style)
+          emitted_style = active_style
+        }
+        slice_started = true
+      }
+      table_write_chars(buf, chars, boundaries[i], boundaries[i + 1])
+      emitted_style = table_sgr_state_after_range(
+        chars,
+        boundaries[i],
+        boundaries[i + 1],
+        emitted_style,
+      )
+      used = used + cluster_width
+      cell = cell + cluster_width
+    } else {
+      table_close_sgr_state(buf, chars, boundaries[i], emitted_style)
+      return buf.to_string()
+    }
+  }
+  table_close_sgr_state(buf, chars, chars.length(), emitted_style)
+  buf.to_string()
 }
 
 ///|
 fn wrap_line(line : String, width : Int) -> Array[String] {
-  let segments : Array[String] = []
   if width <= 0 {
-    segments.push("")
-    return segments
+    return [""]
   }
-  let mut segment = StringBuilder::new()
-  let mut segment_width = 0
-  for ch in line {
-    let piece = ch.to_string()
-    let piece_width = @pippa.visible_width(piece)
-    if segment_width > 0 && segment_width + piece_width > width {
-      push_wrapped_segment(segments, segment.to_string())
-      segment = StringBuilder::new()
-      segment_width = 0
-    }
-    segment.write_char(ch)
-    segment_width = segment_width + piece_width
-    if segment_width >= width {
-      push_wrapped_segment(segments, segment.to_string())
-      segment = StringBuilder::new()
-      segment_width = 0
-    }
+  let visible = @pippa.visible_width(line)
+  if visible == 0 {
+    return [line]
   }
-  if segment_width > 0 || segments.is_empty() {
-    push_wrapped_segment(segments, segment.to_string())
+  let segments : Array[String] = []
+  let mut start = 0
+  while start < visible {
+    segments.push(table_visible_cell_slice(line, start, width))
+    start = start + width
   }
   segments
 }
 
 ///|
-fn wrap_content(content : String, width : Int) -> String {
+fn wrapped_content_lines(content : String, width : Int) -> Array[String] {
   let rows : Array[String] = []
   for line in @pippa.split_lines(content) {
     for segment in wrap_line(line, width) {
       rows.push(segment)
     }
   }
-  @internal.join_lines(rows)
+  rows
+}
+
+///|
+fn unwrapped_content_lines(content : String, width : Int) -> Array[String] {
+  let rows : Array[String] = []
+  for line in @pippa.split_lines(content) {
+    rows.push(@pippa.truncate(line, width))
+  }
+  rows
+}
+
+///|
+fn cell_line_style(
+  style : @pippa.Style,
+  content_width : Int,
+  line_index : Int,
+  line_count : Int,
+) -> @pippa.Style {
+  let base = if style.width > 0 { style } else { style.width(content_width) }
+  if line_count <= 1 {
+    return base
+  }
+  {
+    ..base,
+    padding_top: if line_index == 0 {
+      base.padding_top
+    } else {
+      0
+    },
+    padding_bottom: if line_index == line_count - 1 {
+      base.padding_bottom
+    } else {
+      0
+    },
+    margin_top: if line_index == 0 {
+      base.margin_top
+    } else {
+      0
+    },
+    margin_bottom: if line_index == line_count - 1 {
+      base.margin_bottom
+    } else {
+      0
+    },
+  }
 }
 
 ///|
@@ -631,19 +891,22 @@ fn render_cell(
   width : Int,
 ) -> String {
   let content_width = (width - style_horizontal_frame(style)).max(0)
-  let content = if content_width == 0 {
-    ""
+  let content_lines = if content_width == 0 {
+    [""]
   } else if table.wrap {
-    wrap_content(value, content_width)
+    wrapped_content_lines(value, content_width)
   } else {
-    @pippa.truncate(value, content_width)
+    unwrapped_content_lines(value, content_width)
   }
-  let cell_style = if style.width > 0 {
-    style
-  } else {
-    style.width(content_width)
+  let rendered_lines : Array[String] = []
+  for i, line in content_lines {
+    rendered_lines.push(
+      cell_line_style(style, content_width, i, content_lines.length()).render(
+        line,
+      ),
+    )
   }
-  let rendered = cell_style.render(content)
+  let rendered = @internal.join_lines(rendered_lines)
   fit_block_to_width(rendered, width)
 }
 

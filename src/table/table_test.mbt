@@ -128,6 +128,58 @@ test "table wraps cells by default without dropping content" {
 }
 
 ///|
+test "table wraps ansi cell content without splitting escapes" {
+  let styled = @pippa.fg_color(1) + "abcdefghij" + @pippa.reset()
+  let actual = new().row([styled]).width(8).render()
+  let expected = "┌──────┐\n" +
+    "│" +
+    @pippa.fg_color(1) +
+    "abcdef" +
+    @pippa.reset() +
+    "│\n" +
+    "│" +
+    @pippa.fg_color(1) +
+    "ghij  " +
+    @pippa.reset() +
+    "│\n" +
+    "└──────┘"
+  assert_eq(actual, expected)
+  assert_eq(@pippa.max_line_width(actual), 8)
+  assert_eq(
+    @pippa.strip_ansi(actual),
+    "┌──────┐\n│abcdef│\n│ghij  │\n└──────┘",
+  )
+}
+
+///|
+test "table closes styled wrapped cells before separator" {
+  let actual = new()
+    .row(["abcdefghij", "plain"])
+    .style_func(fn(_row, col) {
+      if col == 0 {
+        @pippa.style().fg_color(2)
+      } else {
+        @pippa.style()
+      }
+    })
+    .width(14)
+    .render()
+  let expected = "┌──────┬─────┐\n" +
+    "│" +
+    @pippa.fg_color(2) +
+    "abcdef" +
+    @pippa.reset() +
+    "│plain│\n" +
+    "│" +
+    @pippa.fg_color(2) +
+    "ghij  " +
+    @pippa.reset() +
+    "│     │\n" +
+    "└──────┴─────┘"
+  assert_eq(actual, expected)
+}
+
+///|
 test "table height caps rows while preserving bottom border" {
   let actual = new().row(["one"]).row(["two"]).row(["three"]).height(4).render()
   assert_eq(

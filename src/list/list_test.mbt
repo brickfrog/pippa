@@ -78,6 +78,8 @@ test "list renders alphabet roman and dash enumerators with lipgloss casing" {
   assert_eq(alphabet(values, 26), "AA.")
   assert_eq(alphabet(values, 27), "AB.")
   assert_eq(roman(values, 3), "IV.")
+  assert_eq(roman(values, 27), "XXVIII.")
+  assert_eq(roman(values, 48), "XLIX.")
   assert_eq(dash(values, 0), "-")
   let actual = new()
     .enumerator(alphabet)
