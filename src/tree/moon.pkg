@@ -1,0 +1,8 @@
+import {
+  "brickfrog/pippa/internal",
+  "brickfrog/pippa",
+}
+
+import {
+  "moonbitlang/core/test",
+} for "test"
