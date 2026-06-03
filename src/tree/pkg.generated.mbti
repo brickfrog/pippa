@@ -1,0 +1,61 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/tree"
+
+import {
+  "brickfrog/pippa",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn default_enumerator() -> Enumerator
+
+pub fn leaf(String, hidden? : Bool) -> Tree
+
+pub fn new() -> Tree
+
+pub fn root(String) -> Tree
+
+pub fn rounded_enumerator() -> Enumerator
+
+// Errors
+
+// Types and methods
+pub(all) struct Enumerator {
+  child_connector : String
+  last_child_connector : String
+  vertical_pipe : String
+  indent : String
+  item_indent : String
+} derive(Eq, @debug.Debug)
+
+type Tree
+pub fn Tree::append_children(Self, Array[Self]) -> Self
+pub fn Tree::child(Self, Self) -> Self
+pub fn Tree::child_leaf(Self, String, hidden? : Bool) -> Self
+pub fn Tree::children(Self) -> Array[Self]
+pub fn Tree::enumerator(Self, Enumerator) -> Self
+pub fn Tree::enumerator_func(Self, (Array[Self], Int) -> String) -> Self
+pub fn Tree::enumerator_style(Self, @pippa.Style) -> Self
+pub fn Tree::enumerator_style_func(Self, (Array[Self], Int) -> @pippa.Style) -> Self
+pub fn Tree::hidden(Self) -> Bool
+pub fn Tree::hide(Self, Bool) -> Self
+pub fn Tree::indenter_func(Self, (Array[Self], Int) -> String) -> Self
+pub fn Tree::indenter_style(Self, @pippa.Style) -> Self
+pub fn Tree::indenter_style_func(Self, (Array[Self], Int) -> @pippa.Style) -> Self
+pub fn Tree::item_indent(Self, String) -> Self
+pub fn Tree::item_style(Self, @pippa.Style) -> Self
+pub fn Tree::item_style_func(Self, (Array[Self], Int) -> @pippa.Style) -> Self
+pub fn Tree::offset(Self, Int, Int) -> Self
+pub fn Tree::render(Self) -> String
+pub fn Tree::root(Self, String) -> Self
+pub fn Tree::root_style(Self, @pippa.Style) -> Self
+pub fn Tree::set_hidden(Self, Bool) -> Self
+pub fn Tree::set_value(Self, String) -> Self
+pub fn Tree::to_string(Self) -> String
+pub fn Tree::value(Self) -> String
+pub fn Tree::width(Self, Int) -> Self
+
+// Type aliases
+
+// Traits
+
