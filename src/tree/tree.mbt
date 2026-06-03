@@ -142,7 +142,7 @@ pub fn Tree::value(self : Tree) -> String {
 
 ///|
 pub fn Tree::set_value(self : Tree, value : String) -> Tree {
-  self.root(value)
+  { ..self, value, }
 }
 
 ///|
@@ -176,12 +176,9 @@ pub fn Tree::children(self : Tree) -> Array[Tree] {
 pub fn Tree::offset(self : Tree, start : Int, end : Int) -> Tree {
   let (start, end) = if start > end { (end, start) } else { (start, end) }
   let start = start.max(0)
-  let end = if end < 0 || end > self.children.length() {
-    self.children.length()
-  } else {
-    end
-  }
-  { ..self, offset_start: start, offset_end: end }
+  let len = self.children.length()
+  let end = if end < 0 || end > self.children.length() { len } else { end }
+  { ..self, offset_start: start, offset_end: len - end }
 }
 
 ///|
@@ -384,9 +381,7 @@ fn visible_children(children : Array[Tree]) -> Array[Tree] {
 fn max_connector_width(renderer : TreeRenderer, children : Array[Tree]) -> Int {
   let mut max_width = 0
   for i in 0..<children.length() {
-    let connector = (renderer.enumerator_style)(children, i).render(
-      (renderer.enumerator)(children, i),
-    )
+    let connector = (renderer.enumerator)(children, i)
     max_width = max_width.max(@pippa.visible_width(connector))
   }
   max_width
@@ -485,9 +480,10 @@ fn render_tree(
     let indent_style = (renderer.indenter_style)(children, i)
     let item_style = (renderer.item_style)(children, i)
     let connector = pad_left_to_width(
-      enum_style.render((renderer.enumerator)(children, i)),
+      (renderer.enumerator)(children, i),
       max_width,
     )
+    let connector = enum_style.render(connector)
     let item = item_style.render(child.value)
     rows.push(
       pad_block_to_tree_width(

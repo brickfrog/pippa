@@ -87,3 +87,73 @@ test "tree renders styled nodes and enumerators" {
     @pippa.reset()
   assert_eq(actual, expected)
 }
+
+///|
+test "tree offset renders absolute child window" {
+  let tree = new()
+    .child_leaf("A")
+    .child_leaf("B")
+    .child_leaf("C")
+    .child_leaf("D")
+  assert_eq(tree.offset(1, 3).render(), "├── B\n└── C")
+  assert_eq(
+    tree.offset(0, 4).render(),
+    "├── A\n├── B\n├── C\n└── D",
+  )
+}
+
+///|
+test "tree set_value preserves leaf behavior" {
+  let actual = new()
+    .child(leaf("Old").set_value("Parent"))
+    .child(new().item_style(@pippa.style().fg_color(1)).child_leaf("Child"))
+    .render()
+  let expected = "└── Parent\n    └── " +
+    @pippa.fg_color(1) +
+    "Child" +
+    @pippa.reset()
+  assert_eq(actual, expected)
+}
+
+///|
+test "tree styles connector alignment padding" {
+  let actual = new()
+    .enumerator_func(fn(_children, i) { if i == 0 { ">" } else { "====>" } })
+    .enumerator_style(@pippa.style().bg_color(5))
+    .child_leaf("Short")
+    .child_leaf("Long")
+    .render()
+  let expected = @pippa.bg_color(5) +
+    "    >" +
+    @pippa.reset() +
+    " Short\n" +
+    @pippa.bg_color(5) +
+    "====>" +
+    @pippa.reset() +
+    " Long"
+  assert_eq(actual, expected)
+}
+
+///|
+test "tree width pads root and child lines with active styles" {
+  let actual = root("R")
+    .root_style(@pippa.style().fg_color(1))
+    .item_style(@pippa.style().fg_color(2))
+    .width(6)
+    .child_leaf("x")
+    .render()
+  let expected = @pippa.fg_color(1) +
+    "R" +
+    @pippa.reset() +
+    @pippa.fg_color(1) +
+    "     " +
+    @pippa.reset() +
+    "\n└── " +
+    @pippa.fg_color(2) +
+    "x" +
+    @pippa.reset() +
+    @pippa.fg_color(2) +
+    " " +
+    @pippa.reset()
+  assert_eq(actual, expected)
+}
