@@ -192,7 +192,7 @@ pub fn Style::dim(self : Style) -> Style {
 
 ///|
 pub fn Style::faint(self : Style) -> Style {
-  { ..self, dim: true }
+  self.dim()
 }
 
 ///|
