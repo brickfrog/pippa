@@ -1,0 +1,68 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/list"
+
+import {
+  "brickfrog/pippa",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn alphabet(Items, Int) -> String
+
+pub fn arabic(Items, Int) -> String
+
+pub fn bullet(Items, Int) -> String
+
+pub fn dash(Items, Int) -> String
+
+pub fn nested(List) -> Item
+
+pub fn new(items? : Array[Item]) -> List
+
+pub fn roman(Items, Int) -> String
+
+pub fn text(String) -> Item
+
+// Errors
+
+// Types and methods
+pub(all) enum Item {
+  Text(String)
+  Nested(List)
+}
+
+pub(all) struct Items {
+  values : Array[String]
+} derive(Eq, @debug.Debug)
+pub fn Items::length(Self) -> Int
+pub fn Items::value(Self, Int) -> String
+
+type List
+pub fn List::enumerator(Self, (Items, Int) -> String) -> Self
+pub fn List::enumerator_func(Self, (Items, Int) -> String) -> Self
+pub fn List::enumerator_style(Self, @pippa.Style) -> Self
+pub fn List::enumerator_style_func(Self, (Items, Int) -> @pippa.Style) -> Self
+pub fn List::hidden(Self) -> Bool
+pub fn List::hide(Self, Bool) -> Self
+pub fn List::indenter(Self, (Items, Int) -> String) -> Self
+pub fn List::indenter_func(Self, (Items, Int) -> String) -> Self
+pub fn List::indenter_style(Self, @pippa.Style) -> Self
+pub fn List::indenter_style_func(Self, (Items, Int) -> @pippa.Style) -> Self
+pub fn List::item(Self, Item) -> Self
+pub fn List::item_indent(Self, String) -> Self
+pub fn List::item_list(Self, Self) -> Self
+pub fn List::item_style(Self, @pippa.Style) -> Self
+pub fn List::item_style_func(Self, (Items, Int) -> @pippa.Style) -> Self
+pub fn List::item_text(Self, String) -> Self
+pub fn List::items(Self, Array[Item]) -> Self
+pub fn List::offset(Self, Int, Int) -> Self
+pub fn List::render(Self) -> String
+pub fn List::set_hidden(Self, Bool) -> Self
+pub fn List::to_string(Self) -> String
+pub fn List::value(Self) -> String
+pub fn List::width(Self, Int) -> Self
+
+// Type aliases
+
+// Traits
+
