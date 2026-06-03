@@ -785,6 +785,7 @@ priv enum RuntimeTerminalCommand {
   RuntimeRequestClipboard(ClipboardSelection)
   RuntimeSetFocusReporting(Bool)
   RuntimeSetBracketedPaste(Bool)
+  RuntimeSetMouseMode(ViewMouseMode)
 }
 
 ///|
@@ -1090,6 +1091,9 @@ fn terminal_command_sequence(command : RuntimeTerminalCommand) -> String {
     RuntimeSetFocusReporting(false) => disable_focus_reporting()
     RuntimeSetBracketedPaste(true) => enable_bracketed_paste()
     RuntimeSetBracketedPaste(false) => disable_bracketed_paste()
+    RuntimeSetMouseMode(ViewMousePress) => enable_mouse()
+    RuntimeSetMouseMode(ViewMouseAllMotion) => enable_mouse_motion()
+    RuntimeSetMouseMode(ViewMouseOff) => disable_mouse()
   }
 }
 
@@ -1101,11 +1105,24 @@ fn[Model, Msg] apply_terminal_command(
   command : RuntimeTerminalCommand,
 ) -> RuntimeRenderState {
   if state.terminal_active {
-    emit_output(program, terminal_command_sequence(command))
+    let sequence = match command {
+      RuntimeSetMouseMode(mode) =>
+        mouse_mode_transition(state.view_terminal_state.mouse_mode, Some(mode))
+      _ => terminal_command_sequence(command)
+    }
+    emit_output(program, sequence)
   }
   match command {
     RuntimeSetFocusReporting(enabled) => { ..state, focus_reporting: enabled }
     RuntimeSetBracketedPaste(enabled) => { ..state, bracketed_paste: enabled }
+    RuntimeSetMouseMode(mode) =>
+      {
+        ..state,
+        view_terminal_state: {
+          ..state.view_terminal_state,
+          mouse_mode: view_mouse_state(Some(mode)),
+        },
+      }
     _ => state
   }
 }
@@ -1601,6 +1618,8 @@ fn[Msg] queue_cmd_effects(
         pending.push(RuntimeTerminal(RuntimeSetFocusReporting(enabled)))
       SetBracketedPaste(enabled) =>
         pending.push(RuntimeTerminal(RuntimeSetBracketedPaste(enabled)))
+      SetMouseMode(mode) =>
+        pending.push(RuntimeTerminal(RuntimeSetMouseMode(mode)))
       LifecycleAction(msg) => pending.push(RuntimeLifecycle(msg))
       ExecProcessAction(process, to_msg) =>
         pending.push(RuntimeExec(process, to_msg))

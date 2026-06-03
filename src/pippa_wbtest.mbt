@@ -197,6 +197,28 @@ fn assert_terminal_cmd_emits(cmd : Cmd[Int], expected : String) -> Unit raise {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn drain_terminal_cmd(cmd : Cmd[Int]) -> (String, RuntimeRenderState) {
+  let chunks : Ref[Array[String]] = Ref([])
+  let program : Program[Int, Int] = Program::new(
+    init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+    update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+    view=fn(_model) { "" },
+    output=fn(output) { chunks.val = [..chunks.val, output] },
+  )
+  let sent_msgs = @queue.Queue([])
+  let pending = @queue.Queue([])
+  let sequences = @deque.Deque([])
+  let timers = []
+  let state = initial_render_state(program, true)
+  queue_cmd_effects(cmd, 0L, pending, timers, sequences)
+  let (_model, _reason, _updated, next_state) = drain_runtime(
+    program, 0, state, sent_msgs, pending, timers, sequences,
+  )
+  (chunks.val.join(""), next_state)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 fn assert_terminal_query_round_trip(
   cmd : Cmd[Int],
   expected_query : String,
@@ -317,6 +339,108 @@ test "pippa terminal mode commands emit focus and paste control sequences" {
   assert_terminal_cmd_emits(Cmd::disable_focus_reporting(), "\u001b[?1004l")
   assert_terminal_cmd_emits(Cmd::enable_bracketed_paste(), "\u001b[?2004h")
   assert_terminal_cmd_emits(Cmd::disable_bracketed_paste(), "\u001b[?2004l")
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa mouse mode commands store typed terminal actions" {
+  let cmd : Cmd[Int] = Cmd::batch([
+    Cmd::enable_mouse_cell_motion(),
+    Cmd::enable_mouse_all_motion(),
+    Cmd::disable_mouse(),
+  ])
+  assert_eq(cmd.actions.length(), 3)
+  match cmd.actions[0] {
+    SetMouseMode(ViewMousePress) => ()
+    _ => fail("expected SetMouseMode(ViewMousePress) action")
+  }
+  match cmd.actions[1] {
+    SetMouseMode(ViewMouseAllMotion) => ()
+    _ => fail("expected SetMouseMode(ViewMouseAllMotion) action")
+  }
+  match cmd.actions[2] {
+    SetMouseMode(ViewMouseOff) => ()
+    _ => fail("expected SetMouseMode(ViewMouseOff) action")
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa mouse mode commands emit control sequences and update runtime state" {
+  let (cell_output, cell_state) = drain_terminal_cmd(
+    Cmd::enable_mouse_cell_motion(),
+  )
+  assert_eq(cell_output, "\u001b[?1000h\u001b[?1006h")
+  @test.assert_eq(
+    cell_state.view_terminal_state.mouse_mode,
+    Some(ViewMousePress),
+  )
+
+  let (all_output, all_state) = drain_terminal_cmd(
+    Cmd::enable_mouse_all_motion(),
+  )
+  assert_eq(all_output, "\u001b[?1003h\u001b[?1006h")
+  @test.assert_eq(
+    all_state.view_terminal_state.mouse_mode,
+    Some(ViewMouseAllMotion),
+  )
+
+  let (off_output, off_state) = drain_terminal_cmd(Cmd::disable_mouse())
+  assert_eq(off_output, "\u001b[?1000l\u001b[?1003l\u001b[?1006l")
+  @test.assert_eq(off_state.view_terminal_state.mouse_mode, None)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa runtime mouse mode commands reset previous cell or all mode" {
+  let (output, state) = drain_terminal_cmd(
+    Cmd::sequence([
+      Cmd::enable_mouse_cell_motion(),
+      Cmd::enable_mouse_all_motion(),
+      Cmd::enable_mouse_cell_motion(),
+      Cmd::disable_mouse(),
+    ]),
+  )
+  assert_eq(
+    output,
+    "\u001b[?1000h\u001b[?1006h" +
+    "\u001b[?1000l\u001b[?1003h\u001b[?1006h" +
+    "\u001b[?1003l\u001b[?1000h\u001b[?1006h" +
+    "\u001b[?1000l\u001b[?1003l\u001b[?1006l",
+  )
+  @test.assert_eq(state.view_terminal_state.mouse_mode, None)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa runtime mouse commands keep structured mouse delta consistent" {
+  let (_output, all_state) = drain_terminal_cmd(Cmd::enable_mouse_all_motion())
+  let all_view = View::text("").with_mouse_mode(ViewMouseAllMotion)
+  let (unchanged, _same_terminal_state) = view_terminal_state_delta(
+    all_state.view_terminal_state,
+    all_view,
+    all_state.render_context,
+  )
+  assert_eq(unchanged, "")
+
+  let cell_view = View::text("").with_mouse_mode(ViewMousePress)
+  let (to_cell, cell_terminal_state) = view_terminal_state_delta(
+    all_state.view_terminal_state,
+    cell_view,
+    all_state.render_context,
+  )
+  assert_eq(to_cell, "\u001b[?1003l\u001b[?1000h\u001b[?1006h")
+  @test.assert_eq(cell_terminal_state.mouse_mode, Some(ViewMousePress))
+
+  let (_off_output, off_state) = drain_terminal_cmd(Cmd::disable_mouse())
+  let off_view = View::text("")
+  let (still_off, off_terminal_state) = view_terminal_state_delta(
+    off_state.view_terminal_state,
+    off_view,
+    off_state.render_context,
+  )
+  assert_eq(still_off, "")
+  @test.assert_eq(off_terminal_state.mouse_mode, None)
 }
 
 ///|

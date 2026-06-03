@@ -287,6 +287,24 @@ pub fn[Msg] Cmd::disable_bracketed_paste() -> Cmd[Msg] {
 }
 
 ///|
+/// Enable terminal mouse button, release, wheel, and drag reporting at runtime.
+pub fn[Msg] Cmd::enable_mouse_cell_motion() -> Cmd[Msg] {
+  { _phantom: [], actions: [SetMouseMode(ViewMousePress)] }
+}
+
+///|
+/// Enable all terminal mouse motion reporting at runtime.
+pub fn[Msg] Cmd::enable_mouse_all_motion() -> Cmd[Msg] {
+  { _phantom: [], actions: [SetMouseMode(ViewMouseAllMotion)] }
+}
+
+///|
+/// Disable terminal mouse reporting at runtime.
+pub fn[Msg] Cmd::disable_mouse() -> Cmd[Msg] {
+  { _phantom: [], actions: [SetMouseMode(ViewMouseOff)] }
+}
+
+///|
 /// Run commands in order.
 ///
 /// Each command starts only after the prior command's immediate effects have
@@ -345,6 +363,7 @@ pub fn[A, B] Cmd::map(f : (A) -> B, cmd : Cmd[A]) -> Cmd[B] {
       RequestClipboard(selection) => actions.push(RequestClipboard(selection))
       SetFocusReporting(enabled) => actions.push(SetFocusReporting(enabled))
       SetBracketedPaste(enabled) => actions.push(SetBracketedPaste(enabled))
+      SetMouseMode(mode) => actions.push(SetMouseMode(mode))
       LifecycleAction(msg) => actions.push(LifecycleAction(msg))
       ExecProcessAction(process, task) =>
         actions.push(ExecProcessAction(process, fn(result) { f(task(result)) }))
