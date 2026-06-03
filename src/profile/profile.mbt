@@ -194,6 +194,11 @@ fn clamp_channel(n : Int) -> Int {
 }
 
 ///|
+fn clamp_non_negative(n : Int) -> Int {
+  n.max(0)
+}
+
+///|
 fn clamp_palette(n : Int) -> Int {
   if n < 0 {
     0
@@ -370,9 +375,9 @@ fn render_color(
       match value {
         Palette(index) =>
           if is_fg {
-            "\{CSI}38;5;\{clamp_palette(index)}m"
+            "\{CSI}38;5;\{clamp_non_negative(index)}m"
           } else {
-            "\{CSI}48;5;\{clamp_palette(index)}m"
+            "\{CSI}48;5;\{clamp_non_negative(index)}m"
           }
         Rgb(r, g, b) => {
           let cr = clamp_channel(r)

@@ -69,7 +69,7 @@ test "profile quantization and render degradation" {
 
   assert_eq(
     render_fg(RenderContext::default(), Palette(999)),
-    "\u001b[38;5;255m",
+    "\u001b[38;5;999m",
   )
   assert_eq(render_bg(RenderContext::default(), Palette(-4)), "\u001b[48;5;0m")
 }
