@@ -177,6 +177,8 @@ pub fn show_cursor() -> String
 
 pub fn split_lines(String) -> Array[String]
 
+pub fn strikethrough() -> String
+
 pub fn strip_ansi(String) -> String
 
 pub fn style() -> Style
@@ -510,6 +512,7 @@ pub(all) struct Style {
   underline : Bool
   blink : Bool
   reverse : Bool
+  strikethrough : Bool
   border : Border?
   border_top : Bool
   border_right : Bool
@@ -543,6 +546,7 @@ pub fn Style::border_background(Self, Color) -> Self
 pub fn Style::border_foreground(Self, Color) -> Self
 pub fn Style::border_sides(Self, Bool, Bool, Bool, Bool) -> Self
 pub fn Style::dim(Self) -> Self
+pub fn Style::faint(Self) -> Self
 pub fn Style::fg_color(Self, Int) -> Self
 pub fn Style::foreground(Self, Color) -> Self
 pub fn Style::foreground_hex(Self, String) -> Self
@@ -558,6 +562,7 @@ pub fn Style::padding(Self, Int, Int, Int, Int) -> Self
 pub fn Style::render(Self, String) -> String
 pub fn Style::render_with(Self, String, @profile.RenderContext) -> String
 pub fn Style::reverse(Self) -> Self
+pub fn Style::strikethrough(Self) -> Self
 pub fn Style::underline(Self) -> Self
 pub fn Style::width(Self, Int) -> Self
 

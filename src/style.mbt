@@ -49,6 +49,7 @@ pub(all) struct Style {
   underline : Bool
   blink : Bool
   reverse : Bool
+  strikethrough : Bool
   border : Border?
   border_top : Bool
   border_right : Bool
@@ -166,6 +167,7 @@ pub fn style() -> Style {
     underline: false,
     blink: false,
     reverse: false,
+    strikethrough: false,
     border: None,
     border_top: true,
     border_right: true,
@@ -268,6 +270,11 @@ pub fn Style::dim(self : Style) -> Style {
 }
 
 ///|
+pub fn Style::faint(self : Style) -> Style {
+  { ..self, dim: true }
+}
+
+///|
 pub fn Style::italic(self : Style) -> Style {
   { ..self, italic: true }
 }
@@ -285,6 +292,11 @@ pub fn Style::blink(self : Style) -> Style {
 ///|
 pub fn Style::reverse(self : Style) -> Style {
   { ..self, reverse: true }
+}
+
+///|
+pub fn Style::strikethrough(self : Style) -> Style {
+  { ..self, strikethrough: true }
 }
 
 ///|
@@ -872,6 +884,9 @@ fn build_ansi_prefix_with_colors(
   }
   if style.reverse {
     buf.write_string(reverse())
+  }
+  if style.strikethrough {
+    buf.write_string(strikethrough())
   }
   buf.to_string()
 }

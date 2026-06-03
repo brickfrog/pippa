@@ -360,6 +360,9 @@ fn legacy_build_ansi_prefix(style : Style) -> String {
   if style.reverse {
     buf.write_string(@pippa.reverse())
   }
+  if style.strikethrough {
+    buf.write_string(@pippa.strikethrough())
+  }
   buf.to_string()
 }
 
