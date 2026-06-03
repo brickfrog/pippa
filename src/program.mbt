@@ -786,6 +786,7 @@ priv enum RuntimeTerminalCommand {
   RuntimeSetFocusReporting(Bool)
   RuntimeSetBracketedPaste(Bool)
   RuntimeSetMouseMode(ViewMouseMode)
+  RuntimeSetWindowTitle(String)
 }
 
 ///|
@@ -1095,6 +1096,17 @@ fn terminal_command_sequence(command : RuntimeTerminalCommand) -> String {
     RuntimeSetMouseMode(ViewMouseCellMotion) => enable_mouse_cell_motion()
     RuntimeSetMouseMode(ViewMouseAllMotion) => enable_mouse_motion()
     RuntimeSetMouseMode(ViewMouseOff) => disable_mouse()
+    RuntimeSetWindowTitle(title) => set_window_title(title)
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_window_title_state(title : String) -> String? {
+  if title == "" {
+    None
+  } else {
+    Some(title)
   }
 }
 
@@ -1122,6 +1134,14 @@ fn[Model, Msg] apply_terminal_command(
         view_terminal_state: {
           ..state.view_terminal_state,
           mouse_mode: view_mouse_state(Some(mode)),
+        },
+      }
+    RuntimeSetWindowTitle(title) =>
+      {
+        ..state,
+        view_terminal_state: {
+          ..state.view_terminal_state,
+          window_title: runtime_window_title_state(title),
         },
       }
     _ => state
@@ -1630,6 +1650,8 @@ fn[Msg] queue_cmd_effects(
         pending.push(RuntimeTerminal(RuntimeSetBracketedPaste(enabled)))
       SetMouseMode(mode) =>
         pending.push(RuntimeTerminal(RuntimeSetMouseMode(mode)))
+      SetWindowTitle(title) =>
+        pending.push(RuntimeTerminal(RuntimeSetWindowTitle(title)))
       LifecycleAction(msg) => pending.push(RuntimeLifecycle(msg))
       ExecProcessAction(process, to_msg) =>
         pending.push(RuntimeExec(process, to_msg))
