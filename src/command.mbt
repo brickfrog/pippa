@@ -43,6 +43,83 @@ pub fn[Msg] Cmd::runtime_error(message : String) -> Cmd[Msg] {
 }
 
 ///|
+/// Print unmanaged text above the program in inline terminal mode.
+///
+/// The printed text is not part of the managed view and may persist in terminal
+/// scrollback across later renders. The runtime prints each newline-delimited
+/// line on its own terminal line, then repaints the current view below it. When
+/// the alternate screen is active the request is discarded, matching Bubble Tea's
+/// `Println` / `Printf` behavior.
+pub fn[Msg] Cmd::print_above(message : String) -> Cmd[Msg] {
+  {
+    _phantom: [],
+    actions: [
+      Perform(fn() {
+        runtime_enqueue_print_above({ message_body: message })
+        None
+      }),
+    ],
+  }
+}
+
+///|
+/// Print unmanaged text above the program in inline terminal mode.
+///
+/// This is the Pippa equivalent of Bubble Tea's `Println`: unlike writing from a
+/// view, the line is outside the managed render area and is ignored while the
+/// alternate screen is active.
+pub fn[Msg] Cmd::println(message : String) -> Cmd[Msg] {
+  Cmd::print_above(message)
+}
+
+///|
+fn print_above_format(template : String, args : Array[String]) -> String {
+  let buf = StringBuilder::new(size_hint=template.length())
+  let chars : Array[Char] = []
+  for ch in template {
+    chars.push(ch)
+  }
+  let mut arg_index = 0
+  let mut i = 0
+  while i < chars.length() {
+    let ch = chars[i]
+    if ch == '%' && i + 1 < chars.length() {
+      let next = chars[i + 1]
+      if next == '%' {
+        buf.write_char('%')
+        i = i + 2
+        continue
+      } else if next == 's' {
+        if arg_index < args.length() {
+          buf.write_string(args[arg_index])
+          arg_index = arg_index + 1
+        } else {
+          buf.write_string("%s")
+        }
+        i = i + 2
+        continue
+      }
+    }
+    buf.write_char(ch)
+    i = i + 1
+  }
+  buf.to_string()
+}
+
+///|
+/// Format unmanaged text and print it above the program in inline terminal mode.
+///
+/// Pippa accepts pre-rendered string arguments and replaces `%s` placeholders in
+/// `template` from left to right; `%%` emits a literal percent sign. The result is
+/// then handled like `Cmd::println`, including the alt-screen no-op behavior.
+pub fn[Msg] Cmd::printf(
+  template : String,
+  args? : Array[String] = [],
+) -> Cmd[Msg] {
+  Cmd::print_above(print_above_format(template, args))
+}
+
+///|
 /// Run an external process while the runtime releases the terminal.
 pub fn[Msg] Cmd::exec_process(
   process : ExecProcess,

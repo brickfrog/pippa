@@ -62,6 +62,15 @@ test "pippa cmd after is lazy until the runtime executes it" {
 }
 
 ///|
+test "pippa print above printf formats string placeholders" {
+  assert_eq(
+    print_above_format("row %s is %s%% done", ["alpha", "90"]),
+    "row alpha is 90% done",
+  )
+  assert_eq(print_above_format("missing %s", []), "missing %s")
+}
+
+///|
 test "pippa cmd every stores a typed aligned callback" {
   let cmd : Cmd[Int] = Cmd::every(33, fn(tick) { tick.elapsed_ms.to_int() + 4 })
   assert_eq(cmd.actions.length(), 1)
@@ -889,6 +898,87 @@ test "pippa flush_view synchronizes content frames without wrapping no-ops or di
     ),
   )
   assert_eq(chunks.val.join(""), "\u001b[1;1H\u001b[Klegacy")
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa print above command emits scrollback line and repaints current view" {
+  let chunks : Ref[Array[String]] = Ref([])
+  let program = test_render_program(chunks)
+    .with_alt_screen(false)
+    .with_synchronized_output(false)
+  let view = desired_view(program, 3)
+  let (rendered, lines, last_render_ms, _due_at, terminal_state) = flush_view(
+    program,
+    "",
+    view,
+    0,
+    runtime_view_terminal_state_empty(),
+    true,
+    0L,
+    true,
+    true,
+  )
+  assert_eq(rendered, "plain 3")
+  assert_eq(lines, 1)
+
+  chunks.val = []
+  let sent_msgs = @queue.Queue([])
+  let pending = @queue.Queue([])
+  let sequences = @deque.Deque([])
+  let timers = []
+  let state = {
+    ..initial_render_state(program, true),
+    rendered,
+    prev_line_count: lines,
+    last_render_ms,
+    view_terminal_state: terminal_state,
+  }
+  queue_cmd_effects(Cmd::println("scrollback"), 0L, pending, timers, sequences)
+  let (_model, reason, updated, next_state) = drain_runtime(
+    program, 3, state, sent_msgs, pending, timers, sequences,
+  )
+  assert_true(reason is None)
+  assert_false(updated)
+  assert_eq(next_state.rendered, "plain 3")
+  assert_eq(next_state.prev_line_count, 1)
+  assert_eq(
+    chunks.val.join(""),
+    move_cursor(1, 1) +
+    clear_line() +
+    "scrollback" +
+    clear_line() +
+    "\r\n" +
+    move_cursor(1, 1) +
+    clear_line() +
+    "plain 3",
+  )
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa print above command is ignored in alt screen mode" {
+  let chunks : Ref[Array[String]] = Ref([])
+  let program = test_render_program(chunks)
+    .with_alt_screen(true)
+    .with_synchronized_output(false)
+  let sent_msgs = @queue.Queue([])
+  let pending = @queue.Queue([])
+  let sequences = @deque.Deque([])
+  let timers = []
+  let state = {
+    ..initial_render_state(program, true),
+    rendered: "plain 4",
+    prev_line_count: 1,
+  }
+  queue_cmd_effects(Cmd::println("hidden"), 0L, pending, timers, sequences)
+  let (_model, reason, updated, next_state) = drain_runtime(
+    program, 4, state, sent_msgs, pending, timers, sequences,
+  )
+  assert_true(reason is None)
+  assert_false(updated)
+  assert_eq(next_state.rendered, "plain 4")
+  assert_eq(chunks.val.join(""), "")
 }
 
 ///|
