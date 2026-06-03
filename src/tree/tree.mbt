@@ -2,6 +2,8 @@
 /// A static tree renderer inspired by lipgloss/tree.
 
 ///|
+/// Branch connectors are expected to be single-line strings. Multi-line
+/// enumerators are unsupported in this renderer and tracked as follow-up work.
 pub(all) struct Enumerator {
   child_connector : String
   last_child_connector : String
@@ -106,7 +108,7 @@ pub fn new() -> Tree {
     hidden: false,
     children: [],
     offset_start: 0,
-    offset_end: 0,
+    offset_end: -1,
     leaf: false,
     renderer: None,
   }
@@ -124,7 +126,7 @@ pub fn leaf(value : String, hidden? : Bool = false) -> Tree {
     hidden,
     children: [],
     offset_start: 0,
-    offset_end: 0,
+    offset_end: -1,
     leaf: true,
     renderer: None,
   }
@@ -162,23 +164,29 @@ pub fn Tree::set_hidden(self : Tree, hidden : Bool) -> Tree {
 
 ///|
 pub fn Tree::children(self : Tree) -> Array[Tree] {
-  let safe_start = self.offset_start.max(0).min(self.children.length())
-  let safe_end = self.offset_end.max(0).min(self.children.length() - safe_start)
-  let stop = self.children.length() - safe_end
+  let len = self.children.length()
+  let safe_start = self.offset_start.max(0).min(len)
+  let raw_end = if self.offset_end < 0 { len } else { self.offset_end }
+  let safe_end = raw_end.max(safe_start).min(len)
   let out : Array[Tree] = []
-  for i in safe_start..<stop {
+  for i in safe_start..<safe_end {
     out.push(self.children[i])
   }
   out
 }
 
 ///|
+/// Select an absolute child window `[start, end)`.
+///
+/// Unlike lipgloss's order-dependent offset storage, this keeps explicit
+/// windows stable when more children are appended later. The default unset end
+/// still renders through the current child length.
 pub fn Tree::offset(self : Tree, start : Int, end : Int) -> Tree {
   let (start, end) = if start > end { (end, start) } else { (start, end) }
   let start = start.max(0)
   let len = self.children.length()
   let end = if end < 0 || end > self.children.length() { len } else { end }
-  { ..self, offset_start: start, offset_end: len - end }
+  { ..self, offset_start: start, offset_end: end }
 }
 
 ///|
@@ -432,24 +440,31 @@ fn render_item_line(
   parent_prefix : String,
   connector : String,
   item_indent : String,
-  item : String,
+  continuation_prefix : String,
+  item_lines : Array[String],
 ) -> String {
-  let item_lines = @pippa.split_lines(item)
   if item_lines.length() <= 1 {
-    return parent_prefix + connector + item_indent + item
+    return parent_prefix + connector + item_indent + item_lines[0]
   }
   let rows : Array[String] = []
   let first_prefix = parent_prefix + connector + item_indent
-  let continuation_width = @pippa.visible_width(connector + item_indent)
-  let continuation = parent_prefix + String::make(continuation_width, ' ')
   for i, line in item_lines {
     if i == 0 {
       rows.push(first_prefix + line)
     } else {
-      rows.push(continuation + line)
+      rows.push(continuation_prefix + line)
     }
   }
   @internal.join_lines(rows)
+}
+
+///|
+fn render_item_lines(style : @pippa.Style, value : String) -> Array[String] {
+  let rows : Array[String] = []
+  for line in @pippa.split_lines(value) {
+    rows.push(style.render(line))
+  }
+  rows
 }
 
 ///|
@@ -484,10 +499,18 @@ fn render_tree(
       max_width,
     )
     let connector = enum_style.render(connector)
-    let item = item_style.render(child.value)
+    let indent = indent_style.render((renderer.indenter)(children, i)) +
+      renderer.item_indent
+    let item_lines = render_item_lines(item_style, child.value)
     rows.push(
       pad_block_to_tree_width(
-        render_item_line(prefix, connector, renderer.item_indent, item),
+        render_item_line(
+          prefix,
+          connector,
+          renderer.item_indent,
+          prefix + indent,
+          item_lines,
+        ),
         renderer.width,
         item_style,
       ),
@@ -498,8 +521,6 @@ fn render_tree(
         Some(custom) => custom
         None => renderer
       }
-      let indent = indent_style.render((renderer.indenter)(children, i)) +
-        renderer.item_indent
       let rendered = render_tree(child, child_renderer, false, prefix + indent)
       if rendered != "" {
         rows.push(rendered)

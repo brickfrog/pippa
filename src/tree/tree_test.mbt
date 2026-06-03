@@ -103,6 +103,17 @@ test "tree offset renders absolute child window" {
 }
 
 ///|
+test "tree offset window stays stable after append" {
+  let actual = new()
+    .child_leaf("A")
+    .child_leaf("B")
+    .offset(0, 1)
+    .child_leaf("C")
+    .render()
+  assert_eq(actual, "└── A")
+}
+
+///|
 test "tree set_value preserves leaf behavior" {
   let actual = new()
     .child(leaf("Old").set_value("Parent"))
@@ -113,6 +124,12 @@ test "tree set_value preserves leaf behavior" {
     "Child" +
     @pippa.reset()
   assert_eq(actual, expected)
+}
+
+///|
+test "tree multiline non-last child keeps branch pipe" {
+  let actual = new().child_leaf("A\nA2").child_leaf("B").render()
+  assert_eq(actual, "├── A\n│   A2\n└── B")
 }
 
 ///|
