@@ -184,9 +184,8 @@ test "table closes first wrapped segment after mid-content restyle" {
   let styled = @pippa.fg_color(1) +
     "abcdef" +
     @pippa.reset() +
-    @pippa.fg_color(1) +
-    "ghij" +
-    @pippa.reset()
+    @pippa.fg_color(2) +
+    "ghij"
   let actual = new().row([styled, "plain"]).width(14).render()
   let expected = "┌──────┬─────┐\n" +
     "│" +
@@ -195,7 +194,7 @@ test "table closes first wrapped segment after mid-content restyle" {
     @pippa.reset() +
     "│plain│\n" +
     "│" +
-    @pippa.fg_color(1) +
+    @pippa.fg_color(2) +
     "ghij  " +
     @pippa.reset() +
     "│     │\n" +
