@@ -1,0 +1,68 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/profile"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn ambient_context() -> RenderContext
+
+pub fn ansi256_to_ansi16(Int) -> Int
+
+pub fn render_bg(RenderContext, ColorValue) -> String
+
+pub fn render_fg(RenderContext, ColorValue) -> String
+
+pub fn rgb_to_ansi256(Int, Int, Int) -> Int
+
+pub fn set_render_context(RenderContext) -> Unit
+
+pub fn[T] with_render_context(RenderContext, () -> T raise?) -> T raise?
+
+// Errors
+
+// Types and methods
+pub(all) enum Background {
+  Dark
+  Light
+  Unknown
+} derive(Eq, @debug.Debug)
+pub impl Show for Background
+
+pub(all) enum ColorPolicy {
+  Auto
+  Always
+  Never
+} derive(Eq, @debug.Debug)
+pub impl Show for ColorPolicy
+
+pub(all) enum ColorProfile {
+  TrueColor
+  Ansi256
+  Ansi16
+  NoColor
+} derive(Eq, @debug.Debug)
+pub impl Show for ColorProfile
+
+pub(all) enum ColorValue {
+  Palette(Int)
+  Rgb(Int, Int, Int)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct RenderContext {
+  color_profile : ColorProfile
+  background : Background
+  color_policy : ColorPolicy
+} derive(Eq, @debug.Debug)
+pub fn RenderContext::default() -> Self
+pub fn RenderContext::detect() -> Self
+pub fn RenderContext::with_background(Self, Background) -> Self
+pub fn RenderContext::with_color_policy(Self, ColorPolicy) -> Self
+pub fn RenderContext::with_color_profile(Self, ColorProfile) -> Self
+pub impl Show for RenderContext
+
+// Type aliases
+
+// Traits
+

@@ -335,12 +335,13 @@ fn legacy_apply_style_prefix(style : Style, block : String) -> String {
 ///|
 fn legacy_build_ansi_prefix(style : Style) -> String {
   let buf = StringBuilder::new()
+  let ctx = @profile.RenderContext::default()
   style.fg
   .iter()
-  .each(fn(color) { buf.write_string(foreground_sequence(color)) })
+  .each(fn(color) { buf.write_string(foreground_sequence(ctx, color)) })
   style.bg
   .iter()
-  .each(fn(color) { buf.write_string(background_sequence(color)) })
+  .each(fn(color) { buf.write_string(background_sequence(ctx, color)) })
   if style.bold {
     buf.write_string(@pippa.bold())
   }
