@@ -365,7 +365,7 @@ test "pippa window title command emits OSC and updates runtime state" {
   let (output, state) = drain_terminal_cmd(
     Cmd::set_window_title("Runtime title"),
   )
-  assert_eq(output, set_window_title("Runtime title"))
+  assert_eq(output, "\u001b]2;Runtime title\u001b\\")
   @test.assert_eq(state.view_terminal_state.window_title, Some("Runtime title"))
 
   let (unchanged, _same_terminal_state) = view_terminal_state_delta(
@@ -385,7 +385,7 @@ test "pippa clear window title command clears runtime state" {
       Cmd::clear_window_title(),
     ]),
   )
-  assert_eq(output, set_window_title("Runtime title") + clear_window_title())
+  assert_eq(output, "\u001b]2;Runtime title\u001b\\\u001b]2;\u001b\\")
   @test.assert_eq(state.view_terminal_state.window_title, None)
 
   let (still_clear, clear_terminal_state) = view_terminal_state_delta(
