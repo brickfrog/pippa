@@ -44,6 +44,16 @@ test "cursor focus and blur gate blinking" {
 }
 
 ///|
+test "cursor focused empty cell renders a visible block" {
+  let c = cursor()
+  let focused = (c.update)((c.init)().model, Focus).model
+  assert_eq((c.view)(focused), visible_cursor(" "))
+
+  let blinked_off = (c.update)(focused, cursor_tick_msg(focused)).model
+  assert_eq((c.view)(blinked_off), "")
+}
+
+///|
 test "cursor blink toggles on current timed tick" {
   let c = cursor(char="x")
   let focused = (c.update)((c.init)().model, Focus).model

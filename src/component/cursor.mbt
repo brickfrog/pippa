@@ -183,11 +183,9 @@ fn cursor_timed_tick(
 ///|
 fn cursor_view(model : CursorModel) -> String {
   if cursor_is_visible(model) {
-    if model.char == "" {
-      ""
-    } else {
-      @pippa.style().reverse().render(model.char)
-    }
+    @pippa.style()
+    .reverse()
+    .render(if model.char == "" { " " } else { model.char })
   } else {
     model.char
   }
