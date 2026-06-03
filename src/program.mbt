@@ -842,6 +842,7 @@ priv struct RuntimeRenderState {
   bracketed_paste : Bool
   rendered : String
   prev_line_count : Int
+  terminal_height : Int
   last_render_ms : Int64
   render_due_at : Int64?
   force_full_repaint : Bool
@@ -942,6 +943,7 @@ fn[Model, Msg] initial_render_state(
     program.bracketed_paste,
     rendered: "",
     prev_line_count: 0,
+    terminal_height: current_window_size().height.max(1),
     last_render_ms: 0L,
     render_due_at: None,
     force_full_repaint: false,
@@ -1482,14 +1484,11 @@ fn runtime_print_above_frame_output(
 
 ///|
 #cfg(any(target="native", target="llvm"))
-fn[Model, Msg] runtime_print_above_terminal_height(
-  program : Program[Model, Msg],
-) -> Int {
-  if program.window_height > 0 {
-    program.window_height
-  } else {
-    current_window_size().height
-  }
+fn runtime_render_state_with_window_size(
+  state : RuntimeRenderState,
+  size : WindowSize,
+) -> RuntimeRenderState {
+  { ..state, terminal_height: size.height.max(1) }
 }
 
 ///|
@@ -1516,7 +1515,7 @@ fn[Model, Msg] apply_print_above_messages(
       lines,
       state.prev_line_count,
       current_view.content,
-      runtime_print_above_terminal_height(program),
+      state.terminal_height,
     )
     let terminal_suffix = view_cursor_position_suffix(
       state.view_terminal_state,
@@ -2645,6 +2644,7 @@ fn[Model, Msg] run_internal(
       program.read_stdin &&
       pippa_check_resize() != 0 {
       let size = current_window_size()
+      render_state = runtime_render_state_with_window_size(render_state, size)
       updated = true
       let (resize_model, resize_reason, _resize_updated) = apply_window_size(
         program, model, size, pending, timers, sequences,

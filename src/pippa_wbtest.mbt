@@ -904,9 +904,7 @@ test "pippa flush_view synchronizes content frames without wrapping no-ops or di
 #cfg(any(target="native", target="llvm"))
 test "pippa print above command emits scrollback line and repaints current view" {
   let chunks : Ref[Array[String]] = Ref([])
-  let program = test_render_program(chunks)
-    .with_alt_screen(false)
-    .with_window_size(80, 5)
+  let program = test_render_program(chunks).with_alt_screen(false)
   let view = desired_view(program, 3)
   let (rendered, lines, last_render_ms, _due_at, terminal_state) = flush_view(
     program,
@@ -927,13 +925,16 @@ test "pippa print above command emits scrollback line and repaints current view"
   let pending = @queue.Queue([])
   let sequences = @deque.Deque([])
   let timers = []
-  let state = {
-    ..initial_render_state(program, true),
-    rendered,
-    prev_line_count: lines,
-    last_render_ms,
-    view_terminal_state: terminal_state,
-  }
+  let state = runtime_render_state_with_window_size(
+    {
+      ..initial_render_state(program, true),
+      rendered,
+      prev_line_count: lines,
+      last_render_ms,
+      view_terminal_state: terminal_state,
+    },
+    { width: 80, height: 9 },
+  )
   queue_cmd_effects(Cmd::println("scrollback"), 0L, pending, timers, sequences)
   let (_model, reason, updated, next_state) = drain_runtime(
     program, 3, state, sent_msgs, pending, timers, sequences,
@@ -942,9 +943,10 @@ test "pippa print above command emits scrollback line and repaints current view"
   assert_false(updated)
   assert_eq(next_state.rendered, "plain 3")
   assert_eq(next_state.prev_line_count, 1)
+  assert_eq(next_state.terminal_height, 9)
   let print_above_output = move_cursor(1, 1) +
     clear_line() +
-    move_cursor(5, 1) +
+    move_cursor(9, 1) +
     "scrollback" +
     clear_line() +
     "\r\n" +
