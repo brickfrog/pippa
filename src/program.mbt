@@ -821,6 +821,7 @@ priv struct RuntimeRenderState {
   last_render_ms : Int64
   render_due_at : Int64?
   force_full_repaint : Bool
+  render_context : @profile.RenderContext
   view_terminal_state : RuntimeViewTerminalState
 }
 
@@ -839,6 +840,7 @@ priv struct RuntimeViewTerminalState {
   window_title : String?
   foreground_color : Color?
   background_color : Color?
+  render_context : @profile.RenderContext
   progress : RuntimeTerminalProgress?
   mouse_mode : ViewMouseMode?
 } derive(Eq)
@@ -852,6 +854,7 @@ fn runtime_view_terminal_state_empty() -> RuntimeViewTerminalState {
     window_title: None,
     foreground_color: None,
     background_color: None,
+    render_context: @profile.RenderContext::default(),
     progress: None,
     mouse_mode: None,
   }
@@ -862,8 +865,9 @@ fn runtime_view_terminal_state_empty() -> RuntimeViewTerminalState {
 fn[Model, Msg] runtime_view_terminal_state_for_program(
   program : Program[Model, Msg],
   terminal_active : Bool,
+  ctx : @profile.RenderContext,
 ) -> RuntimeViewTerminalState {
-  let state = runtime_view_terminal_state_empty()
+  let state = { ..runtime_view_terminal_state_empty(), render_context: ctx }
   {
     ..state,
     cursor_visible: if terminal_active &&
@@ -900,6 +904,8 @@ fn[Model, Msg] initial_render_state(
   program : Program[Model, Msg],
   terminal_active : Bool,
 ) -> RuntimeRenderState {
+  let render_context = @profile.RenderContext::detect()
+  @profile.set_render_context(render_context)
   {
     terminal_active,
     alt_screen: program.alt_screen,
@@ -915,8 +921,9 @@ fn[Model, Msg] initial_render_state(
     last_render_ms: 0L,
     render_due_at: None,
     force_full_repaint: false,
+    render_context,
     view_terminal_state: runtime_view_terminal_state_for_program(
-      program, terminal_active,
+      program, terminal_active, render_context,
     ),
   }
 }
@@ -1079,6 +1086,166 @@ fn[Model, Msg] apply_terminal_command(
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn runtime_hex_value(ch : Char) -> Int? {
+  if ch >= '0' && ch <= '9' {
+    Some(ch.to_int() - '0'.to_int())
+  } else if ch >= 'a' && ch <= 'f' {
+    Some(ch.to_int() - 'a'.to_int() + 10)
+  } else if ch >= 'A' && ch <= 'F' {
+    Some(ch.to_int() - 'A'.to_int() + 10)
+  } else {
+    None
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_parse_rgb_component(part : StringView) -> Int? {
+  let width = part.length()
+  if width < 1 || width > 4 {
+    return None
+  }
+  let mut value = 0
+  for ch in part {
+    match runtime_hex_value(ch) {
+      Some(digit) => value = value * 16 + digit
+      None => return None
+    }
+  }
+  let max_value = (1 << (width * 4)) - 1
+  Some(value * 255 / max_value)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_background_from_osc11(payload : String) -> @profile.Background? {
+  if !payload.has_prefix("rgb:") {
+    return None
+  }
+  let parts : Array[StringView] = payload[:][4:].split("/").collect()
+  if parts.length() != 3 {
+    return None
+  }
+  let r = match runtime_parse_rgb_component(parts[0]) {
+    Some(value) => value
+    None => return None
+  }
+  let g = match runtime_parse_rgb_component(parts[1]) {
+    Some(value) => value
+    None => return None
+  }
+  let b = match runtime_parse_rgb_component(parts[2]) {
+    Some(value) => value
+    None => return None
+  }
+  let luminance = 0.2126 * (r.to_double() / 255.0) +
+    0.7152 * (g.to_double() / 255.0) +
+    0.0722 * (b.to_double() / 255.0)
+  if luminance > 0.5 {
+    Some(@profile.Light)
+  } else {
+    Some(@profile.Dark)
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_profile_rank(profile : @profile.ColorProfile) -> Int {
+  match profile {
+    NoColor => 0
+    Ansi16 => 1
+    Ansi256 => 2
+    TrueColor => 3
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_max_profile(
+  current : @profile.ColorProfile,
+  floor : @profile.ColorProfile,
+) -> @profile.ColorProfile {
+  if runtime_profile_rank(current) >= runtime_profile_rank(floor) {
+    current
+  } else {
+    floor
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_context_apply_capability(
+  ctx : @profile.RenderContext,
+  reply : CapabilityReply,
+) -> @profile.RenderContext {
+  if !reply.valid {
+    return ctx
+  }
+  match reply.name {
+    "Tc" | "RGB" => ctx.with_color_profile(@profile.TrueColor)
+    "Co" =>
+      match reply.value {
+        Some(value) => {
+          let colors = @string.parse_int(value[:], base=10) catch {
+            _ => return ctx
+          }
+          if colors >= 256 {
+            ctx.with_color_profile(
+              runtime_max_profile(ctx.color_profile, @profile.Ansi256),
+            )
+          } else if colors >= 8 {
+            ctx.with_color_profile(
+              runtime_max_profile(ctx.color_profile, @profile.Ansi16),
+            )
+          } else {
+            ctx
+          }
+        }
+        None => ctx
+      }
+    _ => ctx
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_context_apply_event(
+  ctx : @profile.RenderContext,
+  event : InputEvent,
+) -> @profile.RenderContext {
+  match event {
+    TerminalReply(Color(BackgroundColor(payload))) =>
+      match runtime_background_from_osc11(payload) {
+        Some(background) => ctx.with_background(background)
+        None => ctx
+      }
+    TerminalReply(Capability(reply)) =>
+      runtime_context_apply_capability(ctx, reply)
+    _ => ctx
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_apply_render_context_events(
+  state : RuntimeRenderState,
+  events : Array[InputEvent],
+) -> (RuntimeRenderState, Bool) {
+  let original = state.render_context
+  let mut ctx = original
+  for event in events {
+    ctx = runtime_context_apply_event(ctx, event)
+  }
+  if ctx == original {
+    (state, false)
+  } else {
+    @profile.set_render_context(ctx)
+    ({ ..state, render_context: ctx, force_full_repaint: true }, true)
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 fn progress_value(value : Int?) -> Int {
   match value {
     Some(n) => n.max(0).min(100)
@@ -1141,13 +1308,17 @@ fn mouse_mode_transition(
 
 ///|
 #cfg(any(target="native", target="llvm"))
-fn view_terminal_state_from_view(view : View) -> RuntimeViewTerminalState {
+fn view_terminal_state_from_view(
+  view : View,
+  ctx : @profile.RenderContext,
+) -> RuntimeViewTerminalState {
   {
     cursor_position: view.cursor_position,
     cursor_visible: view.cursor_visible,
     window_title: view.window_title,
     foreground_color: view.foreground_color,
     background_color: view.background_color,
+    render_context: ctx,
     progress: view_progress_state(view.progress),
     mouse_mode: view_mouse_state(view.mouse_mode),
   }
@@ -1158,8 +1329,10 @@ fn view_terminal_state_from_view(view : View) -> RuntimeViewTerminalState {
 fn view_terminal_state_delta(
   applied : RuntimeViewTerminalState,
   view : View,
+  ctx : @profile.RenderContext,
 ) -> (String, RuntimeViewTerminalState) {
-  let next = view_terminal_state_from_view(view)
+  let next = view_terminal_state_from_view(view, ctx)
+  let context_changed = ctx != applied.render_context
   let prefix = StringBuilder::new()
   if next.window_title != applied.window_title {
     match next.window_title {
@@ -1170,18 +1343,20 @@ fn view_terminal_state_delta(
         }
     }
   }
-  if next.foreground_color != applied.foreground_color {
+  if next.foreground_color != applied.foreground_color ||
+    (context_changed && next.foreground_color is Some(_)) {
     match next.foreground_color {
-      Some(color) => prefix.write_string(foreground_sequence(color))
+      Some(color) => prefix.write_string(foreground_sequence(ctx, color))
       None =>
         if applied.foreground_color is Some(_) {
           prefix.write_string(reset_foreground_color())
         }
     }
   }
-  if next.background_color != applied.background_color {
+  if next.background_color != applied.background_color ||
+    (context_changed && next.background_color is Some(_)) {
     match next.background_color {
-      Some(color) => prefix.write_string(background_sequence(color))
+      Some(color) => prefix.write_string(background_sequence(ctx, color))
       None =>
         if applied.background_color is Some(_) {
           prefix.write_string(reset_background_color())
@@ -1542,6 +1717,17 @@ fn[Model, Msg] apply_lifecycle_msg(
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn[Msg] queue_startup_color_detection(
+  pending : @queue.Queue[RuntimeEffect[Msg]],
+) -> Unit {
+  pending.push(RuntimeTerminal(RuntimeRequestBackgroundColor))
+  pending.push(RuntimeTerminal(RuntimeRequestCapability("Co")))
+  pending.push(RuntimeTerminal(RuntimeRequestCapability("RGB")))
+  pending.push(RuntimeTerminal(RuntimeRequestCapability("Tc")))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 fn[Model] run_result_from_reason(
   model : Model,
   reason : RuntimeExitReason,
@@ -1650,7 +1836,10 @@ fn[Model, Msg] release_terminal_state(
       prev_line_count: 0,
       render_due_at: None,
       force_full_repaint: false,
-      view_terminal_state: runtime_view_terminal_state_empty(),
+      view_terminal_state: {
+        ..runtime_view_terminal_state_empty(),
+        render_context: state.render_context,
+      },
     }
   } else {
     state
@@ -1693,11 +1882,16 @@ fn[Model, Msg] restore_terminal_state(
         "",
         current_view,
         0,
-        runtime_view_terminal_state_for_program(program, true),
+        runtime_view_terminal_state_for_program(
+          program,
+          true,
+          state.render_context,
+        ),
         true,
         0L,
         true,
         true,
+        render_context=state.render_context,
       )
       next_state = {
         ..next_state,
@@ -1764,6 +1958,7 @@ fn[Model, Msg] flush_view(
   last_render_ms : Int64,
   force : Bool,
   full_repaint : Bool,
+  render_context? : @profile.RenderContext = applied_terminal_state.render_context,
 ) -> (String, Int, Int64, Int64?, RuntimeViewTerminalState) {
   let next_content = next_view.content
   if !program.rendering || !terminal_active {
@@ -1776,7 +1971,7 @@ fn[Model, Msg] flush_view(
     )
   } else {
     let (terminal_prefix, next_terminal_state) = view_terminal_state_delta(
-      applied_terminal_state, next_view,
+      applied_terminal_state, next_view, render_context,
     )
     let terminal_changed = next_terminal_state != applied_terminal_state
     let content_changed = full_repaint || next_content != rendered_view
@@ -2099,6 +2294,9 @@ fn[Model, Msg] run_internal(
   if render_state.terminal_active {
     activate_terminal(program)
   }
+  if render_state.terminal_active && program.read_stdin {
+    queue_startup_color_detection(pending)
+  }
 
   let (initial_model, initial_reason, _initial_updated) = apply_initial_window_size(
     program, model, pending, timers, sequences,
@@ -2130,6 +2328,7 @@ fn[Model, Msg] run_internal(
     render_state.last_render_ms,
     true,
     true,
+    render_context=render_state.render_context,
   )
   render_state = {
     ..render_state,
@@ -2185,6 +2384,7 @@ fn[Model, Msg] run_internal(
         render_state.last_render_ms,
         exit_reason is Some(_) || render_state.force_full_repaint,
         render_state.force_full_repaint,
+        render_context=render_state.render_context,
       )
       render_state = {
         ..render_state,
@@ -2201,13 +2401,16 @@ fn[Model, Msg] run_internal(
     }
 
     let mut updated = false
+    let polled_input_events = poll_input_events(program)
+    let (input_context_state, input_context_updated) = runtime_apply_render_context_events(
+      render_state, polled_input_events,
+    )
+    render_state = input_context_state
+    if input_context_updated {
+      updated = true
+    }
     let (input_model, input_reason, input_updated) = apply_input_events(
-      program,
-      model,
-      poll_input_events(program),
-      pending,
-      timers,
-      sequences,
+      program, model, polled_input_events, pending, timers, sequences,
     )
     model = input_model
     match input_reason {
@@ -2219,6 +2422,13 @@ fn[Model, Msg] run_internal(
     }
     let (raw_events, next_raw_buf) = poll_raw_input_events(program, raw_buf)
     raw_buf = next_raw_buf
+    let (raw_context_state, raw_context_updated) = runtime_apply_render_context_events(
+      render_state, raw_events,
+    )
+    render_state = raw_context_state
+    if raw_context_updated {
+      updated = true
+    }
     let (raw_model, raw_reason, raw_updated) = apply_input_events(
       program, model, raw_events, pending, timers, sequences,
     )
@@ -2281,6 +2491,13 @@ fn[Model, Msg] run_internal(
           let (events, leftover) = parse_all(bv)
 
           stdin_buf = leftover.to_array()
+          let (stdin_context_state, stdin_context_updated) = runtime_apply_render_context_events(
+            render_state, events,
+          )
+          render_state = stdin_context_state
+          if stdin_context_updated {
+            updated = true
+          }
 
           let (next_model, input_reason, input_updated) = apply_input_events(
             program, model, events, pending, timers, sequences,
@@ -2352,6 +2569,7 @@ fn[Model, Msg] run_internal(
         render_state.last_render_ms,
         exit_reason is Some(_) || render_state.force_full_repaint,
         render_state.force_full_repaint,
+        render_context=render_state.render_context,
       )
       render_state = {
         ..render_state,

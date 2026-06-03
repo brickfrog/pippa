@@ -6,6 +6,7 @@ pub(all) enum Color {
   Ansi(Int)
   RGB(Int, Int, Int)
   Hex(String)
+  Adaptive(Color, Color)
 } derive(Debug, Eq)
 
 ///|
@@ -94,6 +95,11 @@ pub fn color_rgb(r : Int, g : Int, b : Int) -> Color {
 ///|
 pub fn color_hex(hex : String) -> Color {
   Hex(hex)
+}
+
+///|
+pub fn color_adaptive(light : Color, dark : Color) -> Color {
+  Adaptive(light, dark)
 }
 
 ///|
@@ -295,6 +301,15 @@ pub fn Style::align(self : Style, align : Align) -> Style {
 
 ///|
 pub fn Style::render(self : Style, content : String) -> String {
+  self.render_with(content, @profile.ambient_context())
+}
+
+///|
+pub fn Style::render_with(
+  self : Style,
+  content : String,
+  ctx : @profile.RenderContext,
+) -> String {
   let content_lines = @pippa.split_lines(content)
   let (content_widths, natural_width) = measure_line_widths(content_lines)
   let target_width = resolve_width_from_natural(self, natural_width)
@@ -309,7 +324,7 @@ pub fn Style::render(self : Style, content : String) -> String {
   let padded_width = target_width + self.padding_left + self.padding_right
   let padded = apply_padding_with_inner_width(height_fitted, self, target_width)
   let bordered = match self.border {
-    Some(border) => render_border_block(border, padded, padded_width, self)
+    Some(border) => render_border_block(border, padded, padded_width, self, ctx)
     None => @internal.join_lines(padded)
   }
   let margined = apply_margin(
@@ -319,7 +334,7 @@ pub fn Style::render(self : Style, content : String) -> String {
     self.margin_bottom,
     self.margin_left,
   )
-  apply_style_prefix(self, margined)
+  apply_style_prefix(self, margined, ctx)
 }
 
 ///|
@@ -655,6 +670,7 @@ fn render_border_block(
   lines : Array[String],
   inner_width : Int,
   style : Style,
+  ctx : @profile.RenderContext,
 ) -> String {
   if style.border_fg is None && style.border_bg is None {
     return @internal.render_border(
@@ -699,8 +715,8 @@ fn render_border_block(
   )
   let horizontal = @internal.repeat_string(horizontal_piece, inner_width)
   let rows : Array[String] = []
-  let border_prefix = build_border_ansi_prefix(style)
-  let content_prefix = build_ansi_prefix(style)
+  let border_prefix = build_border_ansi_prefix(style, ctx)
+  let content_prefix = build_ansi_prefix(style, ctx)
   if style.border_top {
     rows.push(
       decorate_segment(
@@ -755,7 +771,10 @@ fn decorate_segment(prefix : String, segment : String) -> String {
 }
 
 ///|
-fn build_border_ansi_prefix(style : Style) -> String {
+fn build_border_ansi_prefix(
+  style : Style,
+  ctx : @profile.RenderContext,
+) -> String {
   let border_style = {
     ..style,
     fg: match style.border_fg {
@@ -769,16 +788,20 @@ fn build_border_ansi_prefix(style : Style) -> String {
     border_fg: None,
     border_bg: None,
   }
-  build_ansi_prefix(border_style)
+  build_ansi_prefix(border_style, ctx)
 }
 
 ///|
-fn apply_style_prefix(style : Style, block : String) -> String {
+fn apply_style_prefix(
+  style : Style,
+  block : String,
+  ctx : @profile.RenderContext,
+) -> String {
   if style.border is Some(_) &&
     (style.border_fg is Some(_) || style.border_bg is Some(_)) {
     return block
   }
-  let prefix = build_ansi_prefix(style)
+  let prefix = build_ansi_prefix(style, ctx)
   if prefix == "" {
     block
   } else {
@@ -787,14 +810,14 @@ fn apply_style_prefix(style : Style, block : String) -> String {
 }
 
 ///|
-fn build_ansi_prefix(style : Style) -> String {
+fn build_ansi_prefix(style : Style, ctx : @profile.RenderContext) -> String {
   let buf = StringBuilder::new()
   style.fg
   .iter()
-  .each(fn(color) { buf.write_string(foreground_sequence(color)) })
+  .each(fn(color) { buf.write_string(foreground_sequence(ctx, color)) })
   style.bg
   .iter()
-  .each(fn(color) { buf.write_string(background_sequence(color)) })
+  .each(fn(color) { buf.write_string(background_sequence(ctx, color)) })
   if style.bold {
     buf.write_string(@pippa.bold())
   }
@@ -817,30 +840,39 @@ fn build_ansi_prefix(style : Style) -> String {
 }
 
 ///|
-fn foreground_sequence(color : Color) -> String {
+fn color_value(
+  ctx : @profile.RenderContext,
+  color : Color,
+) -> @profile.ColorValue? {
   match color {
-    Ansi(n) => @pippa.fg_color(@internal.clamp_non_negative(n))
-    RGB(r, g, b) =>
-      @pippa.fg_rgb(clamp_channel(r), clamp_channel(g), clamp_channel(b))
+    Ansi(n) => Some(@profile.Palette(@internal.clamp_non_negative(n)))
+    RGB(r, g, b) => Some(@profile.Rgb(r, g, b))
     Hex(hex) =>
       match hex_to_rgb(hex) {
-        Some((r, g, b)) => @pippa.fg_rgb(r, g, b)
-        None => ""
+        Some((r, g, b)) => Some(@profile.Rgb(r, g, b))
+        None => None
+      }
+    Adaptive(light, dark) =>
+      match ctx.background {
+        Light => color_value(ctx, light)
+        Dark | Unknown => color_value(ctx, dark)
       }
   }
 }
 
 ///|
-fn background_sequence(color : Color) -> String {
-  match color {
-    Ansi(n) => @pippa.bg_color(@internal.clamp_non_negative(n))
-    RGB(r, g, b) =>
-      @pippa.bg_rgb(clamp_channel(r), clamp_channel(g), clamp_channel(b))
-    Hex(hex) =>
-      match hex_to_rgb(hex) {
-        Some((r, g, b)) => @pippa.bg_rgb(r, g, b)
-        None => ""
-      }
+fn foreground_sequence(ctx : @profile.RenderContext, color : Color) -> String {
+  match color_value(ctx, color) {
+    Some(value) => @profile.render_fg(ctx, value)
+    None => ""
+  }
+}
+
+///|
+fn background_sequence(ctx : @profile.RenderContext, color : Color) -> String {
+  match color_value(ctx, color) {
+    Some(value) => @profile.render_bg(ctx, value)
+    None => ""
   }
 }
 

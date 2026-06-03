@@ -23,6 +23,7 @@ pub(all) enum Color {
   Ansi(Int)
   RGB(Int, Int, Int)
   Hex(String)
+  Adaptive(Color, Color)
 } derive(Debug, Eq)
 
 ///|
@@ -146,6 +147,11 @@ pub fn color_hex(hex : String) -> Color {
 }
 
 ///|
+pub fn color_adaptive(light : Color, dark : Color) -> Color {
+  Adaptive(light, dark)
+}
+
+///|
 pub fn style() -> Style {
   {
     fg: None,
@@ -202,6 +208,7 @@ pub fn Style::foreground(self : Style, color : Color) -> Style {
     fg_ext: Some(color),
     fg: match color {
       Ansi(n) => Some(@internal.clamp_non_negative(n))
+      Adaptive(_, _) => None
       _ => None
     },
   }
@@ -214,6 +221,7 @@ pub fn Style::background(self : Style, color : Color) -> Style {
     bg_ext: Some(color),
     bg: match color {
       Ansi(n) => Some(@internal.clamp_non_negative(n))
+      Adaptive(_, _) => None
       _ => None
     },
   }
@@ -372,6 +380,15 @@ pub fn Style::align(self : Style, a : Align) -> Style {
 
 ///|
 pub fn Style::render(self : Style, content : String) -> String {
+  self.render_with(content, @profile.ambient_context())
+}
+
+///|
+pub fn Style::render_with(
+  self : Style,
+  content : String,
+  ctx : @profile.RenderContext,
+) -> String {
   let effective_style = {
     ..self,
     fg: self.fg.map(@internal.clamp_non_negative),
@@ -408,6 +425,7 @@ pub fn Style::render(self : Style, content : String) -> String {
         padded,
         @internal.max_visible_width(padded, visible_width),
         effective_style,
+        ctx,
       )
     None => @internal.join_lines(padded)
   }
@@ -418,7 +436,7 @@ pub fn Style::render(self : Style, content : String) -> String {
     effective_style.margin_bottom,
     effective_style.margin_left,
   )
-  apply_style_prefix(effective_style, margined)
+  apply_style_prefix(effective_style, margined, ctx)
 }
 
 ///|
@@ -676,6 +694,7 @@ fn render_border_block(
   lines : Array[String],
   inner_width : Int,
   style : Style,
+  ctx : @profile.RenderContext,
 ) -> String {
   if style.border_fg is None && style.border_bg is None {
     return @internal.render_border(
@@ -720,8 +739,8 @@ fn render_border_block(
   )
   let horizontal = @internal.repeat_string(horizontal_piece, inner_width)
   let rows : Array[String] = []
-  let border_prefix = build_border_ansi_prefix(style)
-  let content_prefix = build_ansi_prefix(style)
+  let border_prefix = build_border_ansi_prefix(style, ctx)
+  let content_prefix = build_ansi_prefix(style, ctx)
   if style.border_top {
     rows.push(
       decorate_segment(
@@ -776,9 +795,13 @@ fn decorate_segment(prefix : String, segment : String) -> String {
 }
 
 ///|
-fn build_border_ansi_prefix(style : Style) -> String {
+fn build_border_ansi_prefix(
+  style : Style,
+  ctx : @profile.RenderContext,
+) -> String {
   build_ansi_prefix_with_colors(
     style,
+    ctx,
     match style.border_fg {
       Some(color) => Some(color)
       None => effective_foreground(style)
@@ -791,12 +814,16 @@ fn build_border_ansi_prefix(style : Style) -> String {
 }
 
 ///|
-fn apply_style_prefix(style : Style, block : String) -> String {
+fn apply_style_prefix(
+  style : Style,
+  block : String,
+  ctx : @profile.RenderContext,
+) -> String {
   if style.border is Some(_) &&
     (style.border_fg is Some(_) || style.border_bg is Some(_)) {
     return block
   }
-  let prefix = build_ansi_prefix(style)
+  let prefix = build_ansi_prefix(style, ctx)
   if prefix == "" {
     block
   } else {
@@ -805,9 +832,10 @@ fn apply_style_prefix(style : Style, block : String) -> String {
 }
 
 ///|
-fn build_ansi_prefix(style : Style) -> String {
+fn build_ansi_prefix(style : Style, ctx : @profile.RenderContext) -> String {
   build_ansi_prefix_with_colors(
     style,
+    ctx,
     effective_foreground(style),
     effective_background(style),
   )
@@ -816,12 +844,17 @@ fn build_ansi_prefix(style : Style) -> String {
 ///|
 fn build_ansi_prefix_with_colors(
   style : Style,
+  ctx : @profile.RenderContext,
   fg : Color?,
   bg : Color?,
 ) -> String {
   let buf = StringBuilder::new()
-  fg.iter().each(fn(color) { buf.write_string(foreground_sequence(color)) })
-  bg.iter().each(fn(color) { buf.write_string(background_sequence(color)) })
+  fg
+  .iter()
+  .each(fn(color) { buf.write_string(foreground_sequence(ctx, color)) })
+  bg
+  .iter()
+  .each(fn(color) { buf.write_string(background_sequence(ctx, color)) })
   if style.bold {
     buf.write_string(bold())
   }
@@ -844,28 +877,39 @@ fn build_ansi_prefix_with_colors(
 }
 
 ///|
-fn foreground_sequence(color : Color) -> String {
+fn color_value(
+  ctx : @profile.RenderContext,
+  color : Color,
+) -> @profile.ColorValue? {
   match color {
-    Ansi(n) => fg_color(@internal.clamp_non_negative(n))
-    RGB(r, g, b) => fg_rgb(clamp_channel(r), clamp_channel(g), clamp_channel(b))
+    Ansi(n) => Some(@profile.Palette(@internal.clamp_non_negative(n)))
+    RGB(r, g, b) => Some(@profile.Rgb(r, g, b))
     Hex(hex) =>
       match hex_to_rgb(hex) {
-        Some((r, g, b)) => fg_rgb(r, g, b)
-        None => ""
+        Some((r, g, b)) => Some(@profile.Rgb(r, g, b))
+        None => None
+      }
+    Adaptive(light, dark) =>
+      match ctx.background {
+        Light => color_value(ctx, light)
+        Dark | Unknown => color_value(ctx, dark)
       }
   }
 }
 
 ///|
-fn background_sequence(color : Color) -> String {
-  match color {
-    Ansi(n) => bg_color(@internal.clamp_non_negative(n))
-    RGB(r, g, b) => bg_rgb(clamp_channel(r), clamp_channel(g), clamp_channel(b))
-    Hex(hex) =>
-      match hex_to_rgb(hex) {
-        Some((r, g, b)) => bg_rgb(r, g, b)
-        None => ""
-      }
+fn foreground_sequence(ctx : @profile.RenderContext, color : Color) -> String {
+  match color_value(ctx, color) {
+    Some(value) => @profile.render_fg(ctx, value)
+    None => ""
+  }
+}
+
+///|
+fn background_sequence(ctx : @profile.RenderContext, color : Color) -> String {
+  match color_value(ctx, color) {
+    Some(value) => @profile.render_bg(ctx, value)
+    None => ""
   }
 }
 

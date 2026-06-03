@@ -4,8 +4,8 @@ using @debug {assert_eq}
 ///|
 test "col joins children vertically" {
   let result = col <| [
-      "hello", "world",
-    ]
+    "hello", "world",
+  ]
   assert_eq(result, "hello\nworld")
 }
 
@@ -18,20 +18,20 @@ test "col with empty array" {
 ///|
 test "row joins children horizontally" {
   let result = row <| [
-      "ab", "cd",
-    ]
+    "ab", "cd",
+  ]
   assert_eq(result, "abcd")
 }
 
 ///|
 test "nested col and row" {
   let result = col <| [
-      "header",
-      row <| [
-        "left", " | ", "right",
-      ],
-      "footer",
-    ]
+    "header",
+    row <| [
+      "left", " | ", "right",
+    ],
+    "footer",
+  ]
   // col (join_vertical) pads lines to equal width
   assert_eq(result, "header      \nleft | right\nfooter      ")
 }

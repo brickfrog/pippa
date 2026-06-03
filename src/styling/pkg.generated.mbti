@@ -3,6 +3,7 @@ package "brickfrog/pippa/styling"
 
 import {
   "brickfrog/pippa",
+  "brickfrog/pippa/profile",
   "moonbitlang/core/debug",
 }
 
@@ -18,6 +19,8 @@ pub fn border_rounded() -> @pippa.Border
 pub fn border_thick() -> @pippa.Border
 
 pub fn col(Array[String]) -> String
+
+pub fn color_adaptive(Color, Color) -> Color
 
 pub fn color_ansi(Int) -> Color
 
@@ -56,6 +59,7 @@ pub(all) enum Color {
   Ansi(Int)
   RGB(Int, Int, Int)
   Hex(String)
+  Adaptive(Color, Color)
 } derive(Eq, @debug.Debug)
 
 pub(all) struct Style {
@@ -113,6 +117,7 @@ pub fn Style::min_height(Self, Int) -> Self
 pub fn Style::min_width(Self, Int) -> Self
 pub fn Style::padding(Self, Int, Int, Int, Int) -> Self
 pub fn Style::render(Self, String) -> String
+pub fn Style::render_with(Self, String, @profile.RenderContext) -> String
 pub fn Style::reverse(Self) -> Self
 pub fn Style::underline(Self) -> Self
 pub fn Style::width(Self, Int) -> Self

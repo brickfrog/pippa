@@ -90,3 +90,35 @@ test "styling border colors render separately from content colors" {
     @pippa.reset()
   assert_eq(actual, expected)
 }
+
+///|
+test "styling render_with degrades content and border colors" {
+  let ctx = @profile.RenderContext::default().with_color_profile(
+    @profile.NoColor,
+  )
+  let actual = style()
+    .foreground_rgb(255, 0, 0)
+    .border(border_ascii())
+    .border_foreground(color_rgb(0, 255, 0))
+    .bold()
+    .render_with("hi", ctx)
+  assert_false(actual.contains("\u001b[38;"))
+  assert_false(actual.contains("\u001b[48;"))
+  assert_true(actual.contains(@pippa.bold()))
+  assert_eq(@pippa.strip_ansi(actual), "+--+\n|hi|\n+--+")
+}
+
+///|
+test "styling adaptive color mirrors root style semantics" {
+  let light = @profile.RenderContext::default().with_background(@profile.Light)
+  let unknown = @profile.RenderContext::default()
+  let adaptive = color_adaptive(color_ansi(1), color_ansi(2))
+  assert_eq(
+    style().foreground(adaptive).render_with("x", unknown),
+    @pippa.fg_color(2) + "x" + @pippa.reset(),
+  )
+  assert_eq(
+    style().foreground(adaptive).render_with("x", light),
+    @pippa.fg_color(1) + "x" + @pippa.reset(),
+  )
+}

@@ -263,6 +263,46 @@ test "pippa terminal query commands round-trip through typed replies" {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+test "runtime color profile parses OSC 11 and merges capabilities monotonically" {
+  assert_true(
+    runtime_background_from_osc11("rgb:ffff/ffff/ffff") is Some(@profile.Light),
+  )
+  assert_true(
+    runtime_background_from_osc11("rgb:0000/0000/0000") is Some(@profile.Dark),
+  )
+  assert_true(
+    runtime_background_from_osc11("rgb:ff/ff/ff") is Some(@profile.Light),
+  )
+
+  let env_truecolor = @profile.RenderContext::default()
+  let invalid = { name: "Tc", value: None, valid: false }
+  assert_eq(
+    runtime_context_apply_capability(env_truecolor, invalid),
+    env_truecolor,
+  )
+
+  let low = @profile.RenderContext::default().with_color_profile(
+    @profile.NoColor,
+  )
+  let co16 = { name: "Co", value: Some("16"), valid: true }
+  assert_eq(
+    runtime_context_apply_capability(low, co16).color_profile,
+    @profile.Ansi16,
+  )
+  let co256 = { name: "Co", value: Some("256"), valid: true }
+  assert_eq(
+    runtime_context_apply_capability(low, co256).color_profile,
+    @profile.Ansi256,
+  )
+  let tc = { name: "Tc", value: Some(""), valid: true }
+  assert_eq(
+    runtime_context_apply_capability(low, tc).color_profile,
+    @profile.TrueColor,
+  )
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "pippa terminal mode commands emit focus and paste control sequences" {
   assert_terminal_cmd_emits(Cmd::enable_focus_reporting(), "\u001b[?1004h")
   assert_terminal_cmd_emits(Cmd::disable_focus_reporting(), "\u001b[?1004l")
@@ -1397,7 +1437,32 @@ test "pippa runtime hide cursor command updates structured cursor cache" {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn wbtest_restore_env_var(key : String, value : String?) -> Unit {
+  match value {
+    Some(v) => @env.set_env_var(key, v)
+    None => @env.unset_env_var(key)
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "pippa interrupt cleanup resets structured terminal state at runtime" {
+  let previous_colorterm = @env.get_env_var("COLORTERM")
+  let previous_term = @env.get_env_var("TERM")
+  let previous_no_color = @env.get_env_var("NO_COLOR")
+  let previous_clicolor_force = @env.get_env_var("CLICOLOR_FORCE")
+  let previous_clicolor = @env.get_env_var("CLICOLOR")
+  @env.unset_env_var("NO_COLOR")
+  @env.unset_env_var("CLICOLOR_FORCE")
+  @env.set_env_var("CLICOLOR", "1")
+  @env.set_env_var("COLORTERM", "truecolor")
+  @env.set_env_var("TERM", "xterm-256color")
+  defer wbtest_restore_env_var("NO_COLOR", previous_no_color)
+  defer wbtest_restore_env_var("CLICOLOR_FORCE", previous_clicolor_force)
+  defer wbtest_restore_env_var("CLICOLOR", previous_clicolor)
+  defer wbtest_restore_env_var("COLORTERM", previous_colorterm)
+  defer wbtest_restore_env_var("TERM", previous_term)
+
   let chunks : Ref[Array[String]] = Ref([])
   let polled = Ref(false)
   let program : Program[Int, Int] = Program::new(

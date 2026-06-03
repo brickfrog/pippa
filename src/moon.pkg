@@ -1,5 +1,6 @@
 import {
   "brickfrog/pippa/internal",
+  "brickfrog/pippa/profile",
   "moonbitlang/core/debug",
   "moonbitlang/core/deque",
   "moonbitlang/core/encoding/utf8",
@@ -13,6 +14,7 @@ import {
 
 import {
   "brickfrog/pippa/component",
+  "moonbitlang/core/env",
   "moonbitlang/core/test",
 } for "wbtest"
 
