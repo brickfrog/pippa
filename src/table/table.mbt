@@ -742,9 +742,6 @@ fn table_visible_cell_slice(
     return ""
   }
   let start = start_cell.max(0)
-  if start == 0 {
-    return @pippa.truncate(s, width)
-  }
   let chars = s.to_array()
   let boundaries = @internal.grapheme_boundaries(s)
   let buf = StringBuilder::new(size_hint=chars.length())

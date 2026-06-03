@@ -180,6 +180,30 @@ test "table closes styled wrapped cells before separator" {
 }
 
 ///|
+test "table closes first wrapped segment after mid-content restyle" {
+  let styled = @pippa.fg_color(1) +
+    "abcdef" +
+    @pippa.reset() +
+    @pippa.fg_color(1) +
+    "ghij" +
+    @pippa.reset()
+  let actual = new().row([styled, "plain"]).width(14).render()
+  let expected = "┌──────┬─────┐\n" +
+    "│" +
+    @pippa.fg_color(1) +
+    "abcdef" +
+    @pippa.reset() +
+    "│plain│\n" +
+    "│" +
+    @pippa.fg_color(1) +
+    "ghij  " +
+    @pippa.reset() +
+    "│     │\n" +
+    "└──────┴─────┘"
+  assert_eq(actual, expected)
+}
+
+///|
 test "table height caps rows while preserving bottom border" {
   let actual = new().row(["one"]).row(["two"]).row(["three"]).height(4).render()
   assert_eq(
