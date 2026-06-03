@@ -737,9 +737,9 @@ fn table_visible_cell_slice(
   s : String,
   start_cell : Int,
   width : Int,
-) -> String {
+) -> (String, Int) {
   if width <= 0 {
-    return ""
+    return ("", 0)
   }
   let start = start_cell.max(0)
   let chars = s.to_array()
@@ -747,13 +747,14 @@ fn table_visible_cell_slice(
   let buf = StringBuilder::new(size_hint=chars.length())
   let mut cell = 0
   let mut used = 0
+  let mut consumed = 0
   let mut active_style = ""
   let mut emitted_style = ""
   let mut slice_started = false
   for i in 0..<(boundaries.length() - 1) {
     if used >= width {
       table_close_sgr_state(buf, chars, boundaries[i], emitted_style)
-      return buf.to_string()
+      return (buf.to_string(), consumed)
     }
     let cluster = table_chars_to_string(chars, boundaries[i], boundaries[i + 1])
     let cluster_width = @pippa.visible_width(cluster)
@@ -765,22 +766,7 @@ fn table_visible_cell_slice(
         active_style,
       )
       cell = cell + cluster_width
-    } else if cell < start {
-      if !slice_started {
-        if active_style != "" {
-          buf.write_string(active_style)
-          emitted_style = active_style
-        }
-        slice_started = true
-      }
-      let visible_tail = cluster_width - (start - cell)
-      let spaces = visible_tail.min(width - used)
-      for _ in 0..<spaces {
-        buf.write_char(' ')
-      }
-      used = used + spaces
-      cell = cell + cluster_width
-    } else if used + cluster_width <= width {
+    } else if used + cluster_width <= width || used == 0 {
       if !slice_started {
         if active_style != "" {
           buf.write_string(active_style)
@@ -796,14 +782,15 @@ fn table_visible_cell_slice(
         emitted_style,
       )
       used = used + cluster_width
+      consumed = consumed + cluster_width
       cell = cell + cluster_width
     } else {
       table_close_sgr_state(buf, chars, boundaries[i], emitted_style)
-      return buf.to_string()
+      return (buf.to_string(), consumed)
     }
   }
   table_close_sgr_state(buf, chars, chars.length(), emitted_style)
-  buf.to_string()
+  (buf.to_string(), consumed)
 }
 
 ///|
@@ -818,8 +805,10 @@ fn wrap_line(line : String, width : Int) -> Array[String] {
   let segments : Array[String] = []
   let mut start = 0
   while start < visible {
-    segments.push(table_visible_cell_slice(line, start, width))
-    start = start + width
+    let (segment, consumed) = table_visible_cell_slice(line, start, width)
+    segments.push(segment)
+    let step = if consumed > 0 { consumed } else { width }
+    start = start + step
   }
   segments
 }

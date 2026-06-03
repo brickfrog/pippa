@@ -128,6 +128,30 @@ test "table wraps cells by default without dropping content" {
 }
 
 ///|
+test "table wraps wide grapheme at odd width without dropping it" {
+  let actual = new().row(["ab你z"]).width(5).render()
+  assert_eq(
+    actual,
+    "┌───┐\n" + "│ab │\n" + "│你z│\n" + "└───┘",
+  )
+}
+
+///|
+test "table wraps all-wide graphemes at odd width without splits" {
+  let actual = new().row(["你好世界"]).width(5).render()
+  assert_eq(
+    actual,
+    "┌───┐\n" +
+    "│你 │\n" +
+    "│好 │\n" +
+    "│世 │\n" +
+    "│界 │\n" +
+    "└───┘",
+  )
+  assert_eq(@pippa.max_line_width(actual), 5)
+}
+
+///|
 test "table wraps ansi cell content without splitting escapes" {
   let styled = @pippa.fg_color(1) + "abcdefghij" + @pippa.reset()
   let actual = new().row([styled]).width(8).render()
