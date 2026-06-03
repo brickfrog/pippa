@@ -94,6 +94,11 @@ test "pippa ansi enable mouse" {
 }
 
 ///|
+test "pippa ansi enable mouse cell motion" {
+  inspect(enable_mouse_cell_motion(), content="\u001b[?1002h\u001b[?1006h")
+}
+
+///|
 test "pippa ansi enable mouse motion" {
   inspect(enable_mouse_motion(), content="\u001b[?1003h\u001b[?1006h")
 }
@@ -110,7 +115,10 @@ test "pippa ansi enable bracketed paste" {
 
 ///|
 test "pippa ansi disable mouse" {
-  inspect(disable_mouse(), content="\u001b[?1000l\u001b[?1003l\u001b[?1006l")
+  inspect(
+    disable_mouse(),
+    content="\u001b[?1000l\u001b[?1002l\u001b[?1003l\u001b[?1006l",
+  )
 }
 
 ///|

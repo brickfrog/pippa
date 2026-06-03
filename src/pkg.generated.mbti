@@ -77,6 +77,8 @@ pub fn enable_focus_reporting() -> String
 
 pub fn enable_mouse() -> String
 
+pub fn enable_mouse_cell_motion() -> String
+
 pub fn enable_mouse_motion() -> String
 
 pub fn end_sync_update() -> String
@@ -250,8 +252,11 @@ pub fn[Msg] Cmd::batch(Array[Self[Msg]]) -> Self[Msg]
 pub fn[Msg] Cmd::clear_screen() -> Self[Msg]
 pub fn[Msg] Cmd::disable_bracketed_paste() -> Self[Msg]
 pub fn[Msg] Cmd::disable_focus_reporting() -> Self[Msg]
+pub fn[Msg] Cmd::disable_mouse() -> Self[Msg]
 pub fn[Msg] Cmd::enable_bracketed_paste() -> Self[Msg]
 pub fn[Msg] Cmd::enable_focus_reporting() -> Self[Msg]
+pub fn[Msg] Cmd::enable_mouse_all_motion() -> Self[Msg]
+pub fn[Msg] Cmd::enable_mouse_cell_motion() -> Self[Msg]
 pub fn[Msg] Cmd::enter_alt_screen() -> Self[Msg]
 pub fn[Msg] Cmd::every(Int, (TimerTick) -> Msg) -> Self[Msg]
 pub fn[Msg] Cmd::exec_process(ExecProcess, (ExecResult) -> Msg) -> Self[Msg]
@@ -630,6 +635,7 @@ pub fn ViewCursorPosition::new(row~ : Int, col~ : Int) -> Self
 pub(all) enum ViewMouseMode {
   ViewMouseOff
   ViewMousePress
+  ViewMouseCellMotion
   ViewMouseAllMotion
 } derive(Eq, @debug.Debug)
 

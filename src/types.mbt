@@ -134,8 +134,10 @@ pub(all) enum ViewProgress {
 pub(all) enum ViewMouseMode {
   /// Disable per-frame mouse reporting.
   ViewMouseOff
-  /// Enable mouse press/release reporting.
+  /// Enable normal mouse press/release reporting.
   ViewMousePress
+  /// Enable button-event mouse reporting, including button-held drag motion.
+  ViewMouseCellMotion
   /// Enable full mouse motion reporting.
   ViewMouseAllMotion
 } derive(Debug, Eq)
@@ -303,6 +305,8 @@ priv enum CmdAction[Msg] {
   SetFocusReporting(Bool)
   // Enable or disable bracketed paste mode.
   SetBracketedPaste(Bool)
+  // Set terminal mouse reporting mode.
+  SetMouseMode(ViewMouseMode)
   // Deliver a typed lifecycle message through the runtime.
   LifecycleAction(LifecycleMsg)
   // Run an external process while the terminal is released.
@@ -349,7 +353,8 @@ pub impl[Msg] Debug for Cmd[Msg] with fn to_repr(self) {
       | RequestCapability(_)
       | RequestClipboard(_)
       | SetFocusReporting(_)
-      | SetBracketedPaste(_) => terminal_count = terminal_count + 1
+      | SetBracketedPaste(_)
+      | SetMouseMode(_) => terminal_count = terminal_count + 1
       LifecycleAction(_) => lifecycle_count = lifecycle_count + 1
       ExecProcessAction(_, _) => exec_count = exec_count + 1
       RuntimeErrorAction(_) => error_count = error_count + 1

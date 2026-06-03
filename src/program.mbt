@@ -785,6 +785,7 @@ priv enum RuntimeTerminalCommand {
   RuntimeRequestClipboard(ClipboardSelection)
   RuntimeSetFocusReporting(Bool)
   RuntimeSetBracketedPaste(Bool)
+  RuntimeSetMouseMode(ViewMouseMode)
 }
 
 ///|
@@ -1090,6 +1091,10 @@ fn terminal_command_sequence(command : RuntimeTerminalCommand) -> String {
     RuntimeSetFocusReporting(false) => disable_focus_reporting()
     RuntimeSetBracketedPaste(true) => enable_bracketed_paste()
     RuntimeSetBracketedPaste(false) => disable_bracketed_paste()
+    RuntimeSetMouseMode(ViewMousePress) => enable_mouse()
+    RuntimeSetMouseMode(ViewMouseCellMotion) => enable_mouse_cell_motion()
+    RuntimeSetMouseMode(ViewMouseAllMotion) => enable_mouse_motion()
+    RuntimeSetMouseMode(ViewMouseOff) => disable_mouse()
   }
 }
 
@@ -1101,11 +1106,24 @@ fn[Model, Msg] apply_terminal_command(
   command : RuntimeTerminalCommand,
 ) -> RuntimeRenderState {
   if state.terminal_active {
-    emit_output(program, terminal_command_sequence(command))
+    let sequence = match command {
+      RuntimeSetMouseMode(mode) =>
+        mouse_mode_transition(state.view_terminal_state.mouse_mode, Some(mode))
+      _ => terminal_command_sequence(command)
+    }
+    emit_output(program, sequence)
   }
   match command {
     RuntimeSetFocusReporting(enabled) => { ..state, focus_reporting: enabled }
     RuntimeSetBracketedPaste(enabled) => { ..state, bracketed_paste: enabled }
+    RuntimeSetMouseMode(mode) =>
+      {
+        ..state,
+        view_terminal_state: {
+          ..state.view_terminal_state,
+          mouse_mode: view_mouse_state(Some(mode)),
+        },
+      }
     _ => state
   }
 }
@@ -1305,6 +1323,7 @@ fn view_progress_sequence(progress : RuntimeTerminalProgress) -> String {
 fn view_mouse_state(mouse_mode : ViewMouseMode?) -> ViewMouseMode? {
   match mouse_mode {
     Some(ViewMousePress) => Some(ViewMousePress)
+    Some(ViewMouseCellMotion) => Some(ViewMouseCellMotion)
     Some(ViewMouseAllMotion) => Some(ViewMouseAllMotion)
     Some(ViewMouseOff) | None => None
   }
@@ -1321,12 +1340,20 @@ fn mouse_mode_transition(
     Some(ViewMouseOff) => disable_mouse()
     Some(ViewMousePress) =>
       match previous {
+        Some(ViewMouseCellMotion) => "\{CSI}?1002l" + enable_mouse()
         Some(ViewMouseAllMotion) => "\{CSI}?1003l" + enable_mouse()
         _ => enable_mouse()
+      }
+    Some(ViewMouseCellMotion) =>
+      match previous {
+        Some(ViewMousePress) => "\{CSI}?1000l" + enable_mouse_cell_motion()
+        Some(ViewMouseAllMotion) => "\{CSI}?1003l" + enable_mouse_cell_motion()
+        _ => enable_mouse_cell_motion()
       }
     Some(ViewMouseAllMotion) =>
       match previous {
         Some(ViewMousePress) => "\{CSI}?1000l" + enable_mouse_motion()
+        Some(ViewMouseCellMotion) => "\{CSI}?1002l" + enable_mouse_motion()
         _ => enable_mouse_motion()
       }
   }
@@ -1601,6 +1628,8 @@ fn[Msg] queue_cmd_effects(
         pending.push(RuntimeTerminal(RuntimeSetFocusReporting(enabled)))
       SetBracketedPaste(enabled) =>
         pending.push(RuntimeTerminal(RuntimeSetBracketedPaste(enabled)))
+      SetMouseMode(mode) =>
+        pending.push(RuntimeTerminal(RuntimeSetMouseMode(mode)))
       LifecycleAction(msg) => pending.push(RuntimeLifecycle(msg))
       ExecProcessAction(process, to_msg) =>
         pending.push(RuntimeExec(process, to_msg))
