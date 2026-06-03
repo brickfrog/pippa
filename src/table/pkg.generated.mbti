@@ -1,0 +1,41 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/table"
+
+import {
+  "brickfrog/pippa",
+}
+
+// Values
+pub const HEADER_ROW : Int = -1
+
+pub fn new() -> Table
+
+// Errors
+
+// Types and methods
+type Table
+pub fn Table::border(Self, @pippa.Border) -> Self
+pub fn Table::border_bottom(Self, Bool) -> Self
+pub fn Table::border_column(Self, Bool) -> Self
+pub fn Table::border_header(Self, Bool) -> Self
+pub fn Table::border_left(Self, Bool) -> Self
+pub fn Table::border_right(Self, Bool) -> Self
+pub fn Table::border_row(Self, Bool) -> Self
+pub fn Table::border_style(Self, @pippa.Style) -> Self
+pub fn Table::border_top(Self, Bool) -> Self
+pub fn Table::clear_rows(Self) -> Self
+pub fn Table::get_headers(Self) -> Array[String]
+pub fn Table::get_rows(Self) -> Array[Array[String]]
+pub fn Table::headers(Self, Array[String]) -> Self
+pub fn Table::height(Self, Int) -> Self
+pub fn Table::render(Self) -> String
+pub fn Table::row(Self, Array[String]) -> Self
+pub fn Table::rows(Self, Array[Array[String]]) -> Self
+pub fn Table::style_func(Self, (Int, Int) -> @pippa.Style) -> Self
+pub fn Table::to_string(Self) -> String
+pub fn Table::width(Self, Int) -> Self
+
+// Type aliases
+
+// Traits
+
