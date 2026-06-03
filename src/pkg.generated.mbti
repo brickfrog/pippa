@@ -635,6 +635,7 @@ pub fn ViewCursorPosition::new(row~ : Int, col~ : Int) -> Self
 pub(all) enum ViewMouseMode {
   ViewMouseOff
   ViewMousePress
+  ViewMouseCellMotion
   ViewMouseAllMotion
 } derive(Eq, @debug.Debug)
 

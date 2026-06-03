@@ -351,8 +351,8 @@ test "pippa mouse mode commands store typed terminal actions" {
   ])
   assert_eq(cmd.actions.length(), 3)
   match cmd.actions[0] {
-    SetMouseMode(ViewMousePress) => ()
-    _ => fail("expected SetMouseMode(ViewMousePress) action")
+    SetMouseMode(ViewMouseCellMotion) => ()
+    _ => fail("expected SetMouseMode(ViewMouseCellMotion) action")
   }
   match cmd.actions[1] {
     SetMouseMode(ViewMouseAllMotion) => ()
@@ -373,7 +373,7 @@ test "pippa mouse mode commands emit control sequences and update runtime state"
   assert_eq(cell_output, "\u001b[?1002h\u001b[?1006h")
   @test.assert_eq(
     cell_state.view_terminal_state.mouse_mode,
-    Some(ViewMousePress),
+    Some(ViewMouseCellMotion),
   )
 
   let (all_output, all_state) = drain_terminal_cmd(
@@ -404,7 +404,7 @@ test "pippa runtime mouse mode commands reset previous cell or all mode" {
   assert_eq(
     output,
     "\u001b[?1002h\u001b[?1006h" +
-    "\u001b[?1000l\u001b[?1002l\u001b[?1003h\u001b[?1006h" +
+    "\u001b[?1002l\u001b[?1003h\u001b[?1006h" +
     "\u001b[?1003l\u001b[?1002h\u001b[?1006h" +
     "\u001b[?1000l\u001b[?1002l\u001b[?1003l\u001b[?1006l",
   )
@@ -423,14 +423,14 @@ test "pippa runtime mouse commands keep structured mouse delta consistent" {
   )
   assert_eq(unchanged, "")
 
-  let cell_view = View::text("").with_mouse_mode(ViewMousePress)
+  let cell_view = View::text("").with_mouse_mode(ViewMouseCellMotion)
   let (to_cell, cell_terminal_state) = view_terminal_state_delta(
     all_state.view_terminal_state,
     cell_view,
     all_state.render_context,
   )
   assert_eq(to_cell, "\u001b[?1003l\u001b[?1002h\u001b[?1006h")
-  @test.assert_eq(cell_terminal_state.mouse_mode, Some(ViewMousePress))
+  @test.assert_eq(cell_terminal_state.mouse_mode, Some(ViewMouseCellMotion))
 
   let (_off_output, off_state) = drain_terminal_cmd(Cmd::disable_mouse())
   let off_view = View::text("")
@@ -1142,7 +1142,7 @@ test "pippa structured_view carries state while rendering content unchanged" {
   let captured = chunks.val.join("")
   assert_true(captured.contains("\u001b]2;Structured\u001b\\"))
   assert_true(captured.contains("\u001b]9;4;3;0\u001b\\"))
-  assert_true(captured.contains(enable_mouse_cell_motion()))
+  assert_true(captured.contains(enable_mouse()))
   assert_true(captured.contains(show_cursor()))
   assert_true(captured.contains(move_cursor(2, 4)))
   assert_true(captured.contains("\u001b[1;1H\u001b[Kstructured 5"))
@@ -1439,7 +1439,7 @@ test "pippa flush_view reconciles mouse mode transitions" {
     true,
     false,
   )
-  assert_eq(chunks.val.join(""), sync_frame("\u001b[?1002h\u001b[?1006h"))
+  assert_eq(chunks.val.join(""), sync_frame("\u001b[?1000h\u001b[?1006h"))
 
   chunks.val = []
   let (rendered_same, lines_same, last_same, _d_same, state_same) = flush_view(
@@ -1469,9 +1469,7 @@ test "pippa flush_view reconciles mouse mode transitions" {
   )
   assert_eq(
     chunks.val.join(""),
-    sync_frame(
-      "\u001b[?1000l\u001b[?1002l\u001b[?1003h\u001b[?1006h\u001b[1;1H\u001b[K",
-    ),
+    sync_frame("\u001b[?1000l\u001b[?1003h\u001b[?1006h\u001b[1;1H\u001b[K"),
   )
 
   chunks.val = []
@@ -1488,7 +1486,7 @@ test "pippa flush_view reconciles mouse mode transitions" {
   )
   assert_eq(
     chunks.val.join(""),
-    sync_frame("\u001b[?1003l\u001b[?1002h\u001b[?1006h"),
+    sync_frame("\u001b[?1003l\u001b[?1000h\u001b[?1006h"),
   )
 
   chunks.val = []
@@ -1546,7 +1544,9 @@ test "pippa initial view terminal cache reflects program-managed cursor and mous
     flush_view(
       program,
       "",
-      View::text("").with_cursor_visible(false).with_mouse_mode(ViewMousePress),
+      View::text("")
+      .with_cursor_visible(false)
+      .with_mouse_mode(ViewMouseCellMotion),
       0,
       render_state.view_terminal_state,
       true,
@@ -1555,7 +1555,10 @@ test "pippa initial view terminal cache reflects program-managed cursor and mous
       false,
     ),
   )
-  assert_eq(chunks.val.join(""), "")
+  assert_eq(
+    chunks.val.join(""),
+    sync_frame("\u001b[?1000l\u001b[?1002h\u001b[?1006h"),
+  )
 }
 
 ///|
@@ -1717,7 +1720,7 @@ test "pippa interrupt cleanup resets structured terminal state at runtime" {
   assert_true(captured.contains(fg_color(3)))
   assert_true(captured.contains(bg_rgb(4, 5, 6)))
   assert_true(captured.contains(set_terminal_progress(1, 33)))
-  assert_true(captured.contains(enable_mouse_cell_motion()))
+  assert_true(captured.contains(enable_mouse()))
   assert_true(captured.contains(terminal_view_reset_sequence()))
 }
 

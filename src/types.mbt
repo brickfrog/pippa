@@ -134,8 +134,10 @@ pub(all) enum ViewProgress {
 pub(all) enum ViewMouseMode {
   /// Disable per-frame mouse reporting.
   ViewMouseOff
-  /// Enable mouse press/release reporting.
+  /// Enable normal mouse press/release reporting.
   ViewMousePress
+  /// Enable button-event mouse reporting, including button-held drag motion.
+  ViewMouseCellMotion
   /// Enable full mouse motion reporting.
   ViewMouseAllMotion
 } derive(Debug, Eq)
