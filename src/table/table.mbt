@@ -352,14 +352,38 @@ fn resize_widths(table : Table, widths : Array[Int]) -> Array[Int] {
 
 ///|
 fn table_border(border : @pippa.Border) -> TableBorder {
-  if border.horizontal == "-" && border.vertical == "|" {
+  let top_left = @internal.normalize_border_piece(
+    border.top_left,
+    @pippa.visible_width,
+  )
+  let top_right = @internal.normalize_border_piece(
+    border.top_right,
+    @pippa.visible_width,
+  )
+  let bottom_left = @internal.normalize_border_piece(
+    border.bottom_left,
+    @pippa.visible_width,
+  )
+  let bottom_right = @internal.normalize_border_piece(
+    border.bottom_right,
+    @pippa.visible_width,
+  )
+  let horizontal = @internal.normalize_border_piece(
+    border.horizontal,
+    @pippa.visible_width,
+  )
+  let vertical = @internal.normalize_border_piece(
+    border.vertical,
+    @pippa.visible_width,
+  )
+  if horizontal == "-" && vertical == "|" {
     return {
-      top_left: border.top_left,
-      top_right: border.top_right,
-      bottom_left: border.bottom_left,
-      bottom_right: border.bottom_right,
-      horizontal: border.horizontal,
-      vertical: border.vertical,
+      top_left,
+      top_right,
+      bottom_left,
+      bottom_right,
+      horizontal,
+      vertical,
       middle_top: "+",
       middle_bottom: "+",
       middle_left: "+",
@@ -367,14 +391,14 @@ fn table_border(border : @pippa.Border) -> TableBorder {
       middle: "+",
     }
   }
-  if border.horizontal == "━" && border.vertical == "┃" {
+  if horizontal == "━" && vertical == "┃" {
     return {
-      top_left: border.top_left,
-      top_right: border.top_right,
-      bottom_left: border.bottom_left,
-      bottom_right: border.bottom_right,
-      horizontal: border.horizontal,
-      vertical: border.vertical,
+      top_left,
+      top_right,
+      bottom_left,
+      bottom_right,
+      horizontal,
+      vertical,
       middle_top: "┳",
       middle_bottom: "┻",
       middle_left: "┣",
@@ -382,14 +406,14 @@ fn table_border(border : @pippa.Border) -> TableBorder {
       middle: "╋",
     }
   }
-  if border.horizontal == "═" && border.vertical == "║" {
+  if horizontal == "═" && vertical == "║" {
     return {
-      top_left: border.top_left,
-      top_right: border.top_right,
-      bottom_left: border.bottom_left,
-      bottom_right: border.bottom_right,
-      horizontal: border.horizontal,
-      vertical: border.vertical,
+      top_left,
+      top_right,
+      bottom_left,
+      bottom_right,
+      horizontal,
+      vertical,
       middle_top: "╦",
       middle_bottom: "╩",
       middle_left: "╠",
@@ -398,12 +422,12 @@ fn table_border(border : @pippa.Border) -> TableBorder {
     }
   }
   {
-    top_left: border.top_left,
-    top_right: border.top_right,
-    bottom_left: border.bottom_left,
-    bottom_right: border.bottom_right,
-    horizontal: border.horizontal,
-    vertical: border.vertical,
+    top_left,
+    top_right,
+    bottom_left,
+    bottom_right,
+    horizontal,
+    vertical,
     middle_top: "┬",
     middle_bottom: "┴",
     middle_left: "├",

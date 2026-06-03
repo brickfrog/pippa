@@ -74,3 +74,18 @@ test "table width resizes columns" {
     "└─────────┴────────┘",
   )
 }
+
+///|
+test "table normalizes multi-width custom border pieces" {
+  let border : @pippa.Border = {
+    top_left: "tl",
+    top_right: "tr",
+    bottom_left: "bl",
+    bottom_right: "br",
+    horizontal: "==",
+    vertical: "||",
+  }
+  let actual = new().headers(["A"]).row(["B"]).border(border).render()
+  assert_eq(@pippa.max_line_width(actual), 3)
+  assert_eq(actual, "***\n*A*\n├*┤\n*B*\n***")
+}
