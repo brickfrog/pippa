@@ -9,6 +9,16 @@ test "style render bold wraps content in ansi" {
 }
 
 ///|
+test "style render faint aliases dim without duplicate sgr" {
+  assert_eq(style().faint().dim().render("hello"), "[2mhello[0m")
+}
+
+///|
+test "style render strikethrough emits sgr 9" {
+  assert_eq(style().strikethrough().render("hello"), "[9mhello[0m")
+}
+
+///|
 test "style render rounded border" {
   let actual = style().border(border_rounded()).render("hi")
   let expected = "╭──╮\n│hi│\n╰──╯"

@@ -27,6 +27,16 @@ test "styling supports rgb and hex colors plus extra ansi flags" {
 }
 
 ///|
+test "styling faint aliases dim without duplicate sgr" {
+  assert_eq(style().faint().dim().render("hello"), "[2mhello[0m")
+}
+
+///|
+test "styling strikethrough emits sgr 9" {
+  assert_eq(style().strikethrough().render("hello"), "[9mhello[0m")
+}
+
+///|
 test "styling margin and height expand the rendered block" {
   let actual = style().width(4).height(2).margin(1, 2, 1, 1).render("hi")
   let expected = "       \n hi    \n       \n       "

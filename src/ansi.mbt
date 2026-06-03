@@ -62,6 +62,12 @@ pub fn reverse() -> String {
 }
 
 ///|
+/// Strikethrough text (CSI 9 m).
+pub fn strikethrough() -> String {
+  "\{CSI}9m"
+}
+
+///|
 /// Hide the cursor (CSI ? 25 l).
 pub fn hide_cursor() -> String {
   "\{CSI}?25l"
