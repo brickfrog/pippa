@@ -7,6 +7,8 @@ import {
 }
 
 // Values
+pub fn cursor(char? : String, mode? : CursorMode, interval_ms? : Int, focused? : Bool) -> Component[CursorModel, CursorMsg]
+
 pub fn default_filepicker_keymap() -> FilepickerKeymap
 
 pub fn default_filepicker_styles() -> FilepickerStyles
@@ -152,6 +154,36 @@ pub(all) struct Component[Model, Msg] {
   update : (Model, Msg) -> @pippa.UpdateResult[Model, Msg]
   view : (Model) -> String
 } derive(@debug.Debug)
+
+pub(all) enum CursorMode {
+  CursorBlink
+  CursorStatic
+  CursorHide
+} derive(Eq, @debug.Debug)
+
+pub(all) struct CursorModel {
+  char : String
+  mode : CursorMode
+  is_blinked : Bool
+  focused : Bool
+  interval_ms : Int
+  instance_id : Int64
+  tick_generation : Int64
+} derive(Eq, @debug.Debug)
+
+pub(all) enum CursorMsg {
+  Focus
+  Blur
+  SetMode(CursorMode)
+  SetChar(String)
+  Tick
+  TimedTick(CursorTickToken)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct CursorTickToken {
+  instance_id : Int64
+  generation : Int64
+} derive(Eq, @debug.Debug)
 
 pub(all) struct FileEntry {
   name : String
