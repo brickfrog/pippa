@@ -69,3 +69,20 @@ test "list renders styled enumerators and items" {
     @pippa.reset()
   assert_eq(actual, expected)
 }
+
+///|
+test "list renders alphabet roman and dash enumerators with lipgloss casing" {
+  let values : Items = { values: [] }
+  assert_eq(alphabet(values, 0), "A.")
+  assert_eq(alphabet(values, 25), "Z.")
+  assert_eq(alphabet(values, 26), "AA.")
+  assert_eq(alphabet(values, 27), "AB.")
+  assert_eq(roman(values, 3), "IV.")
+  assert_eq(dash(values, 0), "-")
+  let actual = new()
+    .enumerator(alphabet)
+    .item_text("First")
+    .item_text("Second")
+    .render()
+  assert_eq(actual, "A. First\nB. Second")
+}

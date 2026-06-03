@@ -35,6 +35,7 @@ struct Table {
   style_func : (Int, Int) -> @pippa.Style
   width : Int
   height : Int
+  wrap : Bool
 }
 
 ///|
@@ -59,6 +60,7 @@ pub fn new() -> Table {
     style_func: default_style,
     width: 0,
     height: 0,
+    wrap: true,
   }
 }
 
@@ -183,8 +185,18 @@ pub fn Table::width(self : Table, width : Int) -> Table {
 }
 
 ///|
+/// Set a best-effort table height cap.
+///
+/// The static renderer caps rendered data rows while preserving table structure
+/// such as the bottom border. Lip Gloss-style overflow rows are tracked as
+/// follow-up work.
 pub fn Table::height(self : Table, height : Int) -> Table {
   { ..self, height: @internal.clamp_non_negative(height) }
+}
+
+///|
+pub fn Table::wrap(self : Table, wrap : Bool) -> Table {
+  { ..self, wrap, }
 }
 
 ///|
@@ -242,6 +254,27 @@ fn fixed_cell_width(style : @pippa.Style) -> Int {
 }
 
 ///|
+fn cell_fixed_width(table : Table, row_index : Int, col : Int) -> Int {
+  fixed_cell_width(style_for(table, row_index, col))
+}
+
+///|
+fn fixed_widths(table : Table, count : Int) -> Array[Int] {
+  let widths : Array[Int] = []
+  for col in 0..<count {
+    let mut width = 0
+    if !table.headers.is_empty() {
+      width = width.max(cell_fixed_width(table, HEADER_ROW, col))
+    }
+    for row_index in 0..<table.rows.length() {
+      width = width.max(cell_fixed_width(table, row_index, col))
+    }
+    widths.push(width)
+  }
+  widths
+}
+
+///|
 fn cell_natural_width(
   table : Table,
   row_index : Int,
@@ -258,9 +291,17 @@ fn cell_natural_width(
 }
 
 ///|
-fn natural_widths(table : Table, count : Int) -> Array[Int] {
+fn natural_widths(
+  table : Table,
+  count : Int,
+  fixed_widths : Array[Int],
+) -> Array[Int] {
   let widths : Array[Int] = []
   for col in 0..<count {
+    if fixed_widths[col] > 0 {
+      widths.push(fixed_widths[col])
+      continue
+    }
     let mut width = 0
     if !table.headers.is_empty() {
       width = width.max(
@@ -303,11 +344,14 @@ fn horizontal_border_width(table : Table, count : Int) -> Int {
 }
 
 ///|
-fn index_of_shortest_resizable(widths : Array[Int]) -> Int {
-  let mut index = 0
+fn index_of_shortest_resizable(
+  widths : Array[Int],
+  fixed_widths : Array[Int],
+) -> Int {
+  let mut index = -1
   let mut value = 0x7FFFFFFF
   for i, width in widths {
-    if width < value {
+    if fixed_widths[i] == 0 && width < value {
       value = width
       index = i
     }
@@ -316,11 +360,14 @@ fn index_of_shortest_resizable(widths : Array[Int]) -> Int {
 }
 
 ///|
-fn index_of_largest_resizable(widths : Array[Int]) -> Int {
+fn index_of_largest_resizable(
+  widths : Array[Int],
+  fixed_widths : Array[Int],
+) -> Int {
   let mut index = -1
   let mut value = -1
   for i, width in widths {
-    if width > value && width > 0 {
+    if fixed_widths[i] == 0 && width > value && width > 0 {
       value = width
       index = i
     }
@@ -329,7 +376,11 @@ fn index_of_largest_resizable(widths : Array[Int]) -> Int {
 }
 
 ///|
-fn resize_widths(table : Table, widths : Array[Int]) -> Array[Int] {
+fn resize_widths(
+  table : Table,
+  widths : Array[Int],
+  fixed_widths : Array[Int],
+) -> Array[Int] {
   let resized = widths.copy()
   if table.width <= 0 || resized.is_empty() {
     return resized
@@ -337,11 +388,14 @@ fn resize_widths(table : Table, widths : Array[Int]) -> Array[Int] {
   let available = (table.width -
   horizontal_border_width(table, resized.length())).max(0)
   while sum_widths(resized) < available {
-    let index = index_of_shortest_resizable(resized)
+    let index = index_of_shortest_resizable(resized, fixed_widths)
+    if index < 0 {
+      break
+    }
     resized[index] = resized[index] + 1
   }
   while sum_widths(resized) > available {
-    let index = index_of_largest_resizable(resized)
+    let index = index_of_largest_resizable(resized, fixed_widths)
     if index < 0 {
       break
     }
@@ -523,10 +577,73 @@ fn fit_block_to_width(block : String, width : Int) -> String {
 }
 
 ///|
-fn render_cell(style : @pippa.Style, value : String, width : Int) -> String {
+fn push_wrapped_segment(segments : Array[String], segment : String) -> Unit {
+  segments.push(segment)
+}
+
+///|
+fn wrap_line(line : String, width : Int) -> Array[String] {
+  let segments : Array[String] = []
+  if width <= 0 {
+    segments.push("")
+    return segments
+  }
+  let mut segment = StringBuilder::new()
+  let mut segment_width = 0
+  for ch in line {
+    let piece = ch.to_string()
+    let piece_width = @pippa.visible_width(piece)
+    if segment_width > 0 && segment_width + piece_width > width {
+      push_wrapped_segment(segments, segment.to_string())
+      segment = StringBuilder::new()
+      segment_width = 0
+    }
+    segment.write_char(ch)
+    segment_width = segment_width + piece_width
+    if segment_width >= width {
+      push_wrapped_segment(segments, segment.to_string())
+      segment = StringBuilder::new()
+      segment_width = 0
+    }
+  }
+  if segment_width > 0 || segments.is_empty() {
+    push_wrapped_segment(segments, segment.to_string())
+  }
+  segments
+}
+
+///|
+fn wrap_content(content : String, width : Int) -> String {
+  let rows : Array[String] = []
+  for line in @pippa.split_lines(content) {
+    for segment in wrap_line(line, width) {
+      rows.push(segment)
+    }
+  }
+  @internal.join_lines(rows)
+}
+
+///|
+fn render_cell(
+  table : Table,
+  style : @pippa.Style,
+  value : String,
+  width : Int,
+) -> String {
   let content_width = (width - style_horizontal_frame(style)).max(0)
-  let content = if content_width == 0 { "" } else { value }
-  let rendered = style.width(content_width).render(content)
+  let content = if content_width == 0 {
+    ""
+  } else if table.wrap {
+    wrap_content(value, content_width)
+  } else {
+    @pippa.truncate(value, content_width)
+  }
+  let cell_style = if style.width > 0 {
+    style
+  } else {
+    style.width(content_width)
+  }
+  let rendered = cell_style.render(content)
   fit_block_to_width(rendered, width)
 }
 
@@ -547,6 +664,7 @@ fn render_row(
   let mut height = 1
   for col in 0..<widths.length() {
     let block = render_cell(
+      table,
       style_for(table, row_index, col),
       cell_at(cells, col),
       widths[col],
@@ -583,19 +701,57 @@ fn render_row(
 }
 
 ///|
-fn fit_table_height(table : Table, block : String) -> String {
-  if table.height <= 0 {
-    return block
+fn block_height(block : String) -> Int {
+  if block == "" {
+    0
+  } else {
+    @pippa.split_lines(block).length()
   }
-  let lines = @pippa.split_lines(block)
-  if lines.length() <= table.height {
-    return block
+}
+
+///|
+fn blocks_height(blocks : Array[String]) -> Int {
+  let mut height = 0
+  for block in blocks {
+    height = height + block_height(block)
   }
-  let out : Array[String] = []
-  for i in 0..<table.height {
-    out.push(lines[i])
+  height
+}
+
+///|
+fn can_fit_blocks(
+  table : Table,
+  blocks : Array[String],
+  candidate : String,
+  reserved_bottom : Int,
+) -> Bool {
+  table.height <= 0 ||
+  blocks_height(blocks) + block_height(candidate) + reserved_bottom <=
+  table.height
+}
+
+///|
+fn maybe_push_block(
+  table : Table,
+  blocks : Array[String],
+  block : String,
+  reserved_bottom : Int,
+) -> Bool {
+  if can_fit_blocks(table, blocks, block, reserved_bottom) {
+    blocks.push(block)
+    true
+  } else {
+    false
   }
-  @internal.join_lines(out)
+}
+
+///|
+fn bottom_reservation(table : Table) -> Int {
+  if table.border_bottom {
+    1
+  } else {
+    0
+  }
 }
 
 ///|
@@ -604,27 +760,63 @@ pub fn Table::render(self : Table) -> String {
   if count == 0 {
     return ""
   }
-  let widths = resize_widths(self, natural_widths(self, count))
+  let fixed_widths = fixed_widths(self, count)
+  let widths = resize_widths(
+    self,
+    natural_widths(self, count, fixed_widths),
+    fixed_widths,
+  )
   let rows : Array[String] = []
+  let reserved_bottom = bottom_reservation(self)
   if self.border_top {
-    rows.push(render_top_border(self, widths))
+    ignore(
+      maybe_push_block(
+        self,
+        rows,
+        render_top_border(self, widths),
+        reserved_bottom,
+      ),
+    )
   }
   if !self.headers.is_empty() {
-    rows.push(render_row(self, HEADER_ROW, self.headers, widths))
+    let header = render_row(self, HEADER_ROW, self.headers, widths)
+    ignore(maybe_push_block(self, rows, header, reserved_bottom))
     if self.border_header {
-      rows.push(render_middle_border(self, widths))
+      ignore(
+        maybe_push_block(
+          self,
+          rows,
+          render_middle_border(self, widths),
+          reserved_bottom,
+        ),
+      )
     }
   }
   for row_index in 0..<self.rows.length() {
-    rows.push(render_row(self, row_index, self.rows[row_index], widths))
+    let row = render_row(self, row_index, self.rows[row_index], widths)
+    if !maybe_push_block(self, rows, row, reserved_bottom) {
+      break
+    }
     if self.border_row && row_index < self.rows.length() - 1 {
-      rows.push(render_middle_border(self, widths))
+      ignore(
+        maybe_push_block(
+          self,
+          rows,
+          render_middle_border(self, widths),
+          reserved_bottom,
+        ),
+      )
     }
   }
   if self.border_bottom {
-    rows.push(render_bottom_border(self, widths))
+    let bottom = render_bottom_border(self, widths)
+    if self.height <= 0 || blocks_height(rows) < self.height {
+      rows.push(bottom)
+    } else if rows.is_empty() && self.height > 0 {
+      rows.push(bottom)
+    }
   }
-  fit_table_height(self, @internal.join_lines(rows))
+  @internal.join_lines(rows)
 }
 
 ///|

@@ -89,3 +89,48 @@ test "table normalizes multi-width custom border pieces" {
   assert_eq(@pippa.max_line_width(actual), 3)
   assert_eq(actual, "***\n*A*\n├*┤\n*B*\n***")
 }
+
+///|
+test "table width leaves fixed-width columns unchanged" {
+  let actual = new()
+    .headers(["ID", "Name"])
+    .row(["01", "Ada"])
+    .style_func(fn(_row, col) {
+      if col == 0 {
+        @pippa.style().width(2)
+      } else {
+        @pippa.style()
+      }
+    })
+    .width(20)
+    .render()
+  assert_eq(@pippa.max_line_width(actual), 20)
+  assert_eq(
+    actual,
+    "┌──┬───────────────┐\n" +
+    "│ID│Name           │\n" +
+    "├──┼───────────────┤\n" +
+    "│01│Ada            │\n" +
+    "└──┴───────────────┘",
+  )
+}
+
+///|
+test "table wraps cells by default without dropping content" {
+  let actual = new().row(["abcdefghij"]).width(8).render()
+  assert_eq(
+    actual,
+    "┌──────┐\n" +
+    "│abcdef│\n" +
+    "│ghij  │\n" +
+    "└──────┘",
+  )
+}
+
+///|
+test "table height caps rows while preserving bottom border" {
+  let actual = new().row(["one"]).row(["two"]).row(["three"]).height(4).render()
+  assert_eq(
+    actual, "┌─────┐\n│one  │\n│two  │\n└─────┘",
+  )
+}

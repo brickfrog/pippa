@@ -74,7 +74,7 @@ pub fn alphabet(_items : Items, index : Int) -> String {
   let mut n = @internal.clamp_non_negative(index)
   while true {
     let rem = n % 26
-    digits.push((0x61 + rem).unsafe_to_char())
+    digits.push((0x41 + rem).unsafe_to_char())
     n = n / 26 - 1
     if n < 0 {
       break

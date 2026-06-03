@@ -34,6 +34,7 @@ pub fn Table::rows(Self, Array[Array[String]]) -> Self
 pub fn Table::style_func(Self, (Int, Int) -> @pippa.Style) -> Self
 pub fn Table::to_string(Self) -> String
 pub fn Table::width(Self, Int) -> Self
+pub fn Table::wrap(Self, Bool) -> Self
 
 // Type aliases
 
