@@ -28,18 +28,12 @@ test "styling supports rgb and hex colors plus extra ansi flags" {
 
 ///|
 test "styling faint aliases dim without duplicate sgr" {
-  assert_eq(
-    style().faint().dim().render("hello"),
-    @pippa.dim() + "hello" + @pippa.reset(),
-  )
+  assert_eq(style().faint().dim().render("hello"), "[2mhello[0m")
 }
 
 ///|
 test "styling strikethrough emits sgr 9" {
-  assert_eq(
-    style().strikethrough().render("hello"),
-    @pippa.strikethrough() + "hello" + @pippa.reset(),
-  )
+  assert_eq(style().strikethrough().render("hello"), "[9mhello[0m")
 }
 
 ///|
