@@ -906,7 +906,7 @@ test "pippa print above command emits scrollback line and repaints current view"
   let chunks : Ref[Array[String]] = Ref([])
   let program = test_render_program(chunks)
     .with_alt_screen(false)
-    .with_synchronized_output(false)
+    .with_window_size(80, 5)
   let view = desired_view(program, 3)
   let (rendered, lines, last_render_ms, _due_at, terminal_state) = flush_view(
     program,
@@ -942,17 +942,16 @@ test "pippa print above command emits scrollback line and repaints current view"
   assert_false(updated)
   assert_eq(next_state.rendered, "plain 3")
   assert_eq(next_state.prev_line_count, 1)
-  assert_eq(
-    chunks.val.join(""),
-    move_cursor(1, 1) +
+  let print_above_output = move_cursor(1, 1) +
     clear_line() +
+    move_cursor(5, 1) +
     "scrollback" +
     clear_line() +
     "\r\n" +
     move_cursor(1, 1) +
     clear_line() +
-    "plain 3",
-  )
+    "plain 3"
+  assert_eq(chunks.val.join(""), sync_frame(print_above_output))
 }
 
 ///|

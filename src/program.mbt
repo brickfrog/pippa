@@ -805,10 +805,7 @@ let runtime_print_above_messages : Ref[Array[PrintAboveMessage]] = Ref([])
 ///|
 #cfg(any(target="native", target="llvm"))
 fn runtime_enqueue_print_above(message : PrintAboveMessage) -> Unit {
-  runtime_print_above_messages.val = [
-    ..runtime_print_above_messages.val,
-    message,
-  ]
+  runtime_print_above_messages.val.push(message)
 }
 
 ///|
@@ -1469,9 +1466,11 @@ fn runtime_print_above_frame_output(
   lines : Array[String],
   prev_line_count : Int,
   current_content : String,
+  terminal_height : Int,
 ) -> String {
   let buf = StringBuilder::new()
   buf.write_string(render_full("", prev_line_count))
+  buf.write_string(move_cursor(terminal_height.max(1), 1))
   for line in lines {
     buf.write_string(line)
     buf.write_string(clear_line())
@@ -1479,6 +1478,18 @@ fn runtime_print_above_frame_output(
   }
   buf.write_string(render_full(current_content, 0))
   buf.to_string()
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn[Model, Msg] runtime_print_above_terminal_height(
+  program : Program[Model, Msg],
+) -> Int {
+  if program.window_height > 0 {
+    program.window_height
+  } else {
+    current_window_size().height
+  }
 }
 
 ///|
@@ -1505,6 +1516,7 @@ fn[Model, Msg] apply_print_above_messages(
       lines,
       state.prev_line_count,
       current_view.content,
+      runtime_print_above_terminal_height(program),
     )
     let terminal_suffix = view_cursor_position_suffix(
       state.view_terminal_state,
@@ -1512,6 +1524,11 @@ fn[Model, Msg] apply_print_above_messages(
       true,
     )
     let output = terminal_prefix + frame_output + terminal_suffix
+    let output = if program.synchronized_output && output != "" {
+      begin_sync_update() + output + end_sync_update()
+    } else {
+      output
+    }
     emit_output(program, output)
     let now = runtime_now_ms()
     {
