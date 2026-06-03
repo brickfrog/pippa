@@ -287,6 +287,18 @@ pub fn[Msg] Cmd::disable_bracketed_paste() -> Cmd[Msg] {
 }
 
 ///|
+/// Set the terminal window title at runtime.
+pub fn[Msg] Cmd::set_window_title(title : String) -> Cmd[Msg] {
+  { _phantom: [], actions: [SetWindowTitle(title)] }
+}
+
+///|
+/// Clear the terminal window title at runtime.
+pub fn[Msg] Cmd::clear_window_title() -> Cmd[Msg] {
+  Cmd::set_window_title("")
+}
+
+///|
 /// Enable terminal mouse press, release, wheel, and button-held drag reporting at runtime.
 pub fn[Msg] Cmd::enable_mouse_cell_motion() -> Cmd[Msg] {
   { _phantom: [], actions: [SetMouseMode(ViewMouseCellMotion)] }
@@ -364,6 +376,7 @@ pub fn[A, B] Cmd::map(f : (A) -> B, cmd : Cmd[A]) -> Cmd[B] {
       SetFocusReporting(enabled) => actions.push(SetFocusReporting(enabled))
       SetBracketedPaste(enabled) => actions.push(SetBracketedPaste(enabled))
       SetMouseMode(mode) => actions.push(SetMouseMode(mode))
+      SetWindowTitle(title) => actions.push(SetWindowTitle(title))
       LifecycleAction(msg) => actions.push(LifecycleAction(msg))
       ExecProcessAction(process, task) =>
         actions.push(ExecProcessAction(process, fn(result) { f(task(result)) }))

@@ -343,6 +343,62 @@ test "pippa terminal mode commands emit focus and paste control sequences" {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+test "pippa window title commands store typed terminal actions" {
+  let cmd : Cmd[Int] = Cmd::batch([
+    Cmd::set_window_title("Runtime title"),
+    Cmd::clear_window_title(),
+  ])
+  assert_eq(cmd.actions.length(), 2)
+  match cmd.actions[0] {
+    SetWindowTitle("Runtime title") => ()
+    _ => fail("expected SetWindowTitle(\"Runtime title\") action")
+  }
+  match cmd.actions[1] {
+    SetWindowTitle("") => ()
+    _ => fail("expected SetWindowTitle(\"\") action")
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa window title command emits OSC and updates runtime state" {
+  let (output, state) = drain_terminal_cmd(
+    Cmd::set_window_title("Runtime title"),
+  )
+  assert_eq(output, "\u001b]2;Runtime title\u001b\\")
+  @test.assert_eq(state.view_terminal_state.window_title, Some("Runtime title"))
+
+  let (unchanged, _same_terminal_state) = view_terminal_state_delta(
+    state.view_terminal_state,
+    View::text("").with_window_title("Runtime title"),
+    state.render_context,
+  )
+  assert_eq(unchanged, "")
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa clear window title command clears runtime state" {
+  let (output, state) = drain_terminal_cmd(
+    Cmd::sequence([
+      Cmd::set_window_title("Runtime title"),
+      Cmd::clear_window_title(),
+    ]),
+  )
+  assert_eq(output, "\u001b]2;Runtime title\u001b\\\u001b]2;\u001b\\")
+  @test.assert_eq(state.view_terminal_state.window_title, None)
+
+  let (still_clear, clear_terminal_state) = view_terminal_state_delta(
+    state.view_terminal_state,
+    View::text(""),
+    state.render_context,
+  )
+  assert_eq(still_clear, "")
+  @test.assert_eq(clear_terminal_state.window_title, None)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "pippa mouse mode commands store typed terminal actions" {
   let cmd : Cmd[Int] = Cmd::batch([
     Cmd::enable_mouse_cell_motion(),
