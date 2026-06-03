@@ -104,6 +104,12 @@ pub fn enable_mouse() -> String {
 }
 
 ///|
+/// Enable mouse button-event reporting with SGR coordinates (CSI ?1002h CSI ?1006h).
+pub fn enable_mouse_cell_motion() -> String {
+  "\{CSI}?1002h\{CSI}?1006h"
+}
+
+///|
 /// Enable mouse motion reporting with SGR coordinates (CSI ?1003h CSI ?1006h).
 pub fn enable_mouse_motion() -> String {
   "\{CSI}?1003h\{CSI}?1006h"
@@ -205,9 +211,9 @@ pub fn request_clipboard(selection : ClipboardSelection) -> String {
 }
 
 ///|
-/// Disable all mouse reporting (CSI ?1000l, CSI ?1003l, and CSI ?1006l).
+/// Disable all mouse reporting (CSI ?1000l, CSI ?1002l, CSI ?1003l, and CSI ?1006l).
 pub fn disable_mouse() -> String {
-  "\{CSI}?1000l\{CSI}?1003l\{CSI}?1006l"
+  "\{CSI}?1000l\{CSI}?1002l\{CSI}?1003l\{CSI}?1006l"
 }
 
 ///|

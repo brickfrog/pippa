@@ -287,7 +287,7 @@ pub fn[Msg] Cmd::disable_bracketed_paste() -> Cmd[Msg] {
 }
 
 ///|
-/// Enable terminal mouse press, release, and wheel reporting at runtime.
+/// Enable terminal mouse press, release, wheel, and button-held drag reporting at runtime.
 pub fn[Msg] Cmd::enable_mouse_cell_motion() -> Cmd[Msg] {
   { _phantom: [], actions: [SetMouseMode(ViewMousePress)] }
 }

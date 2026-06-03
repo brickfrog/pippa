@@ -77,6 +77,8 @@ pub fn enable_focus_reporting() -> String
 
 pub fn enable_mouse() -> String
 
+pub fn enable_mouse_cell_motion() -> String
+
 pub fn enable_mouse_motion() -> String
 
 pub fn end_sync_update() -> String

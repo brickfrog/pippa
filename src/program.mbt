@@ -1091,7 +1091,7 @@ fn terminal_command_sequence(command : RuntimeTerminalCommand) -> String {
     RuntimeSetFocusReporting(false) => disable_focus_reporting()
     RuntimeSetBracketedPaste(true) => enable_bracketed_paste()
     RuntimeSetBracketedPaste(false) => disable_bracketed_paste()
-    RuntimeSetMouseMode(ViewMousePress) => enable_mouse()
+    RuntimeSetMouseMode(ViewMousePress) => enable_mouse_cell_motion()
     RuntimeSetMouseMode(ViewMouseAllMotion) => enable_mouse_motion()
     RuntimeSetMouseMode(ViewMouseOff) => disable_mouse()
   }
@@ -1338,12 +1338,13 @@ fn mouse_mode_transition(
     Some(ViewMouseOff) => disable_mouse()
     Some(ViewMousePress) =>
       match previous {
-        Some(ViewMouseAllMotion) => "\{CSI}?1003l" + enable_mouse()
-        _ => enable_mouse()
+        Some(ViewMouseAllMotion) => "\{CSI}?1003l" + enable_mouse_cell_motion()
+        _ => enable_mouse_cell_motion()
       }
     Some(ViewMouseAllMotion) =>
       match previous {
-        Some(ViewMousePress) => "\{CSI}?1000l" + enable_mouse_motion()
+        Some(ViewMousePress) =>
+          "\{CSI}?1000l\{CSI}?1002l" + enable_mouse_motion()
         _ => enable_mouse_motion()
       }
   }
