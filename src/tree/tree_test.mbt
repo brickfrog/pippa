@@ -133,6 +133,24 @@ test "tree multiline non-last child keeps branch pipe" {
 }
 
 ///|
+test "tree block-joins multiline connector with single-line item" {
+  let actual = new()
+    .enumerator_func(fn(_children, _index) { "|\n|" })
+    .child_leaf("Leaf")
+    .render()
+  assert_eq(actual, "| Leaf\n|")
+}
+
+///|
+test "tree block-joins multiline connector with multiline item" {
+  let actual = new()
+    .enumerator_func(fn(_children, _index) { "|\n|" })
+    .child_leaf("Top\nBottom")
+    .render()
+  assert_eq(actual, "| Top\n| Bottom")
+}
+
+///|
 test "tree styles connector alignment padding" {
   let actual = new()
     .enumerator_func(fn(_children, i) { if i == 0 { ">" } else { "====>" } })

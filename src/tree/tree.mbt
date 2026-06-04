@@ -1,9 +1,5 @@
 ///|
 /// A static tree renderer inspired by lipgloss/tree.
-
-///|
-/// Branch connectors are expected to be single-line strings. Multi-line
-/// enumerators are unsupported in this renderer and tracked as follow-up work.
 pub(all) struct Enumerator {
   child_connector : String
   last_child_connector : String
@@ -390,7 +386,7 @@ fn max_connector_width(renderer : TreeRenderer, children : Array[Tree]) -> Int {
   let mut max_width = 0
   for i in 0..<children.length() {
     let connector = (renderer.enumerator)(children, i)
-    max_width = max_width.max(@pippa.visible_width(connector))
+    max_width = max_width.max(@pippa.max_line_width(connector))
   }
   max_width
 }
@@ -436,35 +432,104 @@ fn pad_block_to_tree_width(
 }
 
 ///|
-fn render_item_line(
-  parent_prefix : String,
-  connector : String,
-  item_indent : String,
-  continuation_prefix : String,
+fn block_height(block : String) -> Int {
+  @pippa.split_lines(block).length()
+}
+
+///|
+fn pad_block_height(
+  block : String,
+  continuation : String,
+  height : Int,
+) -> String {
+  let mut padded = block
+  while block_height(padded) < height {
+    padded = @pippa.join_vertical([padded, continuation])
+  }
+  padded
+}
+
+///|
+fn remove_trailing_spaces(line : String, count : Int) -> String {
+  if count <= 0 {
+    return line
+  }
+  let chars = line.to_array()
+  let mut end = chars.length()
+  let mut remaining = count
+  while remaining > 0 && end > 0 && chars[end - 1] == ' ' {
+    end = end - 1
+    remaining = remaining - 1
+  }
+  let kept : Array[Char] = []
+  for i in 0..<end {
+    kept.push(chars[i])
+  }
+  String::from_array(kept)
+}
+
+///|
+fn trim_joined_item_padding(
+  joined : String,
   item_lines : Array[String],
 ) -> String {
-  if item_lines.length() <= 1 {
-    return parent_prefix + connector + item_indent + item_lines[0]
+  let item_widths : Array[Int] = []
+  let mut item_width = 0
+  for line in item_lines {
+    let width = @pippa.visible_width(line)
+    item_widths.push(width)
+    item_width = item_width.max(width)
+  }
+  if item_width <= 0 {
+    return joined
   }
   let rows : Array[String] = []
-  let first_prefix = parent_prefix + connector + item_indent
-  for i, line in item_lines {
-    if i == 0 {
-      rows.push(first_prefix + line)
+  for i, line in @pippa.split_lines(joined) {
+    let trim = if i < item_widths.length() {
+      item_width - item_widths[i]
     } else {
-      rows.push(continuation_prefix + line)
+      item_width
     }
+    rows.push(remove_trailing_spaces(line, trim))
   }
   @internal.join_lines(rows)
 }
 
 ///|
-fn render_item_lines(style : @pippa.Style, value : String) -> Array[String] {
+fn render_item_block_lines(
+  style : @pippa.Style,
+  item_indent : String,
+  value : String,
+) -> Array[String] {
   let rows : Array[String] = []
   for line in @pippa.split_lines(value) {
-    rows.push(style.render(line))
+    rows.push(item_indent + style.render(line))
   }
   rows
+}
+
+///|
+fn render_item_line(
+  parent_prefix : String,
+  connector : String,
+  continuation_prefix : String,
+  item_lines : Array[String],
+) -> String {
+  let item_block = @internal.join_lines(item_lines)
+  let item_height = block_height(item_block)
+  let connector_block = pad_block_height(
+    connector, continuation_prefix, item_height,
+  )
+  let parent_prefix_block = pad_block_height(
+    parent_prefix,
+    parent_prefix,
+    block_height(connector_block),
+  )
+  let prefix_block = @pippa.join_horizontal([
+    parent_prefix_block, connector_block,
+  ])
+  let joined = @pippa.join_horizontal([prefix_block, item_block])
+  trim_joined_item_padding(joined, item_lines)
 }
 
 ///|
@@ -499,18 +564,16 @@ fn render_tree(
       max_width,
     )
     let connector = enum_style.render(connector)
-    let indent = indent_style.render((renderer.indenter)(children, i)) +
-      renderer.item_indent
-    let item_lines = render_item_lines(item_style, child.value)
+    let child_indent = indent_style.render((renderer.indenter)(children, i))
+    let indent = child_indent + renderer.item_indent
+    let item_lines = render_item_block_lines(
+      item_style,
+      renderer.item_indent,
+      child.value,
+    )
     rows.push(
       pad_block_to_tree_width(
-        render_item_line(
-          prefix,
-          connector,
-          renderer.item_indent,
-          prefix + indent,
-          item_lines,
-        ),
+        render_item_line(prefix, connector, child_indent, item_lines),
         renderer.width,
         item_style,
       ),
