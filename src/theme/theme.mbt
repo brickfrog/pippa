@@ -5,7 +5,7 @@ pub(all) struct RoleKey {
 } derive(Eq, Show, Hash)
 
 ///|
-pub struct Theme {
+struct Theme {
   roles : Map[RoleKey, @pippa.Style]
   fallback : @pippa.Style
 }

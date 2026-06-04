@@ -16,11 +16,10 @@ test "role keys compare and hash by scope and name" {
 test "theme returns registered style and fallback style" {
   let fallback = @pippa.style().foreground(@pippa.color_ansi(7))
   let registered = @pippa.style().foreground(@pippa.color_ansi(2)).bold()
-  let theme = Theme::new(fallback~).with_role(
-    RoleKey::ui("success"),
-    registered,
-  )
+  let base = Theme::new(fallback~)
+  let theme = base.with_role(RoleKey::ui("success"), registered)
   let missing = RoleKey::ui("missing")
+  @test.assert_eq(base.style(RoleKey::ui("success")), fallback)
   @test.assert_eq(theme.style(RoleKey::ui("success")), registered)
   @test.assert_eq(theme.style(missing), fallback)
 }

@@ -22,10 +22,7 @@ pub fn RoleKey::new(scope~ : String, name~ : String) -> Self
 pub fn RoleKey::syntax(String) -> Self
 pub fn RoleKey::ui(String) -> Self
 
-pub struct Theme {
-  roles : Map[RoleKey, @pippa.Style]
-  fallback : @pippa.Style
-}
+type Theme
 pub fn Theme::new(fallback? : @pippa.Style) -> Self
 pub fn Theme::render(Self, RoleKey, String, @profile.RenderContext) -> String
 pub fn Theme::style(Self, RoleKey) -> @pippa.Style
