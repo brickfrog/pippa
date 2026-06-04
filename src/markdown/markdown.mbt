@@ -20,8 +20,10 @@ pub(all) enum MarkdownFlavor {
 /// Strategy for tables wider than the render width.
 ///
 /// `Wrap` reflows cell contents within allocated columns. `Truncate` keeps one
-/// terminal row per markdown row and clips cell text by visible width. Extremely
-/// narrow widths fall back to one terminal cell per markdown column.
+/// terminal row per markdown row and clips cell text by visible width, marking
+/// clipped content with an ellipsis. Tables fit within the requested width when
+/// the width can hold the structural minimum: borders plus one cell per column.
+/// Below that minimum, the table overflows as one indivisible structure.
 pub(all) enum TableNarrowMode {
   Wrap
   Truncate
@@ -42,7 +44,9 @@ pub(all) enum TaskCheckboxStyle {
 ///
 /// The default is CommonMark-strict parsing with wrapping table behavior and
 /// Unicode task checkboxes. Call `MarkdownOptions::gfm()` to opt into GitHub
-/// Flavored Markdown parsing and rendering.
+/// Flavored Markdown parsing and rendering. The cmark parser used here emits
+/// autolink nodes for CommonMark angle autolinks such as `<https://example.com>`;
+/// bare GFM URL autolinks are not emitted and render as plain text.
 pub(all) struct MarkdownOptions {
   flavor : MarkdownFlavor
   table_narrow_mode : TableNarrowMode
@@ -558,6 +562,11 @@ fn table_border_overhead(col_count : Int) -> Int {
 }
 
 ///|
+fn table_structural_min_width(col_count : Int) -> Int {
+  table_border_overhead(col_count) + col_count
+}
+
+///|
 fn table_line_width(spans : Array[@theme.StyledSpan]) -> Int {
   @pippa.visible_width(@theme.span_plain_text(spans))
 }
@@ -577,9 +586,10 @@ fn table_align(
   line : Array[@theme.StyledSpan],
   width : Int,
   role : @theme.RoleKey,
+  truncate : Bool,
 ) -> Array[@theme.StyledSpan] {
   let safe_width = width.max(0)
-  let clipped = if table_line_width(line) > safe_width {
+  let clipped = if truncate && table_line_width(line) > safe_width {
     table_truncate_line(line, safe_width)
   } else {
     line
@@ -614,7 +624,24 @@ fn table_truncate_line(
   if width <= 0 {
     return out
   }
+  if table_line_width(spans) <= width {
+    return spans
+  }
+  let ellipsis = "…"
+  let ellipsis_width = @pippa.visible_width(ellipsis)
+  if width <= ellipsis_width {
+    if spans.length() == 0 {
+      return out
+    }
+    out.push({
+      ..spans[0],
+      text: @pippa.truncate(ellipsis, width),
+      no_wrap: false,
+    })
+    return out
+  }
   let mut remaining = width
+  remaining = remaining - ellipsis_width
   for item in spans {
     if remaining <= 0 {
       break
@@ -628,7 +655,21 @@ fn table_truncate_line(
       break
     }
   }
+  let template = if out.length() > 0 { out[out.length() - 1] } else { spans[0] }
+  out.push({ ..template, text: ellipsis, no_wrap: false })
   out
+}
+
+///|
+fn table_wrap_cell_lines(
+  spans : Array[@theme.StyledSpan],
+  width : Int,
+) -> Array[Array[@theme.StyledSpan]] {
+  let breakable : Array[@theme.StyledSpan] = []
+  for item in spans {
+    breakable.push({ ..item, no_wrap: false })
+  }
+  @theme.wrap_spans(breakable, width.max(1))
 }
 
 ///|
@@ -638,7 +679,7 @@ fn table_cell_lines(
   mode : TableNarrowMode,
 ) -> Array[Array[@theme.StyledSpan]] {
   match mode {
-    Wrap => @theme.wrap_spans(spans, width.max(1))
+    Wrap => table_wrap_cell_lines(spans, width)
     Truncate => [table_truncate_line(spans, width.max(1))]
   }
 }
@@ -713,9 +754,12 @@ fn table_fit_widths(widths : Array[Int], target_width : Int) -> Array[Int] {
     return widths
   }
   let col_count = widths.length()
-  let available = (target_width - table_border_overhead(col_count)).max(
-    col_count,
-  )
+  let structural_min = table_structural_min_width(col_count)
+  let available = if target_width < structural_min {
+    col_count
+  } else {
+    target_width - table_border_overhead(col_count)
+  }
   let base = (available / col_count).max(1)
   let extra = available % col_count
   let out : Array[Int] = []
@@ -806,7 +850,16 @@ fn render_table_row_lines(
       } else {
         []
       }
-      append_spans(line, table_align(align, content, widths[col], role))
+      append_spans(
+        line,
+        table_align(
+          align,
+          content,
+          widths[col],
+          role,
+          state.options.table_narrow_mode == Truncate,
+        ),
+      )
     }
     line.push(span(" |", table_border_role()))
     rendered.push(@theme.render_spans(line, state.theme, state.ctx))
@@ -925,6 +978,12 @@ pub fn parse(
 }
 
 ///|
+/// Render an already-parsed cmark document.
+///
+/// `options.flavor` is a parse-only setting and is ignored here: `render_doc`
+/// renders whatever nodes are already present in `doc`, including extension
+/// nodes from a GFM parse. Render-only fields such as table narrow mode and task
+/// checkbox style still apply.
 pub fn render_doc(
   doc : @cmark.Doc,
   width~ : Int,

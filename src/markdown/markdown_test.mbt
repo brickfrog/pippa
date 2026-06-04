@@ -16,6 +16,15 @@ fn assert_line_widths_at_most(rendered : String, width : Int) -> Unit raise {
 }
 
 ///|
+fn max_line_width(rendered : String) -> Int {
+  let mut width = 0
+  for line in @pippa.split_lines(rendered) {
+    width = width.max(@pippa.visible_width(line))
+  }
+  width
+}
+
+///|
 test "parse exposes cmark doc and renderer handles README grade markdown" {
   let source =
     #|# Pippa Markdown
@@ -246,6 +255,17 @@ test "gfm strikethrough and autolinks render through styled spans" {
   assert_true(no_color.contains("\u001b]8;;https://example.com\u001b\\"))
   assert_true(no_color.contains("\u001b]8;;\u001b\\"))
 
+  let bare = render(
+    "https://example.com",
+    width=80,
+    theme~,
+    ctx=no_color_ctx(),
+    link_mode=Osc8,
+    options=MarkdownOptions::gfm(),
+  )
+  assert_eq(stripped(bare), "https://example.com")
+  assert_false(bare.contains("\u001b]8;;https://example.com\u001b\\"))
+
   let styled = render(
     "~~gone~~",
     width=80,
@@ -299,6 +319,31 @@ test "gfm tables align columns and wrap narrow cells by visible width" {
 }
 
 ///|
+test "gfm table wrap preserves long no-wrap cell content" {
+  let source =
+    #|| Code |
+    #||------|
+    #|| `supercalifragilistic` |
+  let rendered = render(
+    source,
+    width=14,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Wrap),
+  )
+  let expected =
+    #|| Code       |
+    #|| ---------- |
+    #|| supercalif |
+    #|| ragilistic |
+  assert_eq(stripped(rendered), expected)
+  assert_true(stripped(rendered).contains("supercalif"))
+  assert_true(stripped(rendered).contains("ragilistic"))
+  assert_line_widths_at_most(stripped(rendered), 14)
+}
+
+///|
 test "gfm tables can truncate narrow cells by visible width" {
   let source =
     #|| Left | Right | Center |
@@ -316,8 +361,36 @@ test "gfm tables can truncate narrow cells by visible width" {
   let expected =
     #|| Left     |    Right |  Center  |
     #|| :------- | -------: | :------: |
-    #|| alpha be |       12 |   mid    |
-    #|| long wor |      300 | centered |
+    #|| alpha b… |       12 |   mid    |
+    #|| long wo… |      300 | centered |
   assert_eq(stripped(rendered), expected)
   assert_line_widths_at_most(stripped(rendered), 34)
+}
+
+///|
+test "gfm table width fits except below structural minimum" {
+  let source =
+    #|| A | B | C | D |
+    #||---|---|---|---|
+    #|| alpha | beta | gamma | delta |
+  let fitted = render(
+    source,
+    width=17,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Wrap),
+  )
+  assert_line_widths_at_most(stripped(fitted), 17)
+
+  let structural_overflow = render(
+    source,
+    width=10,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Wrap),
+  )
+  assert_eq(max_line_width(stripped(structural_overflow)), 17)
+  assert_true(max_line_width(stripped(structural_overflow)) > 10)
 }
