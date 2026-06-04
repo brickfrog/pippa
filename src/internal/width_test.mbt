@@ -34,6 +34,18 @@ test "display_width treats ANSI SGR escapes as zero width" {
 }
 
 ///|
+test "display_width treats OSC escapes as zero width" {
+  assert_eq(
+    display_width("\u001b]8;;http://example.com\u001b\\label\u001b]8;;\u001b\\"),
+    5,
+  )
+  assert_eq(
+    display_width("\u001b]8;;http://example.com\u0007label\u001b]8;;\u0007"),
+    5,
+  )
+}
+
+///|
 test "display_width stops CSI escapes at non-letter final bytes" {
   assert_eq(display_width("\u001b[@ab"), 2)
 }
@@ -61,6 +73,17 @@ test "grapheme_boundaries keeps ANSI runs out of cursor stops" {
   let mixed = "a\u001b[31m界\u001b[0mb"
   @test.assert_eq(grapheme_boundaries(mixed), [0, 1, 11, 12])
   @test.assert_eq(grapheme_boundaries("\u001b[31m"), [0])
+}
+
+///|
+test "grapheme_boundaries keeps OSC 8 close with label text" {
+  let open = "\u001b]8;;http://example.com\u001b\\"
+  let link = open + "ab" + "\u001b]8;;\u001b\\"
+  @test.assert_eq(grapheme_boundaries(link), [
+    0,
+    open.to_array().length() + 1,
+    link.to_array().length(),
+  ])
 }
 
 ///|

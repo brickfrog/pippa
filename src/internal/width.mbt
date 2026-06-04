@@ -7,6 +7,22 @@ fn is_csi_terminator(ch : Char) -> Bool {
 }
 
 ///|
+fn skip_osc_sequence(chars : Array[Char], start : Int) -> Int {
+  let n = chars.length()
+  let mut i = start
+  while i < n {
+    if chars[i] == '\u0007' {
+      return i + 1
+    }
+    if chars[i] == '\u001b' && i + 1 < n && chars[i + 1] == '\\' {
+      return i + 2
+    }
+    i = i + 1
+  }
+  i
+}
+
+///|
 fn skip_ansi_sequence(chars : Array[Char], start : Int) -> Int {
   let n = chars.length()
   let mut i = start + 1
@@ -20,6 +36,8 @@ fn skip_ansi_sequence(chars : Array[Char], start : Int) -> Int {
       if i < n {
         i = i + 1
       }
+    } else if next == ']' {
+      i = skip_osc_sequence(chars, i)
     }
   }
   i
@@ -399,6 +417,38 @@ fn is_sgr_reset_sequence(
 }
 
 ///|
+fn is_osc8_close_sequence(
+  chars : Array[Char],
+  start : Int,
+  end_index : Int,
+) -> Bool {
+  if end_index < start + 5 ||
+    chars[start] != '\u001b' ||
+    chars[start + 1] != ']' ||
+    chars[start + 2] != '8' ||
+    chars[start + 3] != ';' ||
+    chars[start + 4] != ';' {
+    return false
+  }
+  (end_index == start + 6 && chars[start + 5] == '\u0007') ||
+  (
+    end_index == start + 7 &&
+    chars[start + 5] == '\u001b' &&
+    chars[start + 6] == '\\'
+  )
+}
+
+///|
+fn is_trailing_close_sequence(
+  chars : Array[Char],
+  start : Int,
+  end_index : Int,
+) -> Bool {
+  is_sgr_reset_sequence(chars, start, end_index) ||
+  is_osc8_close_sequence(chars, start, end_index)
+}
+
+///|
 fn trailing_sgr_reset_start(chars : Array[Char], from : Int) -> Int {
   let n = chars.length()
   let mut suffix_start = n
@@ -407,7 +457,7 @@ fn trailing_sgr_reset_start(chars : Array[Char], from : Int) -> Int {
     if chars[i] == '\u001b' {
       let start = i
       let next = skip_ansi_sequence(chars, i)
-      if is_sgr_reset_sequence(chars, start, next) {
+      if is_trailing_close_sequence(chars, start, next) {
         if suffix_start == n {
           suffix_start = start
         }
@@ -506,7 +556,7 @@ pub fn grapheme_boundaries(s : String) -> Array[Int] {
   while i < n {
     if chars[i] == '\u001b' {
       let next = skip_ansi_sequence(chars, i)
-      if cluster_open && is_sgr_reset_sequence(chars, i, next) {
+      if cluster_open && is_trailing_close_sequence(chars, i, next) {
         i = next
       } else {
         if cluster_open {

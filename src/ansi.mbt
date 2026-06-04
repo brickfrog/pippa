@@ -211,6 +211,17 @@ pub fn request_clipboard(selection : ClipboardSelection) -> String {
 }
 
 ///|
+fn osc8(params : String, uri : String, label : String) -> String {
+  "\{OSC}8;\{params};\{uri}\{ST}\{label}\{OSC}8;;\{ST}"
+}
+
+///|
+/// Wrap a label in an OSC 8 hyperlink with empty parameters.
+pub fn hyperlink(url : String, label : String) -> String {
+  osc8("", url, label)
+}
+
+///|
 /// Disable all mouse reporting (CSI ?1000l, CSI ?1002l, CSI ?1003l, and CSI ?1006l).
 pub fn disable_mouse() -> String {
   "\{CSI}?1000l\{CSI}?1002l\{CSI}?1003l\{CSI}?1006l"

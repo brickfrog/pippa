@@ -29,6 +29,12 @@ test "visible_width with ANSI" {
 }
 
 ///|
+test "visible_width treats OSC 8 hyperlinks as zero-width escapes" {
+  let link = hyperlink("http://example.com", "label")
+  assert_eq(visible_width(link), visible_width("label"))
+}
+
+///|
 test "visible_width uses terminal cells for Unicode graphemes" {
   let accented = String::from_array(['e', '\u{0301}'])
   let technologist = String::from_array(['👩', '\u{200D}', '💻'])

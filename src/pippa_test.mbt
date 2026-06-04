@@ -9,6 +9,14 @@ test "pippa ansi bold" {
 }
 
 ///|
+test "pippa ansi hyperlink wraps label in OSC 8" {
+  assert_eq(
+    hyperlink("http://example.com", "label"),
+    "\u001b]8;;http://example.com\u001b\\label\u001b]8;;\u001b\\",
+  )
+}
+
+///|
 test "pippa create program" {
   let program : Program[Int, Unit] = Program::new(
     init=fn() { UpdateResult::new(model=42, cmd=Cmd::none()) },
