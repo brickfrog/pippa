@@ -158,6 +158,8 @@ pub(all) struct View {
   cursor_visible : Bool?
   /// Optional terminal window title for this frame.
   window_title : String?
+  /// Optional real terminal cursor shape/blink style for this frame.
+  cursor_style : CursorStyle?
   /// Optional default foreground color for this frame.
   foreground_color : Color?
   /// Optional default background color for this frame.
@@ -179,6 +181,7 @@ pub fn View::new(
   background_color? : Color? = None,
   progress? : ViewProgress? = None,
   mouse_mode? : ViewMouseMode? = None,
+  cursor_style? : CursorStyle? = None,
 ) -> View {
   let cursor_position = cursor_position.map(fn(pos) {
     ViewCursorPosition::new(row=pos.row, col=pos.col)
@@ -188,6 +191,7 @@ pub fn View::new(
     cursor_position,
     cursor_visible,
     window_title,
+    cursor_style,
     foreground_color,
     background_color,
     progress,
@@ -217,6 +221,12 @@ pub fn View::with_cursor_visible(self : View, visible : Bool) -> View {
 /// Set the terminal window title for this frame.
 pub fn View::with_window_title(self : View, title : String) -> View {
   { ..self, window_title: Some(title) }
+}
+
+///|
+/// Set the real terminal cursor shape/blink style for this frame.
+pub fn View::with_cursor_style(self : View, style : CursorStyle) -> View {
+  { ..self, cursor_style: Some(style) }
 }
 
 ///|
@@ -309,6 +319,8 @@ priv enum CmdAction[Msg] {
   SetMouseMode(ViewMouseMode)
   // Set the terminal window title.
   SetWindowTitle(String)
+  // Set the real terminal cursor shape/blink style.
+  SetCursorStyle(CursorStyle)
   // Deliver a typed lifecycle message through the runtime.
   LifecycleAction(LifecycleMsg)
   // Run an external process while the terminal is released.
@@ -357,7 +369,8 @@ pub impl[Msg] Debug for Cmd[Msg] with fn to_repr(self) {
       | SetFocusReporting(_)
       | SetBracketedPaste(_)
       | SetMouseMode(_)
-      | SetWindowTitle(_) => terminal_count = terminal_count + 1
+      | SetWindowTitle(_)
+      | SetCursorStyle(_) => terminal_count = terminal_count + 1
       LifecycleAction(_) => lifecycle_count = lifecycle_count + 1
       ExecProcessAction(_, _) => exec_count = exec_count + 1
       RuntimeErrorAction(_) => error_count = error_count + 1

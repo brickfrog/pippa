@@ -293,6 +293,12 @@ pub fn[Msg] Cmd::set_window_title(title : String) -> Cmd[Msg] {
 }
 
 ///|
+/// Set the real terminal cursor shape/blink style at runtime.
+pub fn[Msg] Cmd::set_cursor_style(style : CursorStyle) -> Cmd[Msg] {
+  { _phantom: [], actions: [SetCursorStyle(style)] }
+}
+
+///|
 /// Clear the terminal window title at runtime.
 pub fn[Msg] Cmd::clear_window_title() -> Cmd[Msg] {
   Cmd::set_window_title("")
@@ -377,6 +383,7 @@ pub fn[A, B] Cmd::map(f : (A) -> B, cmd : Cmd[A]) -> Cmd[B] {
       SetBracketedPaste(enabled) => actions.push(SetBracketedPaste(enabled))
       SetMouseMode(mode) => actions.push(SetMouseMode(mode))
       SetWindowTitle(title) => actions.push(SetWindowTitle(title))
+      SetCursorStyle(style) => actions.push(SetCursorStyle(style))
       LifecycleAction(msg) => actions.push(LifecycleAction(msg))
       ExecProcessAction(process, task) =>
         actions.push(ExecProcessAction(process, fn(result) { f(task(result)) }))
