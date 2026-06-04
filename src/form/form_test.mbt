@@ -96,6 +96,20 @@ fn has_error(
 }
 
 ///|
+fn has_fieldless_error(
+  errors : Array[ValidationError],
+  message : String,
+) -> Bool {
+  let mut found = false
+  for error in errors {
+    if error.field is None && error.message == message {
+      found = true
+    }
+  }
+  found
+}
+
+///|
 test "form values expose typed accessors" {
   let values = FormValues::new()
     .set(name_id(), Text("Ada"))
@@ -279,6 +293,56 @@ test "form submit blocks invalid decoder errors" {
       assert_true(has_error(errors, color_id(), "choose a color"))
     _ => fail("expected blocked decoder error")
   }
+}
+
+///|
+test "form submit merges field validator and decoder errors" {
+  let form : Form[Unit] = Form::new(
+    fields=[
+      Field::text(id=name_id(), label="Name", validators=[
+        Validators::required(),
+      ]),
+    ],
+    decode=fn(_values) {
+      Err([
+        ValidationError::{
+          field: None,
+          message: "decoder rejected",
+          severity: Error,
+        },
+      ])
+    },
+  )
+  let (blocked, _, event) = form.update(Submit)
+  assert_true(event is None)
+  match blocked.status {
+    Blocked(errors) => {
+      assert_true(has_error(errors, name_id(), "Required"))
+      assert_true(has_fieldless_error(errors, "decoder rejected"))
+    }
+    _ => fail("expected merged blocked errors")
+  }
+}
+
+///|
+test "form view renders fieldless validation errors" {
+  let form : Form[Unit] = Form::new(
+    fields=[Field::text(id=name_id(), label="Name")],
+    decode=fn(_values) {
+      Err([
+        ValidationError::{
+          field: None,
+          message: "form rejected",
+          severity: Error,
+        },
+      ])
+    },
+  )
+  let (blocked, _, _) = form.update(Submit)
+  let ctx = @profile.RenderContext::default().with_background(@profile.Light)
+  let view = blocked.view(@theme.default_theme(), ctx)
+  assert_true(@pippa.strip_ansi(view).contains("form rejected"))
+  assert_true(view.contains("\u001b[38;2;185;28;28mform rejected\u001b[0m"))
 }
 
 ///|

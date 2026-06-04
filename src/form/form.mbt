@@ -968,6 +968,21 @@ fn form_apply_errors_to_fields(
 }
 
 ///|
+fn form_merge_errors(
+  left : Array[ValidationError],
+  right : Array[ValidationError],
+) -> Array[ValidationError] {
+  let merged : Array[ValidationError] = []
+  for error in left {
+    merged.push(error)
+  }
+  for error in right {
+    merged.push(error)
+  }
+  merged
+}
+
+///|
 fn form_reset_fields(fields : Array[Field]) -> Array[Field] {
   let out : Array[Field] = []
   for field in fields {
@@ -1152,34 +1167,39 @@ pub fn[A] Form::update(
         self.fields,
         self.values,
       )
-      if !validation_errors.is_empty() {
-        return (
-          {
-            ..self,
-            fields: validated_fields,
-            status: Blocked(validation_errors),
-          },
-          @pippa.Cmd::none(),
-          None,
-        )
-      }
       match (self.decode)(self.values) {
         Ok(decoded) =>
-          (
-            { ..self, fields: validated_fields, status: Submitted(decoded) },
-            @pippa.Cmd::none(),
-            Submitted(decoded),
-          )
-        Err(errors) =>
+          if validation_errors.is_empty() {
+            (
+              { ..self, fields: validated_fields, status: Submitted(decoded) },
+              @pippa.Cmd::none(),
+              Submitted(decoded),
+            )
+          } else {
+            (
+              {
+                ..self,
+                fields: form_apply_errors_to_fields(
+                  validated_fields, validation_errors,
+                ),
+                status: Blocked(validation_errors),
+              },
+              @pippa.Cmd::none(),
+              None,
+            )
+          }
+        Err(errors) => {
+          let merged = form_merge_errors(validation_errors, errors)
           (
             {
               ..self,
-              fields: form_apply_errors_to_fields(validated_fields, errors),
-              status: Blocked(errors),
+              fields: form_apply_errors_to_fields(validated_fields, merged),
+              status: Blocked(merged),
             },
             @pippa.Cmd::none(),
             None,
           )
+        }
       }
     }
     Reset => {
@@ -1206,6 +1226,21 @@ fn field_validation_errors(field : Field) -> Array[ValidationError] {
     Invalid(errors) => errors
     _ => []
   }
+}
+
+///|
+fn[A] form_fieldless_errors(status : FormStatus[A]) -> Array[ValidationError] {
+  let out : Array[ValidationError] = []
+  match status {
+    Blocked(errors) =>
+      for error in errors {
+        if error.field is None {
+          out.push(error)
+        }
+      }
+    _ => ()
+  }
+  out
 }
 
 ///|
@@ -1268,6 +1303,24 @@ fn form_render_field(
 }
 
 ///|
+fn form_render_fieldless_errors(
+  errors : Array[ValidationError],
+  theme : @theme.Theme,
+  ctx : @profile.RenderContext,
+) -> String? {
+  if errors.is_empty() {
+    return None
+  }
+  let lines : Array[String] = []
+  for error in errors {
+    lines.push(
+      theme.render(@theme.RoleKey::form("validation.error"), error.message, ctx),
+    )
+  }
+  Some(lines.join("\n"))
+}
+
+///|
 pub fn[A] Form::view(
   self : Form[A],
   theme : @theme.Theme,
@@ -1275,6 +1328,11 @@ pub fn[A] Form::view(
 ) -> String {
   let focused = self.focused_id()
   let blocks : Array[String] = []
+  match
+    form_render_fieldless_errors(form_fieldless_errors(self.status), theme, ctx) {
+    Some(summary) => blocks.push(summary)
+    None => ()
+  }
   for field in self.fields {
     if field_is_visible(field, self.values) {
       blocks.push(
