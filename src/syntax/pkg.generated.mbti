@@ -1,0 +1,149 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/syntax"
+
+import {
+  "brickfrog/pippa/profile",
+  "brickfrog/pippa/theme",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn diff_lexer() -> Lexer
+
+pub fn highlight(SyntaxRegistry, String, String) -> Result[Highlighted, LexError]
+
+pub fn highlighted_spans(Highlighted, SyntaxTheme) -> Array[@theme.StyledSpan]
+
+pub fn json_lexer() -> Lexer
+
+pub fn moonbit_lexer() -> Lexer
+
+pub fn plain_text_lexer() -> Lexer
+
+pub fn render_highlighted(Highlighted, SyntaxTheme, @theme.Theme, @profile.RenderContext) -> String
+
+pub fn shell_lexer() -> Lexer
+
+// Errors
+
+// Types and methods
+pub(all) struct Highlighted {
+  source : String
+  tokens : Array[TokenSpan]
+} derive(Eq, @debug.Debug)
+pub impl Show for Highlighted
+
+pub(all) enum LexAction {
+  Emit(SyntaxKind)
+  Push(StateId)
+  Pop
+  Stay
+  Delegate(String)
+} derive(Eq, @debug.Debug)
+pub impl Show for LexAction
+
+pub(all) enum LexError {
+  UnknownLanguage(String)
+  MissingState(StateId)
+  InvalidRegex(String)
+  EmptyRegexMatch(String)
+  StateStackUnderflow
+} derive(Eq, @debug.Debug)
+pub impl Show for LexError
+
+pub(all) enum Lexer {
+  PlainText
+  RuleBased(RuleLexer)
+} derive(@debug.Debug)
+pub impl Eq for Lexer
+pub impl Show for Lexer
+
+pub(all) enum LiteralKind {
+  String
+  Char
+  Number
+  Bool
+  Regex
+} derive(Eq, @debug.Debug)
+pub impl Show for LiteralKind
+
+pub(all) enum NameKind {
+  Variable
+  Function
+  Type
+  Module
+  Attribute
+  Constant
+} derive(Eq, @debug.Debug)
+pub impl Show for NameKind
+
+pub(all) enum Pattern {
+  Literal(String)
+  CharSet(String)
+  Regex(String)
+  Until(String)
+} derive(Eq, @debug.Debug)
+pub impl Show for Pattern
+
+pub(all) struct Rule {
+  pattern : Pattern
+  action : LexAction
+} derive(Eq, @debug.Debug)
+pub impl Show for Rule
+
+pub(all) struct RuleLexer {
+  initial : StateId
+  states : Map[StateId, Array[Rule]]
+} derive(@debug.Debug)
+pub fn RuleLexer::new(StateId, Map[StateId, Array[Rule]]) -> Self
+pub impl Eq for RuleLexer
+pub impl Show for RuleLexer
+
+pub(all) enum StateId {
+  StateId(String)
+} derive(Eq, Hash, @debug.Debug)
+pub fn StateId::new(String) -> Self
+pub fn StateId::value(Self) -> String
+pub impl Show for StateId
+
+pub(all) enum SyntaxKind {
+  Text
+  Whitespace
+  Comment
+  Keyword
+  Name(NameKind)
+  Literal(LiteralKind)
+  Operator
+  Punctuation
+  Escape
+  Error
+} derive(Eq, @debug.Debug)
+pub impl Show for SyntaxKind
+
+pub(all) struct SyntaxRegistry {
+  lexers : Map[String, Lexer]
+} derive(@debug.Debug)
+pub fn SyntaxRegistry::default() -> Self
+pub fn SyntaxRegistry::lexer(Self, String) -> Lexer?
+pub fn SyntaxRegistry::new() -> Self
+pub fn SyntaxRegistry::with_lexer(Self, Array[String], Lexer) -> Self
+pub impl Eq for SyntaxRegistry
+pub impl Show for SyntaxRegistry
+
+pub(all) struct SyntaxTheme {
+  role_for : (SyntaxKind) -> @theme.RoleKey
+}
+pub fn SyntaxTheme::default() -> Self
+pub fn SyntaxTheme::role(Self, SyntaxKind) -> @theme.RoleKey
+
+pub(all) struct TokenSpan {
+  start_byte : Int
+  end_byte : Int
+  kind : SyntaxKind
+} derive(Eq, @debug.Debug)
+pub impl Show for TokenSpan
+
+// Type aliases
+
+// Traits
+

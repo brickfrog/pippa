@@ -675,6 +675,132 @@ pub fn default_theme() -> Theme {
       dark=@pippa.color_rgb(156, 163, 175),
     ),
   )
+  .with_role(
+    RoleKey::syntax("text"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(31, 41, 55),
+      dark=@pippa.color_rgb(229, 231, 235),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("comment"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(100, 116, 139),
+      dark=@pippa.color_rgb(148, 163, 184),
+    ).italic(),
+  )
+  .with_role(
+    RoleKey::syntax("keyword"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(147, 51, 234),
+      dark=@pippa.color_rgb(196, 181, 253),
+    ).bold(),
+  )
+  .with_role(
+    RoleKey::syntax("string"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(21, 128, 61),
+      dark=@pippa.color_rgb(134, 239, 172),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("char"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(22, 101, 52),
+      dark=@pippa.color_rgb(74, 222, 128),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("number"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(202, 138, 4),
+      dark=@pippa.color_rgb(253, 224, 71),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("bool"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(14, 116, 144),
+      dark=@pippa.color_rgb(103, 232, 249),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("regex"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(5, 150, 105),
+      dark=@pippa.color_rgb(94, 234, 212),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("variable"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(31, 41, 55),
+      dark=@pippa.color_rgb(229, 231, 235),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("function"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(37, 99, 235),
+      dark=@pippa.color_rgb(147, 197, 253),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("type"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(126, 34, 206),
+      dark=@pippa.color_rgb(216, 180, 254),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("module"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(15, 118, 110),
+      dark=@pippa.color_rgb(94, 234, 212),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("attribute"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(190, 24, 93),
+      dark=@pippa.color_rgb(244, 114, 182),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("constant"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(194, 65, 12),
+      dark=@pippa.color_rgb(251, 146, 60),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("operator"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(75, 85, 99),
+      dark=@pippa.color_rgb(209, 213, 219),
+    ).bold(),
+  )
+  .with_role(
+    RoleKey::syntax("punctuation"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(107, 114, 128),
+      dark=@pippa.color_rgb(156, 163, 175),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("escape"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(14, 165, 233),
+      dark=@pippa.color_rgb(125, 211, 252),
+    ),
+  )
+  .with_role(
+    RoleKey::syntax("error"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(185, 28, 28),
+      dark=@pippa.color_rgb(248, 113, 113),
+    ).underline(),
+  )
 }
 
 ///|

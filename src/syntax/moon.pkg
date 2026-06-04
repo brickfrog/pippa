@@ -1,12 +1,11 @@
 import {
-  "brickfrog/pippa",
-  "brickfrog/pippa/internal",
   "brickfrog/pippa/profile",
-  "brickfrog/pippa/syntax",
   "brickfrog/pippa/theme",
-  "moonbit-community/cmark/cmark",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/string",
 }
 
 import {
+  "brickfrog/pippa",
   "moonbitlang/core/test",
 } for "test"
