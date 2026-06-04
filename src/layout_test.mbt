@@ -35,6 +35,16 @@ test "visible_width treats OSC 8 hyperlinks as zero-width escapes" {
 }
 
 ///|
+test "visible_width does not hide unterminated OSC text" {
+  assert_eq(
+    visible_width("\u001b]8;;http://xvisible"),
+    visible_width("8;;http://xvisible"),
+  )
+  let link = hyperlink("http://x", "visible")
+  assert_eq(visible_width(link), visible_width("visible"))
+}
+
+///|
 test "visible_width uses terminal cells for Unicode graphemes" {
   let accented = String::from_array(['e', '\u{0301}'])
   let technologist = String::from_array(['👩', '\u{200D}', '💻'])

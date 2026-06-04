@@ -19,7 +19,7 @@ fn skip_osc_sequence(chars : Array[Char], start : Int) -> Int {
     }
     i = i + 1
   }
-  i
+  start
 }
 
 ///|
