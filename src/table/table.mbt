@@ -192,11 +192,14 @@ pub fn Table::width(self : Table, width : Int) -> Table {
 }
 
 ///|
-/// Set a best-effort table height cap.
+/// Set the table's target visible height.
 ///
-/// The static renderer caps rendered data rows while preserving table structure
-/// such as the bottom border. Lip Gloss-style overflow rows are tracked as
-/// follow-up work.
+/// When the fully rendered table is taller than `height`, the renderer keeps
+/// the table frame intact, renders the data rows that fit, and adds an overflow
+/// row made of `…` cells to indicate hidden rows. Row fitting uses the rendered
+/// height of wrapped or styled cells, so multi-line rows consume their full
+/// visible height. A height greater than or equal to the full table height does
+/// not change the rendered bytes.
 pub fn Table::height(self : Table, height : Int) -> Table {
   { ..self, height: @internal.clamp_non_negative(height) }
 }
@@ -977,14 +980,21 @@ fn blocks_height(blocks : Array[String]) -> Int {
 }
 
 ///|
+fn append_blocks(target : Array[String], blocks : Array[String]) -> Unit {
+  for block in blocks {
+    target.push(block)
+  }
+}
+
+///|
 fn can_fit_blocks(
   table : Table,
   blocks : Array[String],
   candidate : String,
-  reserved_bottom : Int,
+  reserved_height : Int,
 ) -> Bool {
   table.height <= 0 ||
-  blocks_height(blocks) + block_height(candidate) + reserved_bottom <=
+  blocks_height(blocks) + block_height(candidate) + reserved_height <=
   table.height
 }
 
@@ -993,9 +1003,9 @@ fn maybe_push_block(
   table : Table,
   blocks : Array[String],
   block : String,
-  reserved_bottom : Int,
+  reserved_height : Int,
 ) -> Bool {
-  if can_fit_blocks(table, blocks, block, reserved_bottom) {
+  if can_fit_blocks(table, blocks, block, reserved_height) {
     blocks.push(block)
     true
   } else {
@@ -1004,12 +1014,129 @@ fn maybe_push_block(
 }
 
 ///|
-fn bottom_reservation(table : Table) -> Int {
-  if table.border_bottom {
-    1
-  } else {
-    0
+fn render_data_row_blocks(
+  table : Table,
+  widths : Array[Int],
+  row_index : Int,
+) -> Array[String] {
+  let blocks : Array[String] = []
+  blocks.push(render_row(table, row_index, table.rows[row_index], widths))
+  if table.border_row && row_index < table.rows.length() - 1 {
+    blocks.push(render_middle_border(table, widths))
   }
+  blocks
+}
+
+///|
+fn render_overflow_row(
+  table : Table,
+  row_index : Int,
+  widths : Array[Int],
+) -> String {
+  let cells : Array[String] = []
+  for _ in 0..<widths.length() {
+    cells.push("…")
+  }
+  render_row(table, row_index, cells, widths)
+}
+
+///|
+fn render_full_blocks(table : Table, widths : Array[Int]) -> Array[String] {
+  let blocks : Array[String] = []
+  if table.border_top {
+    blocks.push(render_top_border(table, widths))
+  }
+  if !table.headers.is_empty() {
+    blocks.push(render_row(table, HEADER_ROW, table.headers, widths))
+    if table.border_header {
+      blocks.push(render_middle_border(table, widths))
+    }
+  }
+  for row_index in 0..<table.rows.length() {
+    append_blocks(blocks, render_data_row_blocks(table, widths, row_index))
+  }
+  if table.border_bottom {
+    blocks.push(render_bottom_border(table, widths))
+  }
+  blocks
+}
+
+///|
+fn maybe_push_table_prefix(
+  table : Table,
+  blocks : Array[String],
+  widths : Array[Int],
+  reserved_height : Int,
+) -> Unit {
+  if table.border_top {
+    ignore(
+      maybe_push_block(
+        table,
+        blocks,
+        render_top_border(table, widths),
+        reserved_height,
+      ),
+    )
+  }
+  if !table.headers.is_empty() {
+    ignore(
+      maybe_push_block(
+        table,
+        blocks,
+        render_row(table, HEADER_ROW, table.headers, widths),
+        reserved_height,
+      ),
+    )
+    if table.border_header {
+      ignore(
+        maybe_push_block(
+          table,
+          blocks,
+          render_middle_border(table, widths),
+          reserved_height,
+        ),
+      )
+    }
+  }
+}
+
+///|
+fn render_capped_blocks(table : Table, widths : Array[Int]) -> Array[String] {
+  let blocks : Array[String] = []
+  let bottom = if table.border_bottom {
+    render_bottom_border(table, widths)
+  } else {
+    ""
+  }
+  let bottom_height = if table.border_bottom { block_height(bottom) } else { 0 }
+  maybe_push_table_prefix(table, blocks, widths, bottom_height)
+  let mut row_index = 0
+  while row_index < table.rows.length() {
+    let row_blocks = render_data_row_blocks(table, widths, row_index)
+    let row_height = blocks_height(row_blocks)
+    let overflow_height = if row_index < table.rows.length() - 1 {
+      block_height(render_overflow_row(table, row_index + 1, widths))
+    } else {
+      0
+    }
+    if blocks_height(blocks) + row_height + overflow_height + bottom_height >
+      table.height {
+      break
+    }
+    append_blocks(blocks, row_blocks)
+    row_index = row_index + 1
+  }
+  if row_index < table.rows.length() {
+    let overflow = render_overflow_row(table, row_index, widths)
+    ignore(maybe_push_block(table, blocks, overflow, bottom_height))
+  }
+  if table.border_bottom {
+    if blocks_height(blocks) + bottom_height <= table.height ||
+      blocks.is_empty() {
+      blocks.push(bottom)
+    }
+  }
+  blocks
 }
 
 ///|
@@ -1024,57 +1151,11 @@ pub fn Table::render(self : Table) -> String {
     natural_widths(self, count, fixed_widths),
     fixed_widths,
   )
-  let rows : Array[String] = []
-  let reserved_bottom = bottom_reservation(self)
-  if self.border_top {
-    ignore(
-      maybe_push_block(
-        self,
-        rows,
-        render_top_border(self, widths),
-        reserved_bottom,
-      ),
-    )
+  let full_blocks = render_full_blocks(self, widths)
+  if self.height <= 0 || self.height >= blocks_height(full_blocks) {
+    return @internal.join_lines(full_blocks)
   }
-  if !self.headers.is_empty() {
-    let header = render_row(self, HEADER_ROW, self.headers, widths)
-    ignore(maybe_push_block(self, rows, header, reserved_bottom))
-    if self.border_header {
-      ignore(
-        maybe_push_block(
-          self,
-          rows,
-          render_middle_border(self, widths),
-          reserved_bottom,
-        ),
-      )
-    }
-  }
-  for row_index in 0..<self.rows.length() {
-    let row = render_row(self, row_index, self.rows[row_index], widths)
-    if !maybe_push_block(self, rows, row, reserved_bottom) {
-      break
-    }
-    if self.border_row && row_index < self.rows.length() - 1 {
-      ignore(
-        maybe_push_block(
-          self,
-          rows,
-          render_middle_border(self, widths),
-          reserved_bottom,
-        ),
-      )
-    }
-  }
-  if self.border_bottom {
-    let bottom = render_bottom_border(self, widths)
-    if self.height <= 0 || blocks_height(rows) < self.height {
-      rows.push(bottom)
-    } else if rows.is_empty() && self.height > 0 {
-      rows.push(bottom)
-    }
-  }
-  @internal.join_lines(rows)
+  @internal.join_lines(render_capped_blocks(self, widths))
 }
 
 ///|

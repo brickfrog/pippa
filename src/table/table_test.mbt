@@ -236,6 +236,53 @@ test "table closes first wrapped segment after mid-content restyle" {
 test "table height caps rows while preserving bottom border" {
   let actual = new().row(["one"]).row(["two"]).row(["three"]).height(4).render()
   assert_eq(
-    actual, "┌─────┐\n│one  │\n│two  │\n└─────┘",
+    actual, "┌─────┐\n│one  │\n│…    │\n└─────┘",
+  )
+}
+
+///|
+test "table height renders overflow row while preserving borders" {
+  let actual = new()
+    .headers(["Item", "Qty"])
+    .row(["one", "1"])
+    .row(["two", "2"])
+    .row(["three", "3"])
+    .height(6)
+    .render()
+  assert_eq(@pippa.line_count(actual), 6)
+  assert_eq(
+    actual,
+    "┌─────┬───┐\n" +
+    "│Item │Qty│\n" +
+    "├─────┼───┤\n" +
+    "│one  │1  │\n" +
+    "│…    │…  │\n" +
+    "└─────┴───┘",
+  )
+}
+
+///|
+test "table height at least content height is no-op" {
+  let table = new().headers(["Item"]).row(["one"]).row(["two"])
+  assert_eq(table.height(99).render(), table.render())
+}
+
+///|
+test "table height accounts for wrapped row height before overflow" {
+  let actual = new()
+    .row(["abcdefghij"])
+    .row(["tail"])
+    .row(["last"])
+    .width(8)
+    .height(5)
+    .render()
+  assert_eq(@pippa.line_count(actual), 5)
+  assert_eq(
+    actual,
+    "┌──────┐\n" +
+    "│abcdef│\n" +
+    "│ghij  │\n" +
+    "│…     │\n" +
+    "└──────┘",
   )
 }
