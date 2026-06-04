@@ -654,11 +654,7 @@ fn fit_line_width_known(
     let truncated_width = style_visible_width(truncated)
     return pad_line_known_width(truncated, truncated_width, target_width, align)
   }
-  if width >= target_width {
-    line
-  } else {
-    pad_line_known_width(line, width, target_width, align)
-  }
+  pad_line_known_width(line, width, target_width, align)
 }
 
 ///|
