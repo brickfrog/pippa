@@ -23,7 +23,7 @@ fn skip_osc_sequence(chars : Array[Char], start : Int) -> Int {
 }
 
 ///|
-fn skip_ansi_sequence(chars : Array[Char], start : Int) -> Int {
+pub fn skip_ansi_sequence(chars : Array[Char], start : Int) -> Int {
   let n = chars.length()
   let mut i = start + 1
   if i < n {

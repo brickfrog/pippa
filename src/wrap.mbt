@@ -28,36 +28,12 @@ fn wrap_chars_to_string(
 }
 
 ///|
-fn wrap_is_csi_terminator(ch : Char) -> Bool {
-  ch >= '@' && ch <= '~'
-}
-
-///|
-fn wrap_skip_ansi_sequence(chars : Array[Char], start : Int) -> Int {
-  let n = chars.length()
-  let mut i = start + 1
-  if i < n {
-    let next = chars[i]
-    i = i + 1
-    if next == '[' {
-      while i < n && !wrap_is_csi_terminator(chars[i]) {
-        i = i + 1
-      }
-      if i < n {
-        i = i + 1
-      }
-    }
-  }
-  i
-}
-
-///|
 fn wrap_cluster_first_text_char(cluster : String) -> Char? {
   let chars = cluster.to_array()
   let mut i = 0
   while i < chars.length() {
     if chars[i] == '\u001b' {
-      i = wrap_skip_ansi_sequence(chars, i)
+      i = @internal.skip_ansi_sequence(chars, i)
     } else {
       return Some(chars[i])
     }
@@ -113,7 +89,7 @@ fn wrap_write_ansi_sequences(buf : StringBuilder, cluster : String) -> Unit {
   let mut i = 0
   while i < chars.length() {
     if chars[i] == '\u001b' {
-      let next = wrap_skip_ansi_sequence(chars, i)
+      let next = @internal.skip_ansi_sequence(chars, i)
       wrap_write_chars(buf, chars, i, next)
       i = next
     } else {
@@ -235,8 +211,8 @@ fn wrap_line_by_words(line : String, width : Int) -> String {
 ///|
 /// Wrap text to `width` visible terminal cells at word boundaries.
 ///
-/// CSI and bare two-byte ESC sequences follow `visible_width`'s zero-width
-/// escape handling, and printable text is walked on
+/// CSI, OSC, and bare two-byte ESC sequences follow `visible_width`'s
+/// zero-width escape handling, and printable text is walked on
 /// `@internal.grapheme_boundaries`, so hard breaks never split a grapheme
 /// cluster. Newlines already present in `text` delimit independent paragraphs.
 /// A non-positive `width` returns `text` unchanged.
