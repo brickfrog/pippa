@@ -155,3 +155,29 @@ test "render reflows the parsed AST at different widths" {
   assert_line_widths_at_most(narrow, 18)
   assert_line_widths_at_most(wide, 42)
 }
+
+///|
+test "non-positive width disables paragraph blockquote and list wrapping" {
+  let source =
+    #|alpha beta gamma delta
+    #|
+    #|> quoted words should not wrap when width is disabled
+    #|
+    #|- list words should not wrap when width is disabled
+  let expected =
+    #|alpha beta gamma delta
+    #|
+    #|| quoted words should not wrap when width is disabled
+    #|
+    #|- list words should not wrap when width is disabled
+  let theme = @theme.default_theme()
+  let ctx = no_color_ctx()
+  assert_eq(
+    stripped(render(source, width=0, theme~, ctx~, link_mode=Plain)),
+    expected,
+  )
+  assert_eq(
+    stripped(render(source, width=-1, theme~, ctx~, link_mode=Plain)),
+    expected,
+  )
+}

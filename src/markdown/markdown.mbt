@@ -79,7 +79,7 @@ fn render_wrapped_lines(
     return []
   }
   @pippa.split_lines(
-    @theme.render_wrapped_spans(spans, width.max(1), state.theme, state.ctx),
+    @theme.render_wrapped_spans(spans, width, state.theme, state.ctx),
   )
 }
 
@@ -291,12 +291,21 @@ fn render_thematic_break(state : RenderState) -> Array[String] {
 }
 
 ///|
+fn child_width(parent_width : Int, consumed_width : Int) -> Int {
+  if parent_width <= 0 {
+    parent_width
+  } else {
+    (parent_width - consumed_width).max(1)
+  }
+}
+
+///|
 fn render_blockquote_lines(
   quote : @cmark.BlockQuote,
   state : RenderState,
 ) -> Array[String] {
   let prefix_width = 2
-  let nested = { ..state, width: (state.width - prefix_width).max(1) }
+  let nested = { ..state, width: child_width(state.width, prefix_width) }
   let prefix = @theme.render_spans(
     [
       span("|", @theme.RoleKey::markdown("blockquote")),
@@ -320,7 +329,7 @@ fn render_list_item_lines(
   let marker_text = if item.marker.v == "" { "-" } else { item.marker.v }
   let gap = String::make(item.after_marker.max(1), ' ')
   let marker_width = @pippa.visible_width(marker_text + gap)
-  let nested = { ..state, width: (state.width - marker_width).max(1) }
+  let nested = { ..state, width: child_width(state.width, marker_width) }
   let marker = @theme.render_spans(
     [
       span(marker_text, @theme.RoleKey::markdown("list.marker")),
