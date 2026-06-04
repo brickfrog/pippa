@@ -586,6 +586,15 @@ fn render_item_block_lines(
 }
 
 ///|
+fn render_connector_block(style : @pippa.Style, connector : String) -> String {
+  let rows : Array[String] = []
+  for line in @pippa.split_lines(connector) {
+    rows.push(style.render(line))
+  }
+  @internal.join_lines(rows)
+}
+
+///|
 fn render_item_line(
   parent_prefix : String,
   connector : String,
@@ -640,7 +649,7 @@ fn render_tree(
       (renderer.enumerator)(children, i),
       max_width,
     )
-    let connector = enum_style.render(connector)
+    let connector = render_connector_block(enum_style, connector)
     let child_indent = indent_style.render((renderer.indenter)(children, i))
     let indent = child_indent + renderer.item_indent
     let item_lines = render_item_block_lines(

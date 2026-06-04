@@ -186,6 +186,23 @@ test "tree trims join padding before styled multiline item resets" {
 }
 
 ///|
+test "tree styles multiline connector lines independently" {
+  let actual = new()
+    .enumerator_func(fn(_children, _index) { "|\n|" })
+    .enumerator_style(@pippa.style().bg_color(5))
+    .child_leaf("A")
+    .render()
+  let expected = @pippa.bg_color(5) +
+    "|" +
+    @pippa.reset() +
+    " A\n" +
+    @pippa.bg_color(5) +
+    "|" +
+    @pippa.reset()
+  assert_eq(actual, expected)
+}
+
+///|
 test "tree styles connector alignment padding" {
   let actual = new()
     .enumerator_func(fn(_children, i) { if i == 0 { ">" } else { "====>" } })
