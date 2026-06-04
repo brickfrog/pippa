@@ -20,6 +20,13 @@ test "word_wrap keeps ANSI escapes intact while wrapping" {
 }
 
 ///|
+test "word_wrap preserves trailing non-reset ANSI bytes" {
+  let trailing_style = "word\u001b[31m"
+  assert_eq(word_wrap(trailing_style, 10), trailing_style)
+  assert_eq(word_wrap("alpha \{trailing_style}", 5), "alpha\n\{trailing_style}")
+}
+
+///|
 test "word_wrap keeps odd-width CJK graphemes intact" {
   assert_eq(word_wrap("你好世界", 3), "你\n好\n世\n界")
 }

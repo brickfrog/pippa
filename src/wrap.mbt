@@ -46,15 +46,6 @@ fn wrap_skip_ansi_sequence(chars : Array[Char], start : Int) -> Int {
       if i < n {
         i = i + 1
       }
-    } else if next == ']' || next == 'P' {
-      while i < n {
-        if chars[i] == '\u0007' {
-          return i + 1
-        } else if chars[i] == '\u001b' && i + 1 < n && chars[i + 1] == '\\' {
-          return i + 2
-        }
-        i = i + 1
-      }
     }
   }
   i
@@ -94,6 +85,12 @@ fn wrap_clusters(line : String) -> (Array[String], Array[Int], Array[Bool]) {
     clusters.push(cluster)
     widths.push(visible_width(cluster))
     spaces.push(wrap_is_space_cluster(cluster))
+  }
+  let last_boundary = boundaries[boundaries.length() - 1]
+  if last_boundary < chars.length() {
+    clusters.push(wrap_chars_to_string(chars, last_boundary, chars.length()))
+    widths.push(0)
+    spaces.push(false)
   }
   (clusters, widths, spaces)
 }
@@ -238,10 +235,11 @@ fn wrap_line_by_words(line : String, width : Int) -> String {
 ///|
 /// Wrap text to `width` visible terminal cells at word boundaries.
 ///
-/// ANSI escape sequences are copied as zero-width text, and wrapping walks the
-/// input on `@internal.grapheme_boundaries`, so hard breaks never split a
-/// grapheme cluster. Newlines already present in `text` delimit independent
-/// paragraphs. A non-positive `width` returns `text` unchanged.
+/// CSI and bare two-byte ESC sequences follow `visible_width`'s zero-width
+/// escape handling, and printable text is walked on
+/// `@internal.grapheme_boundaries`, so hard breaks never split a grapheme
+/// cluster. Newlines already present in `text` delimit independent paragraphs.
+/// A non-positive `width` returns `text` unchanged.
 pub fn word_wrap(text : String, width : Int) -> String {
   if width <= 0 {
     return text
