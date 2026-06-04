@@ -173,7 +173,9 @@ test "wrap_spans keeps emoji ZWJ graphemes intact" {
 ///|
 test "wrap_spans hard-breaks overlong breakable words" {
   let spans = [StyledSpan::new("abcdefghi", span_wrap_role())]
-  assert_eq(span_wrap_plain_lines(spans, 4), "abcd\nefgh\ni")
+  let wrapped = span_wrap_plain_lines(spans, 4)
+  assert_eq(@pippa.line_count(wrapped), 3)
+  assert_eq(wrapped, "abcd\nefgh\ni")
   assert_wrap_invariant(spans, 4)
 }
 
@@ -193,10 +195,12 @@ test "wrap_spans leaves non-positive widths unwrapped" {
 test "wrap_spans places overlong no_wrap spans alone without dropping content" {
   let role = span_wrap_role()
   let spans = [
-    StyledSpan::new("abc", role),
-    StyledSpan::new(" uvwxyz", role, no_wrap=true),
+    StyledSpan::new("a", role),
+    StyledSpan::new("uvwxyz", role, no_wrap=true),
   ]
-  assert_eq(span_wrap_plain_lines(spans, 3), "abc\n uvwxyz")
+  let wrapped = span_wrap_plain_lines(spans, 3)
+  assert_eq(@pippa.line_count(wrapped), 2)
+  assert_eq(wrapped, "a\nuvwxyz")
   assert_wrap_invariant(spans, 3)
 }
 

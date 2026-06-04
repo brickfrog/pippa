@@ -359,8 +359,7 @@ pub fn wrap_spans(
       let mut word_index = word_start
       while word_index < index {
         let next_width = unit_width(units[word_index])
-        if current_width > 0 &&
-          (next_width > width || current_width + next_width > width) {
+        if current_width > 0 && current_width + next_width > width {
           current = finish_span_line(lines, current)
           current_width = 0
         }
