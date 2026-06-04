@@ -92,3 +92,121 @@ test "styled spans wrap on plaintext and render ANSI last" {
   assert_true(rendered.contains("\u001b[32m"))
   assert_true(rendered.contains("\u001b[1mstrong words"))
 }
+
+///|
+fn span_wrap_role() -> RoleKey {
+  RoleKey::markdown("paragraph")
+}
+
+///|
+fn span_wrap_plain_lines(spans : Array[StyledSpan], width : Int) -> String {
+  let out : Array[String] = []
+  for line in wrap_spans(spans, width) {
+    out.push(span_plain_text(line))
+  }
+  out.join("\n")
+}
+
+///|
+fn is_single_grapheme(text : String) -> Bool {
+  @internal.grapheme_boundaries(text).length() == 2
+}
+
+///|
+fn line_allowed_overflow(line : Array[StyledSpan], width : Int) -> Bool {
+  let text = span_plain_text(line)
+  let line_width = @internal.display_width(text)
+  if line_width <= width {
+    return true
+  }
+  if line.length() != 1 {
+    return false
+  }
+  let unit = line[0]
+  let unit_width = @internal.display_width(unit.text)
+  (unit.no_wrap || is_single_grapheme(unit.text)) && unit_width > width
+}
+
+///|
+fn assert_wrap_invariant(spans : Array[StyledSpan], width : Int) -> Unit raise {
+  let lines = wrap_spans(spans, width)
+  if width <= 0 {
+    assert_eq(lines.length(), 1)
+    assert_eq(span_plain_text(lines[0]), span_plain_text(spans))
+    return
+  }
+  for line in lines {
+    assert_true(line_allowed_overflow(line, width))
+  }
+}
+
+///|
+test "wrap_spans keeps ASCII lines within width" {
+  let spans = [StyledSpan::new("alpha beta gamma", span_wrap_role())]
+  assert_eq(span_wrap_plain_lines(spans, 10), "alpha beta\ngamma")
+  assert_wrap_invariant(spans, 10)
+}
+
+///|
+test "wrap_spans keeps wide CJK lines within width" {
+  let spans = [StyledSpan::new("你你你", span_wrap_role())]
+  assert_eq(span_wrap_plain_lines(spans, 4), "你你\n你")
+  assert_wrap_invariant(spans, 4)
+}
+
+///|
+test "wrap_spans keeps combining marks with their base grapheme" {
+  let accented = String::from_array(['a', '\u{0301}'])
+  let spans = [StyledSpan::new("x" + accented + "y", span_wrap_role())]
+  assert_eq(span_wrap_plain_lines(spans, 2), "x" + accented + "\ny")
+  assert_wrap_invariant(spans, 2)
+}
+
+///|
+test "wrap_spans keeps emoji ZWJ graphemes intact" {
+  let technologist = String::from_array(['\u{1F469}', '\u{200D}', '\u{1F4BB}'])
+  let spans = [StyledSpan::new("x" + technologist + "y", span_wrap_role())]
+  assert_eq(span_wrap_plain_lines(spans, 3), "x" + technologist + "\ny")
+  assert_wrap_invariant(spans, 3)
+}
+
+///|
+test "wrap_spans hard-breaks overlong breakable words" {
+  let spans = [StyledSpan::new("abcdefghi", span_wrap_role())]
+  assert_eq(span_wrap_plain_lines(spans, 4), "abcd\nefgh\ni")
+  assert_wrap_invariant(spans, 4)
+}
+
+///|
+test "wrap_spans leaves non-positive widths unwrapped" {
+  let spans = [
+    StyledSpan::new("alpha ", span_wrap_role()),
+    StyledSpan::new("beta gamma", span_wrap_role()),
+  ]
+  assert_eq(span_wrap_plain_lines(spans, 0), "alpha beta gamma")
+  assert_eq(span_wrap_plain_lines(spans, -1), "alpha beta gamma")
+  assert_wrap_invariant(spans, 0)
+  assert_wrap_invariant(spans, -1)
+}
+
+///|
+test "wrap_spans places overlong no_wrap spans alone without dropping content" {
+  let role = span_wrap_role()
+  let spans = [
+    StyledSpan::new("abc", role),
+    StyledSpan::new(" uvwxyz", role, no_wrap=true),
+  ]
+  assert_eq(span_wrap_plain_lines(spans, 3), "abc\n uvwxyz")
+  assert_wrap_invariant(spans, 3)
+}
+
+///|
+test "wrap_spans preserves leading space inside no_wrap spans" {
+  let role = span_wrap_role()
+  let spans = [
+    StyledSpan::new("abc", role),
+    StyledSpan::new(" xy", role, no_wrap=true),
+  ]
+  assert_eq(span_wrap_plain_lines(spans, 3), "abc\n xy")
+  assert_wrap_invariant(spans, 3)
+}

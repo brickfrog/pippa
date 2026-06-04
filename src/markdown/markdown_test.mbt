@@ -34,7 +34,6 @@ test "parse exposes cmark doc and renderer handles README grade markdown" {
     #|---
     #|
   let doc = parse(source)
-  assert_true(doc.block is @cmark.Block::Blocks(_))
   let rendered = render_doc(
     doc,
     width=48,

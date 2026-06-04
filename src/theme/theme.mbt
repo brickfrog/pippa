@@ -149,31 +149,26 @@ fn span_chars_to_string(
 }
 
 ///|
-fn span_first_char(text : String) -> Char? {
-  for ch in text {
-    return Some(ch)
+fn span_is_break_space(span : StyledSpan) -> Bool {
+  if span.no_wrap || span.text == "" {
+    return false
   }
-  None
+  for ch in span.text {
+    if ch != ' ' && ch != '\t' {
+      return false
+    }
+  }
+  true
 }
 
 ///|
-fn span_is_space(text : String) -> Bool {
-  match span_first_char(text) {
-    Some(' ') | Some('\t') => true
-    _ => false
-  }
-}
-
-///|
-fn push_text_unit(units : Array[SpanUnit], span : StyledSpan) -> Unit {
+fn push_text_unit(
+  units : Array[SpanUnit],
+  span : StyledSpan,
+  break_space? : Bool = span_is_break_space(span),
+) -> Unit {
   if span.text != "" {
-    units.push(
-      TextUnit(
-        span,
-        @internal.display_width(span.text),
-        span_is_space(span.text),
-      ),
-    )
+    units.push(TextUnit(span, @internal.display_width(span.text), break_space))
   }
 }
 
@@ -187,7 +182,7 @@ fn push_span_units_for_part(
     return
   }
   if span.no_wrap {
-    push_text_unit(units, { ..span, text: part })
+    push_text_unit(units, { ..span, text: part }, break_space=false)
   } else {
     let chars = part.to_array()
     let boundaries = @internal.grapheme_boundaries(part)
@@ -290,6 +285,12 @@ fn finish_span_line(
 }
 
 ///|
+/// Wrap styled plaintext spans to a terminal-cell width.
+///
+/// A non-positive `width` disables wrapping and returns all spans as one line.
+/// For positive widths, breakable text is wrapped by plaintext grapheme width.
+/// Break-point spaces may be consumed at line boundaries. Non-space content is
+/// preserved; an indivisible unit wider than `width` is placed on its own line.
 pub fn wrap_spans(
   spans : Array[StyledSpan],
   width : Int,
@@ -358,7 +359,8 @@ pub fn wrap_spans(
       let mut word_index = word_start
       while word_index < index {
         let next_width = unit_width(units[word_index])
-        if current_width > 0 && current_width + next_width > width {
+        if current_width > 0 &&
+          (next_width > width || current_width + next_width > width) {
           current = finish_span_line(lines, current)
           current_width = 0
         }
