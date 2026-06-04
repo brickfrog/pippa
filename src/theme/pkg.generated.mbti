@@ -13,12 +13,12 @@ pub fn default_theme() -> Theme
 
 // Types and methods
 pub(all) struct RoleKey {
-  namespace : String
+  scope : String
   name : String
 } derive(Eq, Hash, Show)
 pub fn RoleKey::form(String) -> Self
 pub fn RoleKey::markdown(String) -> Self
-pub fn RoleKey::new(namespace~ : String, name~ : String) -> Self
+pub fn RoleKey::new(scope~ : String, name~ : String) -> Self
 pub fn RoleKey::syntax(String) -> Self
 pub fn RoleKey::ui(String) -> Self
 
@@ -34,4 +34,3 @@ pub fn Theme::with_role(Self, RoleKey, @pippa.Style) -> Self
 // Type aliases
 
 // Traits
-

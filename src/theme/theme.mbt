@@ -1,6 +1,6 @@
 ///|
 pub(all) struct RoleKey {
-  namespace : String
+  scope : String
   name : String
 } derive(Eq, Show, Hash)
 
@@ -11,28 +11,28 @@ pub struct Theme {
 }
 
 ///|
-pub fn RoleKey::new(namespace~ : String, name~ : String) -> RoleKey {
-  { namespace, name }
+pub fn RoleKey::new(scope~ : String, name~ : String) -> RoleKey {
+  { scope, name }
 }
 
 ///|
 pub fn RoleKey::ui(name : String) -> RoleKey {
-  RoleKey::new(namespace="ui", name~)
+  RoleKey::new(scope="ui", name~)
 }
 
 ///|
 pub fn RoleKey::markdown(name : String) -> RoleKey {
-  RoleKey::new(namespace="markdown", name~)
+  RoleKey::new(scope="markdown", name~)
 }
 
 ///|
 pub fn RoleKey::syntax(name : String) -> RoleKey {
-  RoleKey::new(namespace="syntax", name~)
+  RoleKey::new(scope="syntax", name~)
 }
 
 ///|
 pub fn RoleKey::form(name : String) -> RoleKey {
-  RoleKey::new(namespace="form", name~)
+  RoleKey::new(scope="form", name~)
 }
 
 ///|

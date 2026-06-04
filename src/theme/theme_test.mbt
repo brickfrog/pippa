@@ -1,7 +1,7 @@
 ///|
-test "role keys compare and hash by namespace and name" {
+test "role keys compare and hash by scope and name" {
   let first = RoleKey::ui("error")
-  let same = RoleKey::new(namespace="ui", name="error")
+  let same = RoleKey::new(scope="ui", name="error")
   let other = RoleKey::markdown("error")
   assert_true(first == same)
   assert_true(first != other)
