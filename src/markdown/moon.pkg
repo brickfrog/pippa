@@ -1,5 +1,6 @@
 import {
   "brickfrog/pippa",
+  "brickfrog/pippa/internal",
   "brickfrog/pippa/profile",
   "brickfrog/pippa/theme",
   "moonbit-community/cmark/cmark",

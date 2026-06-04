@@ -22,8 +22,9 @@ pub(all) enum MarkdownFlavor {
 /// `Wrap` reflows cell contents within allocated columns. `Truncate` keeps one
 /// terminal row per markdown row and clips cell text by visible width, marking
 /// clipped content with an ellipsis. Tables fit within the requested width when
-/// the width can hold the structural minimum: borders plus one cell per column.
-/// Below that minimum, the table overflows as one indivisible structure.
+/// the width can hold the structural minimum: borders plus each column's widest
+/// single grapheme. Below that minimum, the table overflows as one indivisible
+/// structure.
 pub(all) enum TableNarrowMode {
   Wrap
   Truncate
@@ -562,8 +563,8 @@ fn table_border_overhead(col_count : Int) -> Int {
 }
 
 ///|
-fn table_structural_min_width(col_count : Int) -> Int {
-  table_border_overhead(col_count) + col_count
+fn table_structural_min_width(min_widths : Array[Int]) -> Int {
+  table_total_width(min_widths)
 }
 
 ///|
@@ -576,6 +577,45 @@ fn table_cell_width(spans : Array[@theme.StyledSpan]) -> Int {
   let mut width = 0
   for line in @pippa.split_lines(@theme.span_plain_text(spans)) {
     width = width.max(@pippa.visible_width(line))
+  }
+  width
+}
+
+///|
+fn table_char_slice(
+  chars : Array[Char],
+  start : Int,
+  end_index : Int,
+) -> String {
+  let n = chars.length()
+  let from = start.max(0).min(n)
+  let to = end_index.max(from).min(n)
+  let buf = StringBuilder::new(size_hint=to - from)
+  for i in from..<to {
+    buf.write_char(chars[i])
+  }
+  buf.to_string()
+}
+
+///|
+fn table_text_min_width(text : String) -> Int {
+  let mut width = 1
+  for line in @pippa.split_lines(text) {
+    let chars = line.to_array()
+    let boundaries = @internal.grapheme_boundaries(line)
+    for i in 0..<(boundaries.length() - 1) {
+      let cluster = table_char_slice(chars, boundaries[i], boundaries[i + 1])
+      width = width.max(@pippa.visible_width(cluster))
+    }
+  }
+  width
+}
+
+///|
+fn table_cell_min_width(spans : Array[@theme.StyledSpan]) -> Int {
+  let mut width = 1
+  for item in spans {
+    width = width.max(table_text_min_width(item.text))
   }
   width
 }
@@ -740,6 +780,25 @@ fn table_natural_widths(
 }
 
 ///|
+fn table_min_widths(
+  rows : Array[TableRenderRow],
+  col_count : Int,
+) -> Array[Int] {
+  let widths : Array[Int] = []
+  for _ in 0..<col_count {
+    widths.push(1)
+  }
+  for row in rows {
+    for i in 0..<col_count {
+      if i < row.cells.length() {
+        widths[i] = widths[i].max(table_cell_min_width(row.cells[i]))
+      }
+    }
+  }
+  widths
+}
+
+///|
 fn table_total_width(widths : Array[Int]) -> Int {
   let mut width = table_border_overhead(widths.length())
   for col_width in widths {
@@ -749,23 +808,35 @@ fn table_total_width(widths : Array[Int]) -> Int {
 }
 
 ///|
-fn table_fit_widths(widths : Array[Int], target_width : Int) -> Array[Int] {
-  if target_width <= 0 || table_total_width(widths) <= target_width {
-    return widths
+fn table_next_narrowest_column(widths : Array[Int]) -> Int {
+  let mut index = 0
+  for i in 1..<widths.length() {
+    if widths[i] < widths[index] {
+      index = i
+    }
   }
-  let col_count = widths.length()
-  let structural_min = table_structural_min_width(col_count)
-  let available = if target_width < structural_min {
-    col_count
-  } else {
-    target_width - table_border_overhead(col_count)
+  index
+}
+
+///|
+fn table_fit_widths(
+  natural_widths : Array[Int],
+  min_widths : Array[Int],
+  target_width : Int,
+) -> Array[Int] {
+  if target_width <= 0 || table_total_width(natural_widths) <= target_width {
+    return natural_widths
   }
-  let base = (available / col_count).max(1)
-  let extra = available % col_count
-  let out : Array[Int] = []
-  for i in 0..<col_count {
-    let width = if i < extra { base + 1 } else { base }
-    out.push(width.max(1))
+  let structural_min = table_structural_min_width(min_widths)
+  if target_width <= structural_min {
+    return min_widths
+  }
+  let out = min_widths.copy()
+  let mut remaining = target_width - structural_min
+  while remaining > 0 {
+    let index = table_next_narrowest_column(out)
+    out[index] = out[index] + 1
+    remaining = remaining - 1
   }
   out
 }
@@ -897,6 +968,7 @@ fn render_table_lines(
   }
   let widths = table_fit_widths(
     table_natural_widths(rows, table.col_count),
+    table_min_widths(rows, table.col_count),
     state.width,
   )
   let out : Array[String] = []

@@ -393,4 +393,29 @@ test "gfm table width fits except below structural minimum" {
   )
   assert_eq(max_line_width(stripped(structural_overflow)), 17)
   assert_true(max_line_width(stripped(structural_overflow)) > 10)
+
+  let wide_source =
+    #|| A | B |
+    #||---|---|
+    #|| 界 | x |
+  let wide_fitted = render(
+    wide_source,
+    width=10,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Wrap),
+  )
+  assert_line_widths_at_most(stripped(wide_fitted), 10)
+
+  let wide_structural_overflow = render(
+    wide_source,
+    width=9,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Wrap),
+  )
+  assert_eq(max_line_width(stripped(wide_structural_overflow)), 10)
+  assert_true(max_line_width(stripped(wide_structural_overflow)) > 9)
 }
