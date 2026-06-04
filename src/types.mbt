@@ -311,6 +311,8 @@ priv enum CmdAction[Msg] {
   RequestCapability(String)
   // Request clipboard contents with OSC 52.
   RequestClipboard(ClipboardSelection)
+  // Set clipboard contents with OSC 52.
+  SetClipboard(ClipboardSelection, String)
   // Enable or disable focus reporting.
   SetFocusReporting(Bool)
   // Enable or disable bracketed paste mode.
@@ -366,6 +368,7 @@ pub impl[Msg] Debug for Cmd[Msg] with fn to_repr(self) {
       | RequestBackgroundColor
       | RequestCapability(_)
       | RequestClipboard(_)
+      | SetClipboard(_, _)
       | SetFocusReporting(_)
       | SetBracketedPaste(_)
       | SetMouseMode(_)

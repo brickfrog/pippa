@@ -177,6 +177,8 @@ pub fn right_binding() -> Binding
 
 pub fn row(Array[String]) -> String
 
+pub fn set_clipboard(ClipboardSelection, String) -> String
+
 pub fn set_cursor_style(CursorStyle) -> String
 
 pub fn set_disabled(Binding, Bool) -> Binding
@@ -304,6 +306,8 @@ pub fn[Msg] Cmd::request_window_size((WindowSize) -> Msg) -> Self[Msg]
 pub fn[Msg] Cmd::resume_program() -> Self[Msg]
 pub fn[Msg] Cmd::runtime_error(String) -> Self[Msg]
 pub fn[Msg] Cmd::sequence(Array[Self[Msg]]) -> Self[Msg]
+pub fn[Msg] Cmd::set_clipboard(String) -> Self[Msg]
+pub fn[Msg] Cmd::set_clipboard_for(ClipboardSelection, String) -> Self[Msg]
 pub fn[Msg] Cmd::set_cursor_style(CursorStyle) -> Self[Msg]
 pub fn[Msg] Cmd::set_window_title(String) -> Self[Msg]
 pub fn[Msg] Cmd::show_cursor() -> Self[Msg]

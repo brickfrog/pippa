@@ -263,6 +263,21 @@ pub fn[Msg] Cmd::request_clipboard(selection : ClipboardSelection) -> Cmd[Msg] {
 }
 
 ///|
+/// Set system clipboard contents with OSC 52.
+pub fn[Msg] Cmd::set_clipboard(text : String) -> Cmd[Msg] {
+  Cmd::set_clipboard_for(SystemClipboard, text)
+}
+
+///|
+/// Set clipboard contents for an OSC 52 selection.
+pub fn[Msg] Cmd::set_clipboard_for(
+  selection : ClipboardSelection,
+  text : String,
+) -> Cmd[Msg] {
+  { _phantom: [], actions: [SetClipboard(selection, text)] }
+}
+
+///|
 /// Enable terminal focus reporting at runtime.
 pub fn[Msg] Cmd::enable_focus_reporting() -> Cmd[Msg] {
   { _phantom: [], actions: [SetFocusReporting(true)] }
@@ -379,6 +394,8 @@ pub fn[A, B] Cmd::map(f : (A) -> B, cmd : Cmd[A]) -> Cmd[B] {
       RequestBackgroundColor => actions.push(RequestBackgroundColor)
       RequestCapability(name) => actions.push(RequestCapability(name))
       RequestClipboard(selection) => actions.push(RequestClipboard(selection))
+      SetClipboard(selection, text) =>
+        actions.push(SetClipboard(selection, text))
       SetFocusReporting(enabled) => actions.push(SetFocusReporting(enabled))
       SetBracketedPaste(enabled) => actions.push(SetBracketedPaste(enabled))
       SetMouseMode(mode) => actions.push(SetMouseMode(mode))

@@ -17,6 +17,40 @@ test "pippa ansi hyperlink wraps label in OSC 8" {
 }
 
 ///|
+test "pippa ansi set clipboard base64 encodes UTF-8 vectors" {
+  let vectors = [
+    ("", ""),
+    ("M", "TQ=="),
+    ("Ma", "TWE="),
+    ("Man", "TWFu"),
+    ("hello", "aGVsbG8="),
+    ("é", "w6k="),
+  ]
+  for vector in vectors {
+    let (input, encoded) = vector
+    assert_eq(
+      set_clipboard(SystemClipboard, input),
+      "\u001b]52;c;\{encoded}\u001b\\",
+    )
+  }
+}
+
+///|
+test "pippa ansi set clipboard emits exact OSC 52 selection bytes" {
+  assert_eq(
+    set_clipboard(SystemClipboard, "hello"),
+    "\u001b]52;c;aGVsbG8=\u001b\\",
+  )
+  assert_eq(
+    set_clipboard(PrimarySelection, "hello"),
+    "\u001b]52;p;aGVsbG8=\u001b\\",
+  )
+  assert_eq(set_clipboard(SecondarySelection, "M"), "\u001b]52;s;TQ==\u001b\\")
+  assert_eq(set_clipboard(CutBuffer(3), "M"), "\u001b]52;3;TQ==\u001b\\")
+  assert_eq(set_clipboard(NamedSelection("x"), "M"), "\u001b]52;x;TQ==\u001b\\")
+}
+
+///|
 test "pippa ansi cursor style emits exact DECSCUSR bytes" {
   assert_eq(set_cursor_style(Default), "\u001b[0 q")
   assert_eq(set_cursor_style(BlinkBlock), "\u001b[1 q")
@@ -81,6 +115,39 @@ test "pippa cursor style command emits DECSCUSR at runtime" {
     _ => fail("expected RunQuit")
   }
   assert_true(captured.val.contains(set_cursor_style(SteadyBar)))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa clipboard set command emits OSC 52 every time at runtime" {
+  let captured = Ref("")
+  let system_clipboard = set_clipboard(SystemClipboard, "runtime")
+  let primary_clipboard = set_clipboard(PrimarySelection, "é")
+  let program : Program[Int, Int] = Program::new(
+      init=fn() {
+        UpdateResult::new(
+          model=0,
+          cmd=Cmd::sequence([
+            Cmd::set_clipboard("runtime"),
+            Cmd::set_clipboard("runtime"),
+            Cmd::set_clipboard_for(PrimarySelection, "é"),
+            Cmd::quit(),
+          ]),
+        )
+      },
+      update=fn(model, _msg) { UpdateResult::new(model~, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+    )
+    .with_stdin(false)
+    .with_alt_screen(false)
+    .with_hide_cursor(false)
+    .with_output(fn(output) { captured.val = captured.val + output })
+  match program.run() {
+    RunQuit(_) => ()
+    _ => fail("expected RunQuit")
+  }
+  assert_eq(count_substring(captured.val, system_clipboard), 2)
+  assert_eq(count_substring(captured.val, primary_clipboard), 1)
 }
 
 ///|
