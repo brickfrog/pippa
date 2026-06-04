@@ -586,20 +586,23 @@ fn base64_digit(value : Int) -> Char {
     (0x30 + value - 52).unsafe_to_char()
   } else if value == 62 {
     '+'
-  } else {
+  } else if value == 63 {
     '/'
+  } else {
+    abort("base64 digit out of range")
   }
 }
 
 ///|
 fn encode_base64_utf8(input : String) -> String {
   let bytes = @utf8.encode(input)
-  let buf = StringBuilder::new(size_hint=(bytes.length() + 2) / 3 * 4)
+  let len = bytes.length()
+  let buf = StringBuilder::new(size_hint=(len + 2) / 3 * 4)
   let mut i = 0
-  while i < bytes.length() {
+  while i < len {
     let a = bytes[i].to_int()
-    let has_b = i + 1 < bytes.length()
-    let has_c = i + 2 < bytes.length()
+    let has_b = i + 1 < len
+    let has_c = i + 2 < len
     let b = if has_b { bytes[i + 1].to_int() } else { 0 }
     let c = if has_c { bytes[i + 2].to_int() } else { 0 }
     buf.write_char(base64_digit((a >> 2) & 0x3F))
