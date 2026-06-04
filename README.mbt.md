@@ -93,12 +93,11 @@ src/                          # Source root (moon.mod.json → source: "src")
 ├── command.mbt               # Command helpers and composition
 ├── program.mbt               # Program[Model, Msg] entry point
 ├── ansi.mbt                  # ANSI escape sequence helpers
+├── style.mbt                 # Style, Color, borders, and placement
+├── view.mbt                  # col/row/lines/text/gap/hgap layout DSL
 ├── component/                # Composable component sub-package
 │   ├── moon.pkg
 │   └── ...                   # Spinner, textarea, viewport, progress, etc.
-├── styling/                  # Higher-level styling and layout package
-│   ├── moon.pkg
-│   └── styling.mbt
 └── examples/
     ├── hello/                # Minimal example app
     ├── structured-view/      # View.content plus per-frame terminal state
