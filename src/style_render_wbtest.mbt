@@ -1,4 +1,36 @@
 ///|
+#cfg(any(target="native", target="llvm"))
+extern "C" fn pippa_perf_now_us() -> Int64 = "pippa_perf_now_us"
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn representative_render_style() -> Style {
+  style()
+  .background_hex("#102030")
+  .border(border_rounded())
+  .border_foreground(color_hex("#ddeeff"))
+  .padding(1, 2, 1, 2)
+  .width(74)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn representative_render_content() -> String {
+  col([
+    "Pippa render perf", "frame 0001 | alpha beta gamma", "frame 0002 | delta epsilon zeta",
+    "frame 0003 | eta theta iota", "frame 0004 | kappa lambda mu", "frame 0005 | nu xi omicron",
+    "frame 0006 | pi rho sigma", "frame 0007 | tau upsilon phi", "frame 0008 | chi psi omega",
+    "frame 0009 | bright cyan panel", "frame 0010 | steady progress", "frame 0011 | diff stays small",
+    "frame 0012 | layout stays wide", "frame 0013 | animation tick", "frame 0014 | keyboard help",
+    "frame 0015 | component list", "frame 0016 | table viewport", "frame 0017 | progress meter",
+    "frame 0018 | status footer", "frame 0019 | message queue", "frame 0020 | command batch",
+    "frame 0021 | terminal state", "frame 0022 | mouse enabled", "frame 0023 | focus events",
+    "frame 0024 | raw mode safe", "frame 0025 | window resized", "frame 0026 | render complete",
+    "frame 0027 | final row",
+  ])
+}
+
+///|
 fn legacy_render(style : Style, content : String) -> String {
   let content_lines = split_lines(content)
   let target_width = legacy_resolve_width(style, content_lines)
@@ -532,5 +564,23 @@ test "style render path stays byte-identical to legacy reference" {
     for content in exact_fit_trailing_suffix_contents() {
       assert_render_matches_legacy("exact-fit suffix", sty, content)
     }
+  }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "style render representative box stays below native perf budget" {
+  let sty = representative_render_style()
+  let content = representative_render_content()
+  let iterations = 64
+  let mut total = 0
+  let started_at = pippa_perf_now_us()
+  for _ in 0..<iterations {
+    total = total + sty.render(content).length()
+  }
+  let elapsed_us = pippa_perf_now_us() - started_at
+  assert_true(total > 0)
+  if elapsed_us >= 100000L {
+    fail("render perf budget exceeded: \{elapsed_us}us")
   }
 }

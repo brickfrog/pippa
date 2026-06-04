@@ -421,24 +421,25 @@ pub fn Style::render_with(
     max_height: self.max_height.map(@internal.clamp_non_negative),
   }
   let content_lines = split_lines(content)
-  let target_width = resolve_width(effective_style, content_lines)
-  let base_lines = shape_content_lines(
+  let (content_widths, natural_width) = measure_line_widths(content_lines)
+  let target_width = resolve_width_from_natural(effective_style, natural_width)
+  let base_lines = shape_content_lines_with_widths(
     content_lines,
+    content_widths,
     target_width,
     effective_style.align,
   )
   let target_height = resolve_height(effective_style, base_lines.length())
   let height_fitted = fit_height(base_lines, target_width, target_height)
-  let padded = apply_padding(height_fitted, effective_style)
+  let padded_width = target_width +
+    effective_style.padding_left +
+    effective_style.padding_right
+  let padded = apply_padding_with_inner_width(
+    height_fitted, effective_style, target_width,
+  )
   let bordered = match effective_style.border {
     Some(border) =>
-      render_border_block(
-        border,
-        padded,
-        @internal.max_visible_width(padded, visible_width),
-        effective_style,
-        ctx,
-      )
+      render_border_block(border, padded, padded_width, effective_style, ctx)
     None => @internal.join_lines(padded)
   }
   let margined = apply_margin(
@@ -572,14 +573,40 @@ fn effective_background(style : Style) -> Color? {
 }
 
 ///|
-fn resolve_width(style : Style, lines : Array[String]) -> Int {
-  let natural = @internal.max_visible_width(lines, visible_width)
+fn resolve_width_from_natural(style : Style, natural : Int) -> Int {
   let from_width = if style.width > 0 { style.width } else { natural }
   let with_min = from_width.max(style.min_width)
   match style.max_width {
     Some(max_width) => with_min.min(max_width)
     None => with_min
   }
+}
+
+///|
+fn measure_line_widths(lines : Array[String]) -> (Array[Int], Int) {
+  let widths : Array[Int] = []
+  let mut max_width = 0
+  for line in lines {
+    let width = style_visible_width(line)
+    widths.push(width)
+    if width > max_width {
+      max_width = width
+    }
+  }
+  (widths, max_width)
+}
+
+///|
+fn style_visible_width(line : String) -> Int {
+  let mut width = 0
+  for ch in line {
+    let code = ch.to_int()
+    if code < 0x20 || code >= 0x7F {
+      return visible_width(line)
+    }
+    width = width + 1
+  }
+  width
 }
 
 ///|
@@ -596,31 +623,97 @@ fn resolve_height(style : Style, line_count : Int) -> Int {
 }
 
 ///|
-fn shape_content_lines(
+fn shape_content_lines_with_widths(
   lines : Array[String],
+  widths : Array[Int],
   target_width : Int,
   align : Align,
 ) -> Array[String] {
   let shaped : Array[String] = []
-  for line in lines {
-    shaped.push(fit_line_width(line, target_width, align))
+  for i, line in lines {
+    shaped.push(fit_line_width_known(line, widths[i], target_width, align))
   }
   shaped
 }
 
 ///|
 fn fit_line_width(line : String, target_width : Int, align : Align) -> String {
-  let truncated = truncate(line, target_width)
-  let width = visible_width(truncated)
-  if width >= target_width {
-    truncated
-  } else {
-    match align {
-      Left => pad_right(truncated, target_width)
-      Center => center(truncated, target_width)
-      Right => pad_left(truncated, target_width)
-    }
+  let width = style_visible_width(line)
+  fit_line_width_known(line, width, target_width, align)
+}
+
+///|
+fn fit_line_width_known(
+  line : String,
+  width : Int,
+  target_width : Int,
+  align : Align,
+) -> String {
+  if target_width <= 0 || width >= target_width {
+    let truncated = truncate(line, target_width)
+    let truncated_width = style_visible_width(truncated)
+    return pad_line_known_width(truncated, truncated_width, target_width, align)
   }
+  if width >= target_width {
+    line
+  } else {
+    pad_line_known_width(line, width, target_width, align)
+  }
+}
+
+///|
+fn pad_line_known_width(
+  line : String,
+  width : Int,
+  target_width : Int,
+  align : Align,
+) -> String {
+  if width >= target_width {
+    return line
+  }
+  let total_pad = target_width - width
+  match align {
+    Left => pad_right_known_width(line, width, target_width)
+    Center => {
+      let left_pad = total_pad / 2
+      let right_pad = total_pad - left_pad
+      write_padded_line(
+        String::make(left_pad, ' '),
+        line,
+        String::make(right_pad, ' '),
+      )
+    }
+    Right => write_padded_line(String::make(total_pad, ' '), line, "")
+  }
+}
+
+///|
+fn pad_right_known_width(
+  line : String,
+  width : Int,
+  target_width : Int,
+) -> String {
+  if width >= target_width {
+    return line
+  }
+  if line.contains("\u001b") {
+    return pad_right(line, target_width)
+  }
+  line + String::make(target_width - width, ' ')
+}
+
+///|
+fn write_padded_line(left : String, line : String, right : String) -> String {
+  if left == "" && right == "" {
+    return line
+  }
+  let buf = StringBuilder::new(
+    size_hint=left.length() + line.length() + right.length(),
+  )
+  buf.write_string(left)
+  buf.write_string(line)
+  buf.write_string(right)
+  buf.to_string()
 }
 
 ///|
@@ -641,25 +734,21 @@ fn fit_height(
 }
 
 ///|
-fn apply_padding(lines : Array[String], self : Style) -> Array[String] {
+fn apply_padding_with_inner_width(
+  lines : Array[String],
+  self : Style,
+  inner_width : Int,
+) -> Array[String] {
   let padded : Array[String] = []
-  let inner_width = @internal.max_visible_width(lines, visible_width)
   let row_width = inner_width + self.padding_left + self.padding_right
   let blank = String::make(row_width, ' ')
+  let left = String::make(self.padding_left, ' ')
+  let right = String::make(self.padding_right, ' ')
   for _ in 0..<self.padding_top {
     padded.push(blank)
   }
   for line in lines {
-    let fitted = if visible_width(line) < inner_width {
-      pad_right(line, inner_width)
-    } else {
-      line
-    }
-    padded.push(
-      String::make(self.padding_left, ' ') +
-      fitted +
-      String::make(self.padding_right, ' '),
-    )
+    padded.push(write_padded_line(left, line, right))
   }
   for _ in 0..<self.padding_bottom {
     padded.push(blank)
@@ -679,20 +768,22 @@ fn apply_margin(
     return block
   }
   let lines = split_lines(block)
-  let inner_width = @internal.max_visible_width(lines, visible_width)
+  let (widths, inner_width) = measure_line_widths(lines)
   let full_width = inner_width + left + right
   let blank = String::make(full_width, ' ')
+  let left_pad = String::make(left, ' ')
+  let right_pad = String::make(right, ' ')
   let rows : Array[String] = []
   for _ in 0..<top {
     rows.push(blank)
   }
-  for line in lines {
-    let fitted = if visible_width(line) < inner_width {
-      pad_right(line, inner_width)
+  for i, line in lines {
+    let fitted = if widths[i] < inner_width {
+      pad_right_known_width(line, widths[i], inner_width)
     } else {
       line
     }
-    rows.push(String::make(left, ' ') + fitted + String::make(right, ' '))
+    rows.push(write_padded_line(left_pad, fitted, right_pad))
   }
   for _ in 0..<bottom {
     rows.push(blank)
@@ -718,7 +809,7 @@ fn render_border_block(
       border.vertical,
       lines,
       inner_width,
-      visible_width,
+      style_visible_width,
       style.border_top,
       style.border_right,
       style.border_bottom,
@@ -727,27 +818,27 @@ fn render_border_block(
   }
   let top_left = @internal.normalize_border_piece(
     border.top_left,
-    visible_width,
+    style_visible_width,
   )
   let top_right = @internal.normalize_border_piece(
     border.top_right,
-    visible_width,
+    style_visible_width,
   )
   let bottom_left = @internal.normalize_border_piece(
     border.bottom_left,
-    visible_width,
+    style_visible_width,
   )
   let bottom_right = @internal.normalize_border_piece(
     border.bottom_right,
-    visible_width,
+    style_visible_width,
   )
   let horizontal_piece = @internal.normalize_border_piece(
     border.horizontal,
-    visible_width,
+    style_visible_width,
   )
   let vertical_piece = @internal.normalize_border_piece(
     border.vertical,
-    visible_width,
+    style_visible_width,
   )
   let horizontal = @internal.repeat_string(horizontal_piece, inner_width)
   let rows : Array[String] = []

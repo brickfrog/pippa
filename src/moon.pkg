@@ -19,6 +19,6 @@ import {
 } for "wbtest"
 
 options(
-  "native-stub": [ "terminal.c" ],
+  "native-stub": [ "terminal.c", "render_perf_native.c" ],
   targets: { "ffi_native.mbt": [ "native", "llvm" ] },
 )
