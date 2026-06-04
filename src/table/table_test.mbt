@@ -305,3 +305,22 @@ test "table height accounts for wrapped row height before overflow" {
     "└──────┘",
   )
 }
+
+///|
+test "table height fills overflow when wrapped first row cannot fit" {
+  let actual = new()
+    .row(["abcdefghij"])
+    .row(["tail"])
+    .row(["last"])
+    .width(8)
+    .height(4)
+    .render()
+  assert_eq(@pippa.line_count(actual), 4)
+  assert_eq(
+    actual,
+    "┌──────┐\n" +
+    "│…     │\n" +
+    "│      │\n" +
+    "└──────┘",
+  )
+}

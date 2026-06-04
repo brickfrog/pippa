@@ -196,11 +196,13 @@ pub fn Table::width(self : Table, width : Int) -> Table {
 ///
 /// A height of 0 disables height capping; negative values are clamped to 0.
 /// When the fully rendered table is taller than a positive `height`, the
-/// renderer keeps the table frame intact, renders the data rows that fit, and
-/// adds an overflow row made of `…` cells to indicate hidden rows. Row fitting
-/// uses the rendered height of wrapped or styled cells, so multi-line rows
-/// consume their full visible height. A height greater than or equal to the full
-/// table height does not change the rendered bytes.
+/// renderer renders the data rows that fit and adds an overflow row made of `…`
+/// cells to indicate hidden rows. Row fitting uses the rendered height of
+/// wrapped or styled cells, so multi-line rows consume their full visible
+/// height. The overflow row is rendered before the bottom border and stays
+/// visible at very tight heights, so the bottom border may be cropped. A height
+/// greater than or equal to the full table height does not change the rendered
+/// bytes.
 pub fn Table::height(self : Table, height : Int) -> Table {
   { ..self, height: @internal.clamp_non_negative(height) }
 }
@@ -1052,6 +1054,49 @@ fn render_overflow_row(
 }
 
 ///|
+fn render_empty_row(
+  table : Table,
+  row_index : Int,
+  widths : Array[Int],
+) -> String {
+  let cells : Array[String] = []
+  for _ in 0..<widths.length() {
+    cells.push("")
+  }
+  render_row(table, row_index, cells, widths)
+}
+
+///|
+fn render_overflow_row_height(
+  table : Table,
+  row_index : Int,
+  widths : Array[Int],
+  overflow : String,
+  height : Int,
+) -> String {
+  let lines = @pippa.split_lines(overflow)
+  if lines.length() >= height {
+    let trimmed : Array[String] = []
+    for i in 0..<height.max(0) {
+      trimmed.push(lines[i])
+    }
+    return @internal.join_lines(trimmed)
+  }
+  let blank_lines = @pippa.split_lines(
+    render_empty_row(table, row_index, widths),
+  )
+  let mut blank_index = 0
+  while lines.length() < height {
+    lines.push(blank_lines[blank_index])
+    blank_index = blank_index + 1
+    if blank_index >= blank_lines.length() {
+      blank_index = 0
+    }
+  }
+  @internal.join_lines(lines)
+}
+
+///|
 fn render_full_blocks(table : Table, widths : Array[Int]) -> Array[String] {
   let blocks : Array[String] = []
   if table.border_top {
@@ -1131,6 +1176,12 @@ fn render_capped_blocks(table : Table, widths : Array[Int]) -> Array[String] {
   }
   if row_index < table.rows.length() {
     let overflow = render_overflow_row(table, row_index, widths)
+    let overflow_height = block_height(overflow).max(
+      table.height - used_height - bottom_height,
+    )
+    let overflow = render_overflow_row_height(
+      table, row_index, widths, overflow, overflow_height,
+    )
     blocks.push(overflow)
   }
   if table.border_bottom {
