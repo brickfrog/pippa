@@ -27,7 +27,7 @@ fn skip_osc_sequence(chars : Array[Char], start : Int) -> Int {
 }
 
 ///|
-/// Remove all ANSI escape sequences from `s`.
+/// Remove recognized ANSI escape sequences from `s`.
 ///
 /// Handles CSI sequences (`ESC [` … letter), OSC sequences (`ESC ]` … BEL/ST),
 /// and bare two-char sequences (`ESC` followed by any single non-`[`/`]`

@@ -14,6 +14,19 @@ test "strip_ansi removes OSC 8 hyperlink wrappers" {
 }
 
 ///|
+test "strip_ansi removes BEL-terminated OSC 8 hyperlink wrappers" {
+  assert_eq(
+    strip_ansi("\u001b]8;;http://example.com\u0007label\u001b]8;;\u0007"),
+    "label",
+  )
+}
+
+///|
+test "strip_ansi removes empty BEL-terminated OSC payloads" {
+  assert_eq(strip_ansi("before\u001b]\u0007after"), "beforeafter")
+}
+
+///|
 test "strip_ansi does not hide unterminated OSC text" {
   assert_eq(strip_ansi("\u001b]8;;http://xvisible"), "8;;http://xvisible")
 }
