@@ -262,6 +262,25 @@ test "table height renders overflow row while preserving borders" {
 }
 
 ///|
+test "table tight headered height keeps overflow before cropped bottom border" {
+  let actual = new()
+    .headers(["Item", "Qty"])
+    .row(["one", "1"])
+    .row(["two", "2"])
+    .row(["three", "3"])
+    .height(4)
+    .render()
+  assert_eq(@pippa.line_count(actual), 4)
+  assert_eq(
+    actual,
+    "┌─────┬───┐\n" +
+    "│Item │Qty│\n" +
+    "├─────┼───┤\n" +
+    "│…    │…  │",
+  )
+}
+
+///|
 test "table height at least content height is no-op" {
   let table = new().headers(["Item"]).row(["one"]).row(["two"])
   assert_eq(table.height(99).render(), table.render())

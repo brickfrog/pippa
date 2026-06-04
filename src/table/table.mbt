@@ -1009,6 +1009,22 @@ fn push_height_block(
 }
 
 ///|
+fn crop_blocks_to_height(blocks : Array[String], height : Int) -> Array[String] {
+  if height <= 0 || blocks_height(blocks) <= height {
+    return blocks
+  }
+  let rows : Array[String] = []
+  for block in blocks {
+    for line in @pippa.split_lines(block) {
+      if rows.length() < height {
+        rows.push(line)
+      }
+    }
+  }
+  rows
+}
+
+///|
 fn render_data_row_blocks(
   table : Table,
   widths : Array[Int],
@@ -1115,16 +1131,12 @@ fn render_capped_blocks(table : Table, widths : Array[Int]) -> Array[String] {
   }
   if row_index < table.rows.length() {
     let overflow = render_overflow_row(table, row_index, widths)
-    if block_fits(table, used_height, overflow, bottom_height) {
-      used_height = push_height_block(blocks, overflow, used_height)
-    }
+    blocks.push(overflow)
   }
   if table.border_bottom {
-    if used_height + bottom_height <= table.height || blocks.is_empty() {
-      blocks.push(bottom)
-    }
+    blocks.push(bottom)
   }
-  blocks
+  crop_blocks_to_height(blocks, table.height)
 }
 
 ///|
