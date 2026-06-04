@@ -177,6 +177,8 @@ pub fn right_binding() -> Binding
 
 pub fn row(Array[String]) -> String
 
+pub fn set_cursor_style(CursorStyle) -> String
+
 pub fn set_disabled(Binding, Bool) -> Binding
 
 pub fn set_help(Binding, String, String) -> Binding
@@ -302,6 +304,7 @@ pub fn[Msg] Cmd::request_window_size((WindowSize) -> Msg) -> Self[Msg]
 pub fn[Msg] Cmd::resume_program() -> Self[Msg]
 pub fn[Msg] Cmd::runtime_error(String) -> Self[Msg]
 pub fn[Msg] Cmd::sequence(Array[Self[Msg]]) -> Self[Msg]
+pub fn[Msg] Cmd::set_cursor_style(CursorStyle) -> Self[Msg]
 pub fn[Msg] Cmd::set_window_title(String) -> Self[Msg]
 pub fn[Msg] Cmd::show_cursor() -> Self[Msg]
 pub fn[Msg] Cmd::suspend() -> Self[Msg]
@@ -318,6 +321,16 @@ pub(all) enum Color {
 pub(all) struct CursorPositionReply {
   row : Int
   col : Int
+} derive(Eq, @debug.Debug)
+
+pub(all) enum CursorStyle {
+  Default
+  BlinkBlock
+  SteadyBlock
+  BlinkUnderline
+  SteadyUnderline
+  BlinkBar
+  SteadyBar
 } derive(Eq, @debug.Debug)
 
 pub(all) enum EnhancedKeyCode {
@@ -629,15 +642,17 @@ pub(all) struct View {
   cursor_position : ViewCursorPosition?
   cursor_visible : Bool?
   window_title : String?
+  cursor_style : CursorStyle?
   foreground_color : Color?
   background_color : Color?
   progress : ViewProgress?
   mouse_mode : ViewMouseMode?
 } derive(Eq, @debug.Debug)
-pub fn View::new(content~ : String, cursor_position? : ViewCursorPosition?, cursor_visible? : Bool?, window_title? : String?, foreground_color? : Color?, background_color? : Color?, progress? : ViewProgress?, mouse_mode? : ViewMouseMode?) -> Self
+pub fn View::new(content~ : String, cursor_position? : ViewCursorPosition?, cursor_visible? : Bool?, window_title? : String?, foreground_color? : Color?, background_color? : Color?, progress? : ViewProgress?, mouse_mode? : ViewMouseMode?, cursor_style? : CursorStyle?) -> Self
 pub fn View::text(String) -> Self
 pub fn View::with_background_color(Self, Color) -> Self
 pub fn View::with_cursor_position(Self, row~ : Int, col~ : Int) -> Self
+pub fn View::with_cursor_style(Self, CursorStyle) -> Self
 pub fn View::with_cursor_visible(Self, Bool) -> Self
 pub fn View::with_foreground_color(Self, Color) -> Self
 pub fn View::with_mouse_mode(Self, ViewMouseMode) -> Self

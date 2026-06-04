@@ -80,6 +80,37 @@ pub fn show_cursor() -> String {
 }
 
 ///|
+/// Real terminal cursor shape/blink styles for DECSCUSR.
+pub(all) enum CursorStyle {
+  Default
+  BlinkBlock
+  SteadyBlock
+  BlinkUnderline
+  SteadyUnderline
+  BlinkBar
+  SteadyBar
+} derive(Debug, Eq)
+
+///|
+fn cursor_style_code(style : CursorStyle) -> String {
+  match style {
+    Default => "0"
+    BlinkBlock => "1"
+    SteadyBlock => "2"
+    BlinkUnderline => "3"
+    SteadyUnderline => "4"
+    BlinkBar => "5"
+    SteadyBar => "6"
+  }
+}
+
+///|
+/// Set the real terminal cursor shape/blink using DECSCUSR (CSI Ps SP q).
+pub fn set_cursor_style(style : CursorStyle) -> String {
+  "\{CSI}\{cursor_style_code(style)} q"
+}
+
+///|
 /// Begin synchronized output mode (CSI ? 2026 h).
 pub fn begin_sync_update() -> String {
   "\{CSI}?2026h"

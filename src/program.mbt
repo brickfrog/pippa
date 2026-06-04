@@ -787,6 +787,7 @@ priv enum RuntimeTerminalCommand {
   RuntimeSetBracketedPaste(Bool)
   RuntimeSetMouseMode(ViewMouseMode)
   RuntimeSetWindowTitle(String)
+  RuntimeSetCursorStyle(CursorStyle)
 }
 
 ///|
@@ -865,6 +866,7 @@ priv struct RuntimeViewTerminalState {
   cursor_position : ViewCursorPosition?
   cursor_visible : Bool?
   window_title : String?
+  cursor_style : CursorStyle?
   foreground_color : Color?
   background_color : Color?
   render_context : @profile.RenderContext
@@ -879,6 +881,7 @@ fn runtime_view_terminal_state_empty() -> RuntimeViewTerminalState {
     cursor_position: None,
     cursor_visible: None,
     window_title: None,
+    cursor_style: None,
     foreground_color: None,
     background_color: None,
     render_context: @profile.RenderContext::default(),
@@ -1097,6 +1100,7 @@ fn terminal_command_sequence(command : RuntimeTerminalCommand) -> String {
     RuntimeSetMouseMode(ViewMouseAllMotion) => enable_mouse_motion()
     RuntimeSetMouseMode(ViewMouseOff) => disable_mouse()
     RuntimeSetWindowTitle(title) => set_window_title(title)
+    RuntimeSetCursorStyle(style) => set_cursor_style(style)
   }
 }
 
@@ -1108,6 +1112,12 @@ fn runtime_window_title_state(title : String) -> String? {
   } else {
     Some(title)
   }
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn runtime_cursor_style_state(style : CursorStyle) -> CursorStyle? {
+  Some(style)
 }
 
 ///|
@@ -1142,6 +1152,14 @@ fn[Model, Msg] apply_terminal_command(
         view_terminal_state: {
           ..state.view_terminal_state,
           window_title: runtime_window_title_state(title),
+        },
+      }
+    RuntimeSetCursorStyle(style) =>
+      {
+        ..state,
+        view_terminal_state: {
+          ..state.view_terminal_state,
+          cursor_style: runtime_cursor_style_state(style),
         },
       }
     _ => state
@@ -1389,6 +1407,7 @@ fn view_terminal_state_from_view(
     cursor_position: view.cursor_position,
     cursor_visible: view.cursor_visible,
     window_title: view.window_title,
+    cursor_style: view.cursor_style,
     foreground_color: view.foreground_color,
     background_color: view.background_color,
     render_context: ctx,
@@ -1413,6 +1432,16 @@ fn view_terminal_state_delta(
       None =>
         if applied.window_title is Some(_) {
           prefix.write_string(clear_window_title())
+        }
+    }
+  }
+  if next.cursor_style != applied.cursor_style {
+    match next.cursor_style {
+      Some(style) => prefix.write_string(set_cursor_style(style))
+      None =>
+        match applied.cursor_style {
+          Some(Default) | None => ()
+          Some(_) => prefix.write_string(set_cursor_style(Default))
         }
     }
   }
@@ -1486,6 +1515,7 @@ fn view_cursor_position_suffix(
 #cfg(any(target="native", target="llvm"))
 fn terminal_view_reset_sequence() -> String {
   show_cursor() +
+  set_cursor_style(Default) +
   clear_window_title() +
   reset_foreground_color() +
   reset_background_color() +
@@ -1652,6 +1682,8 @@ fn[Msg] queue_cmd_effects(
         pending.push(RuntimeTerminal(RuntimeSetMouseMode(mode)))
       SetWindowTitle(title) =>
         pending.push(RuntimeTerminal(RuntimeSetWindowTitle(title)))
+      SetCursorStyle(style) =>
+        pending.push(RuntimeTerminal(RuntimeSetCursorStyle(style)))
       LifecycleAction(msg) => pending.push(RuntimeLifecycle(msg))
       ExecProcessAction(process, to_msg) =>
         pending.push(RuntimeExec(process, to_msg))
