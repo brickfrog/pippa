@@ -151,6 +151,41 @@ test "tree block-joins multiline connector with multiline item" {
 }
 
 ///|
+test "tree pads every line of multiline sibling connectors" {
+  let actual = new()
+    .enumerator_func(fn(_children, i) {
+      if i == 0 {
+        "|\n||"
+      } else {
+        "====\n==="
+      }
+    })
+    .child_leaf("A")
+    .child_leaf("B")
+    .render()
+  let expected = "   | A\n  ||\n==== B\n ==="
+  assert_eq(actual, expected)
+}
+
+///|
+test "tree trims join padding before styled multiline item resets" {
+  let actual = new()
+    .enumerator_func(fn(_children, _index) { "|\n|" })
+    .item_style(@pippa.style().fg_color(2))
+    .child_leaf("Long\nB")
+    .render()
+  let expected = "| " +
+    @pippa.fg_color(2) +
+    "Long" +
+    @pippa.reset() +
+    "\n| " +
+    @pippa.fg_color(2) +
+    "B" +
+    @pippa.reset()
+  assert_eq(actual, expected)
+}
+
+///|
 test "tree styles connector alignment padding" {
   let actual = new()
     .enumerator_func(fn(_children, i) { if i == 0 { ">" } else { "====>" } })

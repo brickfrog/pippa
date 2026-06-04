@@ -393,12 +393,16 @@ fn max_connector_width(renderer : TreeRenderer, children : Array[Tree]) -> Int {
 
 ///|
 fn pad_left_to_width(content : String, width : Int) -> String {
-  let pad = width - @pippa.visible_width(content)
-  if pad > 0 {
-    String::make(pad, ' ') + content
-  } else {
-    content
+  let rows : Array[String] = []
+  for line in @pippa.split_lines(content) {
+    let pad = width - @pippa.visible_width(line)
+    if pad > 0 {
+      rows.push(String::make(pad, ' ') + line)
+    } else {
+      rows.push(line)
+    }
   }
+  @internal.join_lines(rows)
 }
 
 ///|
@@ -450,12 +454,82 @@ fn pad_block_height(
 }
 
 ///|
+fn is_csi_terminator(ch : Char) -> Bool {
+  (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
+}
+
+///|
+fn skip_ansi_sequence(chars : Array[Char], start : Int) -> Int {
+  let n = chars.length()
+  if start >= n || chars[start] != '\u001b' {
+    return start + 1
+  }
+  let next = start + 1
+  if next >= n {
+    return next
+  }
+  if chars[next] == '[' {
+    let mut i = next + 1
+    while i < n && !is_csi_terminator(chars[i]) {
+      i = i + 1
+    }
+    if i < n {
+      i + 1
+    } else {
+      i
+    }
+  } else {
+    (start + 2).min(n)
+  }
+}
+
+///|
+fn only_ansi_sequences(chars : Array[Char], start : Int) -> Bool {
+  let n = chars.length()
+  let mut i = start
+  while i < n {
+    if chars[i] != '\u001b' {
+      return false
+    }
+    let next = skip_ansi_sequence(chars, i)
+    if next <= i {
+      return false
+    }
+    i = next
+  }
+  true
+}
+
+///|
+fn trailing_ansi_suffix_start(chars : Array[Char]) -> Int {
+  let n = chars.length()
+  let mut i = 0
+  while i < n {
+    if chars[i] == '\u001b' {
+      if only_ansi_sequences(chars, i) {
+        return i
+      }
+      let next = skip_ansi_sequence(chars, i)
+      if next <= i {
+        i = i + 1
+      } else {
+        i = next
+      }
+    } else {
+      i = i + 1
+    }
+  }
+  n
+}
+
+///|
 fn remove_trailing_spaces(line : String, count : Int) -> String {
   if count <= 0 {
     return line
   }
   let chars = line.to_array()
-  let mut end = chars.length()
+  let suffix_start = trailing_ansi_suffix_start(chars)
+  let mut end = suffix_start
   let mut remaining = count
   while remaining > 0 && end > 0 && chars[end - 1] == ' ' {
     end = end - 1
@@ -463,6 +537,9 @@ fn remove_trailing_spaces(line : String, count : Int) -> String {
   }
   let kept : Array[Char] = []
   for i in 0..<end {
+    kept.push(chars[i])
+  }
+  for i in suffix_start..<chars.length() {
     kept.push(chars[i])
   }
   String::from_array(kept)
