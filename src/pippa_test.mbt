@@ -48,6 +48,18 @@ fn count_substring(haystack : String, needle : String) -> Int {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+fn join_chunks_before_last(chunks : Array[String]) -> String {
+  let mut joined = ""
+  let mut i = 0
+  while i + 1 < chunks.length() {
+    joined = joined + chunks[i]
+    i = i + 1
+  }
+  joined
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "pippa cursor style command emits DECSCUSR at runtime" {
   let captured = Ref("")
   let program : Program[Int, Int] = Program::new(
@@ -97,6 +109,99 @@ test "pippa structured cursor style is not re-emitted on unchanged render" {
   }
   assert_true(sent.val)
   assert_eq(count_substring(captured.val, set_cursor_style(BlinkBar)), 1)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa structured cursor style reset is emitted when stale non-default style clears" {
+  let chunks : Ref[Array[String]] = Ref([])
+  let sent = Ref(false)
+  let polled = Ref(false)
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(_model, msg) { UpdateResult::new(model=msg, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+      sub=fn(evt) {
+        match evt {
+          Key(Char('q')) => Some(2)
+          _ => None
+        }
+      },
+      should_quit=fn(model) { model == 2 },
+    )
+    .with_structured_view(fn(model) {
+      if model == 0 {
+        View::text("").with_cursor_style(BlinkBar)
+      } else {
+        View::text("")
+      }
+    })
+    .with_input(fn() {
+      if polled.val {
+        []
+      } else {
+        polled.val = true
+        [Key(Char('q'))]
+      }
+    })
+    .with_alt_screen(false)
+    .with_hide_cursor(false)
+    .with_output(fn(output) { chunks.val = [..chunks.val, output] })
+  match program.run_with_handle(handle => sent.val = handle.send(1)) {
+    RunQuit(_) => ()
+    _ => fail("expected RunQuit")
+  }
+  assert_true(sent.val)
+  let before_teardown = join_chunks_before_last(chunks.val)
+  assert_eq(count_substring(before_teardown, set_cursor_style(BlinkBar)), 1)
+  assert_eq(count_substring(before_teardown, set_cursor_style(Default)), 1)
+  assert_eq(count_substring(chunks.val.join(""), set_cursor_style(Default)), 2)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "pippa structured cursor style default clears without duplicate reset" {
+  let chunks : Ref[Array[String]] = Ref([])
+  let sent = Ref(false)
+  let polled = Ref(false)
+  let program : Program[Int, Int] = Program::new(
+      init=fn() { UpdateResult::new(model=0, cmd=Cmd::none()) },
+      update=fn(_model, msg) { UpdateResult::new(model=msg, cmd=Cmd::none()) },
+      view=fn(_model) { "" },
+      sub=fn(evt) {
+        match evt {
+          Key(Char('q')) => Some(2)
+          _ => None
+        }
+      },
+      should_quit=fn(model) { model == 2 },
+    )
+    .with_structured_view(fn(model) {
+      if model == 0 {
+        View::text("").with_cursor_style(Default)
+      } else {
+        View::text("")
+      }
+    })
+    .with_input(fn() {
+      if polled.val {
+        []
+      } else {
+        polled.val = true
+        [Key(Char('q'))]
+      }
+    })
+    .with_alt_screen(false)
+    .with_hide_cursor(false)
+    .with_output(fn(output) { chunks.val = [..chunks.val, output] })
+  match program.run_with_handle(handle => sent.val = handle.send(1)) {
+    RunQuit(_) => ()
+    _ => fail("expected RunQuit")
+  }
+  assert_true(sent.val)
+  let before_teardown = join_chunks_before_last(chunks.val)
+  assert_eq(count_substring(before_teardown, set_cursor_style(Default)), 1)
+  assert_eq(count_substring(chunks.val.join(""), set_cursor_style(Default)), 2)
 }
 
 ///|
