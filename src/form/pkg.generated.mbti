@@ -1,0 +1,177 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/form"
+
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/component",
+  "brickfrog/pippa/profile",
+  "brickfrog/pippa/theme",
+  "moonbitlang/core/debug",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub(all) struct Field {
+  id : FieldId
+  label : String
+  help : String?
+  kind : FieldKind
+  validators : Array[FieldValidator]
+  disabled : Bool
+  visible : (FormValues) -> Bool
+  validation : ValidationState
+}
+pub fn Field::confirm(id~ : FieldId, label~ : String, help? : String, validators? : Array[FieldValidator], disabled? : Bool, visible? : (FormValues) -> Bool, initial? : Bool) -> Self
+pub fn Field::from_spec(FieldSpec) -> Self
+pub fn Field::password(id~ : FieldId, label~ : String, help? : String, validators? : Array[FieldValidator], disabled? : Bool, visible? : (FormValues) -> Bool, placeholder? : String, prompt? : String, width? : Int, char_limit? : Int?, mask? : Char) -> Self
+pub fn Field::select(id~ : FieldId, label~ : String, options~ : Array[String], help? : String, validators? : Array[FieldValidator], disabled? : Bool, visible? : (FormValues) -> Bool) -> Self
+pub fn Field::text(id~ : FieldId, label~ : String, help? : String, validators? : Array[FieldValidator], disabled? : Bool, visible? : (FormValues) -> Bool, placeholder? : String, prompt? : String, width? : Int, char_limit? : Int?) -> Self
+pub fn Field::to_spec(Self) -> FieldSpec
+pub fn Field::value(Self) -> FieldValue
+
+pub(all) enum FieldId {
+  FieldId(String)
+} derive(Eq, Hash, @debug.Debug)
+pub fn FieldId::value(Self) -> String
+pub impl Show for FieldId
+
+pub(all) enum FieldKind {
+  Text(@component.TextInputModel)
+  Password(@component.TextInputModel)
+  Select(@component.SelectListModel)
+  Confirm(Bool)
+} derive(@debug.Debug)
+
+pub(all) enum FieldMsg {
+  TextInput(@component.TextInputMsg)
+  SelectList(@component.SelectListMsg)
+  ToggleConfirm
+  SetConfirm(Bool)
+  SetValue(FieldValue)
+} derive(@debug.Debug)
+
+pub(all) struct FieldSpec {
+  id : FieldId
+  label : String
+  help : String?
+  kind : FieldKind
+  validators : Array[FieldValidator]
+  disabled : Bool
+  visible : (FormValues) -> Bool
+}
+
+pub(all) struct FieldValidator {
+  validate : (FieldValue, FormValues) -> Result[Unit, Array[ValidationError]]
+}
+pub fn FieldValidator::run(Self, FieldValue, FormValues) -> Result[Unit, Array[ValidationError]]
+
+pub(all) enum FieldValue {
+  Text(String)
+  Bool(Bool)
+  One(String)
+  Empty
+} derive(Eq, @debug.Debug)
+
+pub(all) struct FocusRing {
+  order : Array[FieldId]
+  index : Int
+} derive(Eq, @debug.Debug)
+pub fn FocusRing::current(Self, Array[Field], FormValues) -> FieldId?
+pub fn FocusRing::focus(Self, FieldId, Array[Field], FormValues) -> Self
+pub fn FocusRing::new(order~ : Array[FieldId]) -> Self
+pub fn FocusRing::next(Self, Array[Field], FormValues) -> Self
+pub fn FocusRing::prev(Self, Array[Field], FormValues) -> Self
+
+pub(all) struct Form[A] {
+  fields : Array[Field]
+  focus : FocusRing
+  values : FormValues
+  validate_on : ValidateOn
+  decode : (FormValues) -> Result[A, Array[ValidationError]]
+  status : FormStatus[A]
+}
+pub fn[A] Form::focused_id(Self[A]) -> FieldId?
+pub fn[A] Form::new(fields~ : Array[Field], decode~ : (FormValues) -> Result[A, Array[ValidationError]], validate_on? : ValidateOn) -> Self[A]
+pub fn[A] Form::update(Self[A], FormMsg) -> (Self[A], @pippa.Cmd[FormMsg], FormEvent[A])
+pub fn[A] Form::view(Self[A], @theme.Theme, @profile.RenderContext) -> String
+pub fn[A] Form::with_validate_on(Self[A], ValidateOn) -> Self[A]
+
+pub(all) struct FormDecoder[A] {
+  decode : (FormValues) -> Result[A, Array[ValidationError]]
+}
+pub fn[A] FormDecoder::new(decode~ : (FormValues) -> Result[A, Array[ValidationError]]) -> Self[A]
+pub fn[A] FormDecoder::run(Self[A], FormValues) -> Result[A, Array[ValidationError]]
+
+pub(all) enum FormEvent[A] {
+  None
+  Changed(FieldId, FieldValue)
+  Submitted(A)
+  Cancelled
+} derive(@debug.Debug)
+
+pub(all) enum FormMsg {
+  Key(@pippa.InputEvent)
+  FocusNext
+  FocusPrev
+  Focus(FieldId)
+  Field(FieldId, FieldMsg)
+  Validate(FieldId?)
+  Submit
+  Reset
+} derive(@debug.Debug)
+
+pub(all) enum FormStatus[A] {
+  Editing
+  Submitted(A)
+  Blocked(Array[ValidationError])
+} derive(@debug.Debug)
+
+pub(all) struct FormValues {
+  values : Map[FieldId, FieldValue]
+} derive(@debug.Debug)
+pub fn FormValues::bool_or(Self, FieldId, Bool) -> Bool
+pub fn FormValues::from_pairs(Array[(FieldId, FieldValue)]) -> Self
+pub fn FormValues::get(Self, FieldId) -> FieldValue
+pub fn FormValues::new() -> Self
+pub fn FormValues::one(Self, FieldId) -> String?
+pub fn FormValues::required_text(Self, FieldId) -> Result[String, Array[ValidationError]]
+pub fn FormValues::set(Self, FieldId, FieldValue) -> Self
+
+pub(all) enum Severity {
+  Info
+  Warning
+  Error
+} derive(Eq, @debug.Debug)
+
+pub(all) enum ValidateOn {
+  Change
+  Blur
+  Submit
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ValidationError {
+  field : FieldId?
+  message : String
+  severity : Severity
+} derive(Eq, @debug.Debug)
+pub fn ValidationError::new(field? : FieldId?, message~ : String, severity? : Severity) -> Self
+
+pub(all) enum ValidationState {
+  Untouched
+  Dirty
+  Valid
+  Invalid(Array[ValidationError])
+} derive(Eq, @debug.Debug)
+
+pub(all) struct Validators {
+} derive(Eq, @debug.Debug)
+pub fn Validators::matches(FieldId, String) -> FieldValidator
+pub fn Validators::required() -> FieldValidator
+
+// Type aliases
+
+// Traits
+

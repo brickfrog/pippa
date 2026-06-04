@@ -133,6 +133,41 @@ pub fn default_theme() -> Theme {
       dark=@pippa.color_rgb(75, 85, 99),
     ),
   )
+  .with_role(
+    RoleKey::form("label"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(31, 41, 55),
+      dark=@pippa.color_rgb(229, 231, 235),
+    ).bold(),
+  )
+  .with_role(
+    RoleKey::form("help"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(107, 114, 128),
+      dark=@pippa.color_rgb(156, 163, 175),
+    ),
+  )
+  .with_role(
+    RoleKey::form("validation.info"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(37, 99, 235),
+      dark=@pippa.color_rgb(96, 165, 250),
+    ),
+  )
+  .with_role(
+    RoleKey::form("validation.warning"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(180, 83, 9),
+      dark=@pippa.color_rgb(251, 191, 36),
+    ),
+  )
+  .with_role(
+    RoleKey::form("validation.error"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(185, 28, 28),
+      dark=@pippa.color_rgb(248, 113, 113),
+    ),
+  )
 }
 
 ///|
