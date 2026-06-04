@@ -194,12 +194,13 @@ pub fn Table::width(self : Table, width : Int) -> Table {
 ///|
 /// Set the table's target visible height.
 ///
-/// When the fully rendered table is taller than `height`, the renderer keeps
-/// the table frame intact, renders the data rows that fit, and adds an overflow
-/// row made of `…` cells to indicate hidden rows. Row fitting uses the rendered
-/// height of wrapped or styled cells, so multi-line rows consume their full
-/// visible height. A height greater than or equal to the full table height does
-/// not change the rendered bytes.
+/// A height of 0 disables height capping; negative values are clamped to 0.
+/// When the fully rendered table is taller than a positive `height`, the
+/// renderer keeps the table frame intact, renders the data rows that fit, and
+/// adds an overflow row made of `…` cells to indicate hidden rows. Row fitting
+/// uses the rendered height of wrapped or styled cells, so multi-line rows
+/// consume their full visible height. A height greater than or equal to the full
+/// table height does not change the rendered bytes.
 pub fn Table::height(self : Table, height : Int) -> Table {
   { ..self, height: @internal.clamp_non_negative(height) }
 }
@@ -987,30 +988,24 @@ fn append_blocks(target : Array[String], blocks : Array[String]) -> Unit {
 }
 
 ///|
-fn can_fit_blocks(
+fn block_fits(
   table : Table,
-  blocks : Array[String],
+  used_height : Int,
   candidate : String,
   reserved_height : Int,
 ) -> Bool {
   table.height <= 0 ||
-  blocks_height(blocks) + block_height(candidate) + reserved_height <=
-  table.height
+  used_height + block_height(candidate) + reserved_height <= table.height
 }
 
 ///|
-fn maybe_push_block(
-  table : Table,
+fn push_height_block(
   blocks : Array[String],
   block : String,
-  reserved_height : Int,
-) -> Bool {
-  if can_fit_blocks(table, blocks, block, reserved_height) {
-    blocks.push(block)
-    true
-  } else {
-    false
-  }
+  used_height : Int,
+) -> Int {
+  blocks.push(block)
+  used_height + block_height(block)
 }
 
 ///|
@@ -1067,37 +1062,27 @@ fn maybe_push_table_prefix(
   blocks : Array[String],
   widths : Array[Int],
   reserved_height : Int,
-) -> Unit {
+) -> Int {
+  let mut used_height = 0
   if table.border_top {
-    ignore(
-      maybe_push_block(
-        table,
-        blocks,
-        render_top_border(table, widths),
-        reserved_height,
-      ),
-    )
-  }
-  if !table.headers.is_empty() {
-    ignore(
-      maybe_push_block(
-        table,
-        blocks,
-        render_row(table, HEADER_ROW, table.headers, widths),
-        reserved_height,
-      ),
-    )
-    if table.border_header {
-      ignore(
-        maybe_push_block(
-          table,
-          blocks,
-          render_middle_border(table, widths),
-          reserved_height,
-        ),
-      )
+    let top = render_top_border(table, widths)
+    if block_fits(table, used_height, top, reserved_height) {
+      used_height = push_height_block(blocks, top, used_height)
     }
   }
+  if !table.headers.is_empty() {
+    let header = render_row(table, HEADER_ROW, table.headers, widths)
+    if block_fits(table, used_height, header, reserved_height) {
+      used_height = push_height_block(blocks, header, used_height)
+    }
+    if table.border_header {
+      let middle = render_middle_border(table, widths)
+      if block_fits(table, used_height, middle, reserved_height) {
+        used_height = push_height_block(blocks, middle, used_height)
+      }
+    }
+  }
+  used_height
 }
 
 ///|
@@ -1109,7 +1094,9 @@ fn render_capped_blocks(table : Table, widths : Array[Int]) -> Array[String] {
     ""
   }
   let bottom_height = if table.border_bottom { block_height(bottom) } else { 0 }
-  maybe_push_table_prefix(table, blocks, widths, bottom_height)
+  let mut used_height = maybe_push_table_prefix(
+    table, blocks, widths, bottom_height,
+  )
   let mut row_index = 0
   while row_index < table.rows.length() {
     let row_blocks = render_data_row_blocks(table, widths, row_index)
@@ -1119,20 +1106,21 @@ fn render_capped_blocks(table : Table, widths : Array[Int]) -> Array[String] {
     } else {
       0
     }
-    if blocks_height(blocks) + row_height + overflow_height + bottom_height >
-      table.height {
+    if used_height + row_height + overflow_height + bottom_height > table.height {
       break
     }
     append_blocks(blocks, row_blocks)
+    used_height = used_height + row_height
     row_index = row_index + 1
   }
   if row_index < table.rows.length() {
     let overflow = render_overflow_row(table, row_index, widths)
-    ignore(maybe_push_block(table, blocks, overflow, bottom_height))
+    if block_fits(table, used_height, overflow, bottom_height) {
+      used_height = push_height_block(blocks, overflow, used_height)
+    }
   }
   if table.border_bottom {
-    if blocks_height(blocks) + bottom_height <= table.height ||
-      blocks.is_empty() {
+    if used_height + bottom_height <= table.height || blocks.is_empty() {
       blocks.push(bottom)
     }
   }
@@ -1151,9 +1139,8 @@ pub fn Table::render(self : Table) -> String {
     natural_widths(self, count, fixed_widths),
     fixed_widths,
   )
-  let full_blocks = render_full_blocks(self, widths)
-  if self.height <= 0 || self.height >= blocks_height(full_blocks) {
-    return @internal.join_lines(full_blocks)
+  if self.height <= 0 {
+    return @internal.join_lines(render_full_blocks(self, widths))
   }
   @internal.join_lines(render_capped_blocks(self, widths))
 }
