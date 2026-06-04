@@ -209,6 +209,8 @@ pub fn up_binding() -> Binding
 
 pub fn visible_width(String) -> Int
 
+pub fn word_wrap(String, Int) -> String
+
 // Errors
 
 // Types and methods
