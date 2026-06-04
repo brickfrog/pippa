@@ -9,6 +9,29 @@ test "strip_ansi removes bare ESC sequences" {
 }
 
 ///|
+test "strip_ansi removes OSC 8 hyperlink wrappers" {
+  assert_eq(strip_ansi(hyperlink("http://example.com", "label")), "label")
+}
+
+///|
+test "strip_ansi removes BEL-terminated OSC 8 hyperlink wrappers" {
+  assert_eq(
+    strip_ansi("\u001b]8;;http://example.com\u0007label\u001b]8;;\u0007"),
+    "label",
+  )
+}
+
+///|
+test "strip_ansi removes empty BEL-terminated OSC payloads" {
+  assert_eq(strip_ansi("before\u001b]\u0007after"), "beforeafter")
+}
+
+///|
+test "strip_ansi does not hide unterminated OSC text" {
+  assert_eq(strip_ansi("\u001b]8;;http://xvisible"), "8;;http://xvisible")
+}
+
+///|
 test "strip_ansi plain string unchanged" {
   assert_eq(strip_ansi("hello"), "hello")
 }
@@ -26,6 +49,22 @@ test "visible_width plain string" {
 ///|
 test "visible_width with ANSI" {
   assert_eq(visible_width("\u001b[1mbold\u001b[0m"), 4)
+}
+
+///|
+test "visible_width treats OSC 8 hyperlinks as zero-width escapes" {
+  let link = hyperlink("http://example.com", "label")
+  assert_eq(visible_width(link), visible_width("label"))
+}
+
+///|
+test "visible_width does not hide unterminated OSC text" {
+  assert_eq(
+    visible_width("\u001b]8;;http://xvisible"),
+    visible_width("8;;http://xvisible"),
+  )
+  let link = hyperlink("http://x", "visible")
+  assert_eq(visible_width(link), visible_width("visible"))
 }
 
 ///|

@@ -26,6 +26,15 @@ test "style render rounded border" {
 }
 
 ///|
+test "style render treats OSC 8 hyperlinks as zero-width escapes" {
+  let link = hyperlink("http://example.com", "label")
+  let actual = style().border(border_ascii()).width(5).render(link)
+  let expected = "+-----+\n|\{link}|\n+-----+"
+  assert_eq(actual, expected)
+  assert_eq(max_line_width(actual), 7)
+}
+
+///|
 test "style render padding adds surrounding space" {
   let actual = style().padding(1, 2, 1, 1).render("hi")
   let expected = "     \n hi  \n     "

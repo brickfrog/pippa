@@ -109,6 +109,8 @@ pub fn hgap(n? : Int) -> String
 
 pub fn hide_cursor() -> String
 
+pub fn hyperlink(String, String) -> String
+
 pub fn join_horizontal(Array[String], valign? : VerticalAlign) -> String
 
 pub fn join_vertical(Array[String], align? : Align) -> String
