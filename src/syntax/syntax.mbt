@@ -419,7 +419,10 @@ pub fn shell_lexer() -> Lexer {
         Regex("[$]([A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*#?!\\-])"),
         Emit(Name(Variable)),
       ),
-      rule(Regex("-[A-Za-z][A-Za-z0-9_\\-]*"), Emit(Name(Attribute))),
+      rule(
+        Regex("--?[A-Za-z][A-Za-z0-9_\\-]*(=[^ \t\r\n;&|()<>]+)?"),
+        Emit(Name(Attribute)),
+      ),
       rule(Regex("[0-9]+([.][0-9]+)?"), Emit(Literal(Number))),
       rule(Regex("[A-Za-z_][A-Za-z0-9_]*"), Emit(Name(Variable))),
       rule(CharSet("|&;=<>"), Emit(Operator)),

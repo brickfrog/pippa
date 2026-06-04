@@ -42,6 +42,29 @@ fn has_role(spans : Array[@theme.StyledSpan], role : @theme.RoleKey) -> Bool {
 }
 
 ///|
+fn bytes_from_view(view : BytesView) -> Bytes {
+  Bytes::from_array(view.to_array())
+}
+
+///|
+fn token_text(highlighted : Highlighted, token : TokenSpan) -> String {
+  let bytes = @utf8.encode(highlighted.source[:])
+  @utf8.decode_lossy(bytes_from_view(bytes[token.start_byte:token.end_byte])[:])
+}
+
+///|
+fn assert_token(
+  highlighted : Highlighted,
+  index : Int,
+  kind : SyntaxKind,
+  text : String,
+) -> Unit raise {
+  let token = highlighted.tokens[index]
+  @test.assert_eq(token.kind, kind)
+  @test.assert_eq(token_text(highlighted, token), text)
+}
+
+///|
 test "plain text lexer emits one identity token covering utf8 bytes" {
   let source = "plain é\n"
   let highlighted = checked_highlight(SyntaxRegistry::default(), "text", source)
@@ -69,12 +92,28 @@ test "seed lexers classify representative tokens and preserve coverage" {
     registry, "moonbit", "fn main() -> Int { true }\n",
   )
   assert_covers_all(moon.tokens, @utf8.encode(moon.source[:]).length())
+  assert_eq(moon.tokens.length(), 15)
+  assert_token(moon, 0, Keyword, "fn")
+  assert_token(moon, 1, Whitespace, " ")
+  assert_token(moon, 2, Name(Variable), "main")
+  assert_token(moon, 3, Punctuation, "()")
+  assert_token(moon, 5, Operator, "->")
+  assert_token(moon, 7, Name(Type), "Int")
+  assert_token(moon, 11, Literal(Bool), "true")
   assert_true(has_kind(moon.tokens, Keyword))
   assert_true(has_kind(moon.tokens, Name(Type)))
   assert_true(has_kind(moon.tokens, Literal(Bool)))
 
   let json = checked_highlight(registry, "json", "{\"name\": true, \"n\": 42}")
   assert_covers_all(json.tokens, @utf8.encode(json.source[:]).length())
+  assert_eq(json.tokens.length(), 12)
+  assert_token(json, 0, Punctuation, "{")
+  assert_token(json, 1, Literal(String), "\"name\"")
+  assert_token(json, 2, Punctuation, ":")
+  assert_token(json, 4, Literal(Bool), "true")
+  assert_token(json, 7, Literal(String), "\"n\"")
+  assert_token(json, 10, Literal(Number), "42")
+  assert_token(json, 11, Punctuation, "}")
   assert_true(has_kind(json.tokens, Literal(String)))
   assert_true(has_kind(json.tokens, Literal(Bool)))
   assert_true(has_kind(json.tokens, Literal(Number)))
@@ -93,6 +132,29 @@ test "seed lexers classify representative tokens and preserve coverage" {
   assert_true(has_kind(diff.tokens, Keyword))
   assert_true(has_kind(diff.tokens, Error))
   assert_true(has_kind(diff.tokens, Name(Constant)))
+}
+
+///|
+test "shell lexer preserves exact option tokens including long options" {
+  let shell = checked_highlight(
+    SyntaxRegistry::default(),
+    "sh",
+    "grep --line-number --flag=value -n foo file\n",
+  )
+  assert_covers_all(shell.tokens, @utf8.encode(shell.source[:]).length())
+  assert_eq(shell.tokens.length(), 12)
+  assert_token(shell, 0, Name(Variable), "grep")
+  assert_token(shell, 1, Whitespace, " ")
+  assert_token(shell, 2, Name(Attribute), "--line-number")
+  assert_token(shell, 3, Whitespace, " ")
+  assert_token(shell, 4, Name(Attribute), "--flag=value")
+  assert_token(shell, 5, Whitespace, " ")
+  assert_token(shell, 6, Name(Attribute), "-n")
+  assert_token(shell, 7, Whitespace, " ")
+  assert_token(shell, 8, Name(Variable), "foo")
+  assert_token(shell, 9, Whitespace, " ")
+  assert_token(shell, 10, Name(Variable), "file")
+  assert_token(shell, 11, Whitespace, "\n")
 }
 
 ///|
