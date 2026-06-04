@@ -22,6 +22,8 @@ pub fn render_border(String, String, String, String, String, String, Array[Strin
 
 pub fn repeat_string(String, Int) -> String
 
+pub fn skip_ansi_sequence(Array[Char], Int) -> Int
+
 pub fn truncate_width(String, Int) -> String
 
 // Errors
