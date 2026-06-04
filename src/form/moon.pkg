@@ -1,0 +1,11 @@
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/component",
+  "brickfrog/pippa/profile",
+  "brickfrog/pippa/theme",
+  "moonbitlang/core/debug",
+}
+
+import {
+  "moonbitlang/core/test",
+} for "test"
