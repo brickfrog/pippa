@@ -633,6 +633,48 @@ pub fn default_theme() -> Theme {
       dark=@pippa.color_rgb(75, 85, 99),
     ),
   )
+  .with_role(
+    RoleKey::markdown("strikethrough"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(107, 114, 128),
+      dark=@pippa.color_rgb(156, 163, 175),
+    ).strikethrough(),
+  )
+  .with_role(
+    RoleKey::markdown("table.header"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(17, 24, 39),
+      dark=@pippa.color_rgb(243, 244, 246),
+    ).bold(),
+  )
+  .with_role(
+    RoleKey::markdown("table.cell"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(31, 41, 55),
+      dark=@pippa.color_rgb(229, 231, 235),
+    ),
+  )
+  .with_role(
+    RoleKey::markdown("table.border"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(156, 163, 175),
+      dark=@pippa.color_rgb(75, 85, 99),
+    ),
+  )
+  .with_role(
+    RoleKey::markdown("task.checked"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(21, 128, 61),
+      dark=@pippa.color_rgb(74, 222, 128),
+    ).bold(),
+  )
+  .with_role(
+    RoleKey::markdown("task.unchecked"),
+    adaptive_foreground(
+      light=@pippa.color_rgb(107, 114, 128),
+      dark=@pippa.color_rgb(156, 163, 175),
+    ),
+  )
 }
 
 ///|

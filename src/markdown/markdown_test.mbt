@@ -16,6 +16,15 @@ fn assert_line_widths_at_most(rendered : String, width : Int) -> Unit raise {
 }
 
 ///|
+fn max_line_width(rendered : String) -> Int {
+  let mut width = 0
+  for line in @pippa.split_lines(rendered) {
+    width = width.max(@pippa.visible_width(line))
+  }
+  width
+}
+
+///|
 test "parse exposes cmark doc and renderer handles README grade markdown" {
   let source =
     #|# Pippa Markdown
@@ -179,4 +188,234 @@ test "non-positive width disables paragraph blockquote and list wrapping" {
     stripped(render(source, width=-1, theme~, ctx~, link_mode=Plain)),
     expected,
   )
+}
+
+///|
+test "default markdown flavor remains CommonMark strict" {
+  let source =
+    #|| A | B |
+    #||---|---|
+    #|| 1 | 2 |
+    #|
+    #|~~gone~~
+  let rendered = render(
+    source,
+    width=80,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+  )
+  let expected =
+    #|| A | B | |---|---| | 1 | 2 |
+    #|
+    #|~~gone~~
+  assert_eq(stripped(rendered), expected)
+}
+
+///|
+test "gfm task list markers render unicode checkboxes with ascii fallback" {
+  let source =
+    #|- [x] done
+    #|- [ ] todo
+  let theme = @theme.default_theme()
+  let ctx = no_color_ctx()
+  let unicode = render(
+    source,
+    width=80,
+    theme~,
+    ctx~,
+    link_mode=Plain,
+    options=MarkdownOptions::gfm(),
+  )
+  assert_eq(stripped(unicode), "- ☑ done\n- ☐ todo")
+
+  let ascii = render(
+    source,
+    width=80,
+    theme~,
+    ctx~,
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_task_checkbox_style(AsciiCheckbox),
+  )
+  assert_eq(stripped(ascii), "- [x] done\n- [ ] todo")
+}
+
+///|
+test "gfm strikethrough and autolinks render through styled spans" {
+  let theme = @theme.default_theme()
+  let no_color = render(
+    "~~gone~~ and <https://example.com>",
+    width=80,
+    theme~,
+    ctx=no_color_ctx(),
+    link_mode=Osc8,
+    options=MarkdownOptions::gfm(),
+  )
+  assert_eq(stripped(no_color), "gone and https://example.com")
+  assert_true(no_color.contains("\u001b]8;;https://example.com\u001b\\"))
+  assert_true(no_color.contains("\u001b]8;;\u001b\\"))
+
+  let bare = render(
+    "https://example.com",
+    width=80,
+    theme~,
+    ctx=no_color_ctx(),
+    link_mode=Osc8,
+    options=MarkdownOptions::gfm(),
+  )
+  assert_eq(stripped(bare), "https://example.com")
+  assert_false(bare.contains("\u001b]8;;https://example.com\u001b\\"))
+
+  let styled = render(
+    "~~gone~~",
+    width=80,
+    theme~,
+    ctx=@profile.RenderContext::default(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm(),
+  )
+  assert_true(styled.contains("\u001b[9m"))
+
+  let nested = render(
+    "~~**bold** [link](https://example.com)~~",
+    width=80,
+    theme~,
+    ctx=@profile.RenderContext::default(),
+    link_mode=Osc8,
+    options=MarkdownOptions::gfm(),
+  )
+  assert_eq(stripped(nested), "bold link")
+  assert_true(nested.contains("\u001b[1m"))
+  assert_true(nested.contains("\u001b[4m"))
+  assert_true(nested.contains("\u001b[9m"))
+  assert_true(nested.contains("\u001b]8;;https://example.com\u001b\\"))
+}
+
+///|
+test "gfm tables align columns and wrap narrow cells by visible width" {
+  let source =
+    #|| Left | Right | Center |
+    #||:-----|------:|:------:|
+    #|| alpha beta | 12 | mid |
+    #|| long words here | 300 | centered |
+  let rendered = render(
+    source,
+    width=34,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Wrap),
+  )
+  let expected =
+    #|| Left     |    Right |  Center  |
+    #|| :------- | -------: | :------: |
+    #|| alpha    |       12 |   mid    |
+    #|| beta     |          |          |
+    #|| long     |      300 | centered |
+    #|| words    |          |          |
+    #|| here     |          |          |
+  assert_eq(stripped(rendered), expected)
+  assert_line_widths_at_most(stripped(rendered), 34)
+}
+
+///|
+test "gfm table wrap preserves long no-wrap cell content" {
+  let source =
+    #|| Code |
+    #||------|
+    #|| `supercalifragilistic` |
+  let rendered = render(
+    source,
+    width=14,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Wrap),
+  )
+  let expected =
+    #|| Code       |
+    #|| ---------- |
+    #|| supercalif |
+    #|| ragilistic |
+  assert_eq(stripped(rendered), expected)
+  assert_true(stripped(rendered).contains("supercalif"))
+  assert_true(stripped(rendered).contains("ragilistic"))
+  assert_line_widths_at_most(stripped(rendered), 14)
+}
+
+///|
+test "gfm tables can truncate narrow cells by visible width" {
+  let source =
+    #|| Left | Right | Center |
+    #||:-----|------:|:------:|
+    #|| alpha beta | 12 | mid |
+    #|| long words here | 300 | centered |
+  let rendered = render(
+    source,
+    width=34,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Truncate),
+  )
+  let expected =
+    #|| Left     |    Right |  Center  |
+    #|| :------- | -------: | :------: |
+    #|| alpha b… |       12 |   mid    |
+    #|| long wo… |      300 | centered |
+  assert_eq(stripped(rendered), expected)
+  assert_line_widths_at_most(stripped(rendered), 34)
+}
+
+///|
+test "gfm table width fits except below structural minimum" {
+  let source =
+    #|| A | B | C | D |
+    #||---|---|---|---|
+    #|| alpha | beta | gamma | delta |
+  let fitted = render(
+    source,
+    width=17,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Wrap),
+  )
+  assert_line_widths_at_most(stripped(fitted), 17)
+
+  let structural_overflow = render(
+    source,
+    width=10,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Wrap),
+  )
+  assert_eq(max_line_width(stripped(structural_overflow)), 17)
+  assert_true(max_line_width(stripped(structural_overflow)) > 10)
+
+  let wide_source =
+    #|| A | B |
+    #||---|---|
+    #|| 界 | x |
+  let wide_fitted = render(
+    wide_source,
+    width=10,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Wrap),
+  )
+  assert_line_widths_at_most(stripped(wide_fitted), 10)
+
+  let wide_structural_overflow = render(
+    wide_source,
+    width=9,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Wrap),
+  )
+  assert_eq(max_line_width(stripped(wide_structural_overflow)), 10)
+  assert_true(max_line_width(stripped(wide_structural_overflow)) > 9)
 }
