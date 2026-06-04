@@ -1,0 +1,29 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/markdown"
+
+import {
+  "brickfrog/pippa/profile",
+  "brickfrog/pippa/theme",
+  "moonbit-community/cmark/cmark",
+}
+
+// Values
+pub fn parse(String) -> @cmark.Doc
+
+pub fn render(String, width~ : Int, theme~ : @theme.Theme, ctx~ : @profile.RenderContext, link_mode? : LinkMode) -> String
+
+pub fn render_doc(@cmark.Doc, width~ : Int, theme~ : @theme.Theme, ctx~ : @profile.RenderContext, link_mode? : LinkMode) -> String
+
+// Errors
+
+// Types and methods
+pub(all) enum LinkMode {
+  Osc8
+  Footnote
+  Plain
+} derive(Eq)
+
+// Type aliases
+
+// Traits
+
