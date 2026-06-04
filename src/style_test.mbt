@@ -150,3 +150,102 @@ test "style invalid hex stays empty under every profile" {
     assert_true(out.contains(underline()))
   }
 }
+
+///|
+test "style supports rgb and hex colors plus extra ansi flags" {
+  let actual = style()
+    .foreground_hex("#ff00aa")
+    .background_rgb(1, 2, 3)
+    .italic()
+    .reverse()
+    .render("hi")
+  let expected = fg_rgb(255, 0, 170) +
+    bg_rgb(1, 2, 3) +
+    "\{CSI}3m" +
+    reverse() +
+    "hi" +
+    reset()
+  assert_eq(actual, expected)
+}
+
+///|
+test "style margin and height expand the rendered block" {
+  let actual = style().width(4).height(2).margin(1, 2, 1, 1).render("hi")
+  let expected = "       \n hi    \n       \n       "
+  assert_eq(actual, expected)
+}
+
+///|
+test "style place centers content within a region" {
+  let actual = place(6, 3, "xy", align=Center, valign=Middle)
+  let expected = "      \n  xy  \n      "
+  assert_eq(actual, expected)
+}
+
+///|
+test "style join_horizontal honors vertical alignment" {
+  let actual = join_horizontal(["A", "B\nC"], valign=Bottom)
+  let expected = " B\nAC"
+  assert_eq(actual, expected)
+}
+
+///|
+test "style join_vertical aligns blocks to a common width" {
+  let actual = join_vertical(["A", "ZZ"], align=Right)
+  let expected = " A\nZZ"
+  assert_eq(actual, expected)
+}
+
+///|
+test "style border_sides can suppress vertical edges" {
+  let actual = style()
+    .border(border_ascii())
+    .border_sides(true, false, true, false)
+    .render("hi")
+  let expected = "--\nhi\n--"
+  assert_eq(actual, expected)
+}
+
+///|
+test "style border colors render separately from content colors" {
+  let actual = style()
+    .foreground(color_ansi(2))
+    .border(border_ascii())
+    .border_foreground(color_ansi(1))
+    .render("hi")
+  let expected = fg_color(1) +
+    "+--+" +
+    reset() +
+    "\n" +
+    fg_color(1) +
+    "|" +
+    reset() +
+    fg_color(2) +
+    "hi" +
+    reset() +
+    fg_color(1) +
+    "|" +
+    reset() +
+    "\n" +
+    fg_color(1) +
+    "+--+" +
+    reset()
+  assert_eq(actual, expected)
+}
+
+///|
+test "style render_with degrades content and border colors" {
+  let ctx = @profile.RenderContext::default().with_color_profile(
+    @profile.NoColor,
+  )
+  let actual = style()
+    .foreground_rgb(255, 0, 0)
+    .border(border_ascii())
+    .border_foreground(color_rgb(0, 255, 0))
+    .bold()
+    .render_with("hi", ctx)
+  assert_false(actual.contains("\u001b[38;"))
+  assert_false(actual.contains("\u001b[48;"))
+  assert_true(actual.contains(bold()))
+  assert_eq(strip_ansi(actual), "+--+\n|hi|\n+--+")
+}

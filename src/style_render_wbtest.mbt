@@ -1,7 +1,9 @@
 ///|
-extern "C" fn styling_perf_now_us() -> Int64 = "pippa_styling_perf_now_us"
+#cfg(any(target="native", target="llvm"))
+extern "C" fn pippa_perf_now_us() -> Int64 = "pippa_perf_now_us"
 
 ///|
+#cfg(any(target="native", target="llvm"))
 fn representative_render_style() -> Style {
   style()
   .background_hex("#102030")
@@ -12,6 +14,7 @@ fn representative_render_style() -> Style {
 }
 
 ///|
+#cfg(any(target="native", target="llvm"))
 fn representative_render_content() -> String {
   col([
     "Pippa render perf", "frame 0001 | alpha beta gamma", "frame 0002 | delta epsilon zeta",
@@ -29,7 +32,7 @@ fn representative_render_content() -> String {
 
 ///|
 fn legacy_render(style : Style, content : String) -> String {
-  let content_lines = @pippa.split_lines(content)
+  let content_lines = split_lines(content)
   let target_width = legacy_resolve_width(style, content_lines)
   let base_lines = legacy_shape_content_lines(
     content_lines,
@@ -44,7 +47,7 @@ fn legacy_render(style : Style, content : String) -> String {
       legacy_render_border_block(
         border,
         padded,
-        @internal.max_visible_width(padded, @pippa.visible_width),
+        @internal.max_visible_width(padded, visible_width),
         style,
       )
     None => @internal.join_lines(padded)
@@ -61,11 +64,8 @@ fn legacy_render(style : Style, content : String) -> String {
 
 ///|
 fn legacy_resolve_width(style : Style, lines : Array[String]) -> Int {
-  let natural = @internal.max_visible_width(lines, @pippa.visible_width)
-  let from_width = match style.width {
-    Some(width) => width
-    None => natural
-  }
+  let natural = @internal.max_visible_width(lines, visible_width)
+  let from_width = if style.width > 0 { style.width } else { natural }
   let with_min = from_width.max(style.min_width)
   match style.max_width {
     Some(max_width) => with_min.min(max_width)
@@ -105,15 +105,15 @@ fn legacy_fit_line_width(
   target_width : Int,
   align : Align,
 ) -> String {
-  let truncated = @pippa.truncate(line, target_width)
-  let width = @pippa.visible_width(truncated)
+  let truncated = truncate(line, target_width)
+  let width = visible_width(truncated)
   if width >= target_width {
     truncated
   } else {
     match align {
-      Left => @pippa.pad_right(truncated, target_width)
-      Center => @pippa.center(truncated, target_width)
-      Right => @pippa.pad_left(truncated, target_width)
+      Left => pad_right(truncated, target_width)
+      Center => center(truncated, target_width)
+      Right => pad_left(truncated, target_width)
     }
   }
 }
@@ -138,15 +138,15 @@ fn legacy_fit_height(
 ///|
 fn legacy_apply_padding(lines : Array[String], style : Style) -> Array[String] {
   let padded : Array[String] = []
-  let inner_width = @internal.max_visible_width(lines, @pippa.visible_width)
+  let inner_width = @internal.max_visible_width(lines, visible_width)
   let row_width = inner_width + style.padding_left + style.padding_right
   let blank = String::make(row_width, ' ')
   for _ in 0..<style.padding_top {
     padded.push(blank)
   }
   for line in lines {
-    let fitted = if @pippa.visible_width(line) < inner_width {
-      @pippa.pad_right(line, inner_width)
+    let fitted = if visible_width(line) < inner_width {
+      pad_right(line, inner_width)
     } else {
       line
     }
@@ -173,8 +173,8 @@ fn legacy_apply_margin(
   if top == 0 && right == 0 && bottom == 0 && left == 0 {
     return block
   }
-  let lines = @pippa.split_lines(block)
-  let inner_width = @internal.max_visible_width(lines, @pippa.visible_width)
+  let lines = split_lines(block)
+  let inner_width = @internal.max_visible_width(lines, visible_width)
   let full_width = inner_width + left + right
   let blank = String::make(full_width, ' ')
   let rows : Array[String] = []
@@ -182,8 +182,8 @@ fn legacy_apply_margin(
     rows.push(blank)
   }
   for line in lines {
-    let fitted = if @pippa.visible_width(line) < inner_width {
-      @pippa.pad_right(line, inner_width)
+    let fitted = if visible_width(line) < inner_width {
+      pad_right(line, inner_width)
     } else {
       line
     }
@@ -197,7 +197,7 @@ fn legacy_apply_margin(
 
 ///|
 fn legacy_render_border_block(
-  border : @pippa.Border,
+  border : Border,
   lines : Array[String],
   inner_width : Int,
   style : Style,
@@ -212,7 +212,7 @@ fn legacy_render_border_block(
       border.vertical,
       lines,
       inner_width,
-      @pippa.visible_width,
+      visible_width,
       style.border_top,
       style.border_right,
       style.border_bottom,
@@ -221,27 +221,27 @@ fn legacy_render_border_block(
   }
   let top_left = @internal.normalize_border_piece(
     border.top_left,
-    @pippa.visible_width,
+    visible_width,
   )
   let top_right = @internal.normalize_border_piece(
     border.top_right,
-    @pippa.visible_width,
+    visible_width,
   )
   let bottom_left = @internal.normalize_border_piece(
     border.bottom_left,
-    @pippa.visible_width,
+    visible_width,
   )
   let bottom_right = @internal.normalize_border_piece(
     border.bottom_right,
-    @pippa.visible_width,
+    visible_width,
   )
   let horizontal_piece = @internal.normalize_border_piece(
     border.horizontal,
-    @pippa.visible_width,
+    visible_width,
   )
   let vertical_piece = @internal.normalize_border_piece(
     border.vertical,
-    @pippa.visible_width,
+    visible_width,
   )
   let horizontal = @internal.repeat_string(horizontal_piece, inner_width)
   let rows : Array[String] = []
@@ -296,26 +296,39 @@ fn legacy_decorate_segment(prefix : String, segment : String) -> String {
   if prefix == "" || segment == "" {
     segment
   } else {
-    prefix + segment + @pippa.reset()
+    prefix + segment + reset()
+  }
+}
+
+///|
+fn legacy_effective_foreground(style : Style) -> Color? {
+  match style.fg_ext {
+    Some(color) => Some(color)
+    None => style.fg.map(color_ansi)
+  }
+}
+
+///|
+fn legacy_effective_background(style : Style) -> Color? {
+  match style.bg_ext {
+    Some(color) => Some(color)
+    None => style.bg.map(color_ansi)
   }
 }
 
 ///|
 fn legacy_build_border_ansi_prefix(style : Style) -> String {
-  let border_style = {
-    ..style,
-    fg: match style.border_fg {
+  legacy_build_ansi_prefix_with_colors(
+    style,
+    match style.border_fg {
       Some(color) => Some(color)
-      None => style.fg
+      None => legacy_effective_foreground(style)
     },
-    bg: match style.border_bg {
+    match style.border_bg {
       Some(color) => Some(color)
-      None => style.bg
+      None => legacy_effective_background(style)
     },
-    border_fg: None,
-    border_bg: None,
-  }
-  legacy_build_ansi_prefix(border_style)
+  )
 }
 
 ///|
@@ -328,42 +341,135 @@ fn legacy_apply_style_prefix(style : Style, block : String) -> String {
   if prefix == "" {
     block
   } else {
-    prefix + block + @pippa.reset()
+    prefix + block + reset()
   }
 }
 
 ///|
 fn legacy_build_ansi_prefix(style : Style) -> String {
+  legacy_build_ansi_prefix_with_colors(
+    style,
+    legacy_effective_foreground(style),
+    legacy_effective_background(style),
+  )
+}
+
+///|
+fn legacy_build_ansi_prefix_with_colors(
+  style : Style,
+  fg : Color?,
+  bg : Color?,
+) -> String {
   let buf = StringBuilder::new()
   let ctx = @profile.RenderContext::default()
-  style.fg
+  fg
   .iter()
-  .each(fn(color) { buf.write_string(foreground_sequence(ctx, color)) })
-  style.bg
+  .each(fn(color) { buf.write_string(legacy_foreground_sequence(ctx, color)) })
+  bg
   .iter()
-  .each(fn(color) { buf.write_string(background_sequence(ctx, color)) })
+  .each(fn(color) { buf.write_string(legacy_background_sequence(ctx, color)) })
   if style.bold {
-    buf.write_string(@pippa.bold())
+    buf.write_string(bold())
   }
   if style.dim {
-    buf.write_string(@pippa.dim())
+    buf.write_string(dim())
   }
   if style.italic {
-    buf.write_string("\{@pippa.CSI}3m")
+    buf.write_string("\{CSI}3m")
   }
   if style.underline {
-    buf.write_string(@pippa.underline())
+    buf.write_string(underline())
   }
   if style.blink {
-    buf.write_string(@pippa.blink())
+    buf.write_string(blink())
   }
   if style.reverse {
-    buf.write_string(@pippa.reverse())
+    buf.write_string(reverse())
   }
   if style.strikethrough {
-    buf.write_string(@pippa.strikethrough())
+    buf.write_string(strikethrough())
   }
   buf.to_string()
+}
+
+///|
+fn legacy_color_value(
+  ctx : @profile.RenderContext,
+  color : Color,
+) -> @profile.ColorValue? {
+  match color {
+    Ansi(n) => Some(@profile.Palette(@internal.clamp_non_negative(n)))
+    RGB(r, g, b) => Some(@profile.Rgb(r, g, b))
+    Hex(hex) =>
+      match legacy_hex_to_rgb(hex) {
+        Some((r, g, b)) => Some(@profile.Rgb(r, g, b))
+        None => None
+      }
+    Adaptive(light, dark) =>
+      match ctx.background {
+        Light => legacy_color_value(ctx, light)
+        Dark | Unknown => legacy_color_value(ctx, dark)
+      }
+  }
+}
+
+///|
+fn legacy_foreground_sequence(
+  ctx : @profile.RenderContext,
+  color : Color,
+) -> String {
+  match legacy_color_value(ctx, color) {
+    Some(value) => @profile.render_fg(ctx, value)
+    None => ""
+  }
+}
+
+///|
+fn legacy_background_sequence(
+  ctx : @profile.RenderContext,
+  color : Color,
+) -> String {
+  match legacy_color_value(ctx, color) {
+    Some(value) => @profile.render_bg(ctx, value)
+    None => ""
+  }
+}
+
+///|
+fn legacy_hex_to_rgb(hex : String) -> (Int, Int, Int)? {
+  let view = if hex.length() > 0 && hex[0] == '#' { hex[:][1:] } else { hex[:] }
+  let normalized = if view.length() == 3 {
+    let buf = StringBuilder::new(size_hint=6)
+    for ch in view.iter() {
+      buf.write_char(ch)
+      buf.write_char(ch)
+    }
+    Some(buf.to_string())
+  } else if view.length() == 6 {
+    Some(view.to_owned())
+  } else {
+    None
+  }
+  match normalized {
+    Some(value) => {
+      let parts = value[:]
+      let r = try? @string.parse_uint(parts[0:2], base=16)
+      let g = try? @string.parse_uint(parts[2:4], base=16)
+      let b = try? @string.parse_uint(parts[4:6], base=16)
+      match (r, g, b) {
+        (Ok(rv), Ok(gv), Ok(bv)) =>
+          Some(
+            (
+              rv.reinterpret_as_int(),
+              gv.reinterpret_as_int(),
+              bv.reinterpret_as_int(),
+            ),
+          )
+        _ => None
+      }
+    }
+    None => None
+  }
 }
 
 ///|
@@ -371,15 +477,15 @@ fn unicode_matrix_content() -> String {
   let accented = String::from_array(['e', '\u{0301}'])
   let wide = String::from_array(['\u{4F60}', '\u{597D}'])
   let technologist = String::from_array(['\u{1F469}', '\u{200D}', '\u{1F4BB}'])
-  "\{wide}x\n\{accented}y\n\{@pippa.fg_color(1)}\{technologist}\{@pippa.reset()}"
+  "\{wide}x\n\{accented}y\n\{fg_color(1)}\{technologist}\{reset()}"
 }
 
 ///|
 fn exact_fit_trailing_suffix_contents() -> Array[String] {
   [
-    "hi\{@pippa.fg_color(1)}",
-    "hi\{@pippa.bg_rgb(1, 2, 3)}",
-    "hi\{@pippa.reset()}",
+    "hi\{fg_color(1)}",
+    "hi\{bg_rgb(1, 2, 3)}",
+    "hi\{reset()}",
     "hi\u001b[?25l",
     "h\t",
     "h\u0001",
@@ -388,7 +494,7 @@ fn exact_fit_trailing_suffix_contents() -> Array[String] {
 }
 
 ///|
-fn assert_optimized_render_matches_legacy(
+fn assert_render_matches_legacy(
   name : String,
   sty : Style,
   content : String,
@@ -399,11 +505,11 @@ fn assert_optimized_render_matches_legacy(
 }
 
 ///|
-test "styling render optimized path stays byte-identical to legacy reference" {
+test "style render path stays byte-identical to legacy reference" {
   let contents = [
     "hi",
     "alpha\nbeta\n",
-    "\{@pippa.fg_color(2)}green\{@pippa.reset()} plain",
+    "\{fg_color(2)}green\{reset()} plain",
     unicode_matrix_content(),
   ]
   let borders = [
@@ -453,25 +559,28 @@ test "styling render optimized path stays byte-identical to legacy reference" {
   }
   for sty in styles {
     for content in contents {
-      assert_optimized_render_matches_legacy("matrix", sty, content)
+      assert_render_matches_legacy("matrix", sty, content)
     }
     for content in exact_fit_trailing_suffix_contents() {
-      assert_optimized_render_matches_legacy("exact-fit suffix", sty, content)
+      assert_render_matches_legacy("exact-fit suffix", sty, content)
     }
   }
 }
 
 ///|
-test "styling render representative box stays below native perf budget" {
+#cfg(any(target="native", target="llvm"))
+test "style render representative box stays below native perf budget" {
   let sty = representative_render_style()
   let content = representative_render_content()
   let iterations = 64
   let mut total = 0
-  let started_at = styling_perf_now_us()
+  let started_at = pippa_perf_now_us()
   for _ in 0..<iterations {
     total = total + sty.render(content).length()
   }
-  let elapsed_us = styling_perf_now_us() - started_at
+  let elapsed_us = pippa_perf_now_us() - started_at
   assert_true(total > 0)
-  assert_true(elapsed_us < 100000L)
+  if elapsed_us >= 100000L {
+    fail("render perf budget exceeded: \{elapsed_us}us")
+  }
 }

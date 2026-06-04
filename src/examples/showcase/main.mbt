@@ -136,22 +136,22 @@ fn showcase_accent_hex(tab : Int) -> String {
 
 ///|
 fn showcase_tint(content : String, hex : String) -> String {
-  @styling.style().foreground_hex(hex).render(content)
+  @pippa.style().foreground_hex(hex).render(content)
 }
 
 ///|
 fn showcase_loud(content : String, hex : String) -> String {
-  @styling.style().foreground_hex(hex).bold().render(content)
+  @pippa.style().foreground_hex(hex).bold().render(content)
 }
 
 ///|
 fn showcase_whisper(content : String) -> String {
-  @styling.style().foreground_hex(showcase_mist_hex).render(content)
+  @pippa.style().foreground_hex(showcase_mist_hex).render(content)
 }
 
 ///|
 fn showcase_badge(content : String, bg_hex : String) -> String {
-  @styling.style()
+  @pippa.style()
   .foreground_hex(showcase_paper_hex)
   .background_hex(bg_hex)
   .bold()
@@ -161,7 +161,7 @@ fn showcase_badge(content : String, bg_hex : String) -> String {
 
 ///|
 fn showcase_outline_badge(content : String, accent_hex : String) -> String {
-  @styling.style()
+  @pippa.style()
   .foreground_hex(accent_hex)
   .background_hex(showcase_chip_hex)
   .bold()
@@ -188,13 +188,13 @@ fn showcase_stat_card(
   value : String,
   accent_hex : String,
 ) -> String {
-  @styling.style()
-  .border(@styling.border_ascii())
-  .border_foreground(@styling.color_hex(accent_hex))
+  @pippa.style()
+  .border(@pippa.border_ascii())
+  .border_foreground(@pippa.color_hex(accent_hex))
   .padding(0, 1, 0, 1)
   .width(14)
   .render(
-    @styling.col <| [
+    @pippa.col <| [
       showcase_whisper(label),
       showcase_loud(value, accent_hex),
     ],
@@ -225,7 +225,7 @@ fn showcase_set_tab(model : Model, tab : Int) -> Model {
 
 ///|
 fn showcase_viewport_content() -> String {
-  @styling.lines([
+  @pippa.lines([
     "Pippa Showcase", "==============================", "This demo combines several parts of the framework:",
     "- Model / Update / View architecture", "- Periodic ticks that drive animation",
     "- Composable component models", "- ANSI styles, borders, and layout", "- Keyboard-first interaction",
@@ -395,13 +395,13 @@ fn showcase_progress_target_label(
 
 ///|
 fn showcase_header(model : Model) -> String {
-  @styling.col <| [
+  @pippa.col <| [
     showcase_outline_badge("MOONBIT TUI", showcase_sun_hex),
     showcase_loud("Pippa Showcase", showcase_moon_hex),
     showcase_whisper("Typed updates, composable components,"),
     showcase_whisper("and a warmer MoonBit-flavored palette."),
     "",
-    @styling.row <| [
+    @pippa.row <| [
       showcase_tab_chip("1 ACTIVITY", model.tab == 0, showcase_moon_hex),
       "  ",
       showcase_tab_chip("2 INPUT", model.tab == 1, showcase_sun_hex),
@@ -417,14 +417,14 @@ fn showcase_panel(
   accent_hex : String,
   content : String,
 ) -> String {
-  @styling.style()
+  @pippa.style()
   .background_hex(showcase_panel_hex)
-  .border(@styling.border_rounded())
-  .border_foreground(@styling.color_hex(accent_hex))
+  .border(@pippa.border_rounded())
+  .border_foreground(@pippa.color_hex(accent_hex))
   .padding(1, 2, 1, 2)
   .width(66)
   .render(
-    @styling.col <| [
+    @pippa.col <| [
       showcase_badge(title, accent_hex),
       "",
       content,
@@ -434,7 +434,7 @@ fn showcase_panel(
 
 ///|
 fn showcase_activity_body(model : Model) -> String {
-  let stats = @styling.row <| [
+  let stats = @pippa.row <| [
     showcase_stat_card(
       "FLOW",
       showcase_progress_flow_label(model.progress),
@@ -456,7 +456,7 @@ fn showcase_activity_body(model : Model) -> String {
   showcase_panel(
     "ACTIVITY",
     showcase_moon_hex,
-    @styling.col <| [
+    @pippa.col <| [
       showcase_whisper("A steady 60fps clock drives the spring directly."),
       "",
       stats,
@@ -483,14 +483,14 @@ fn showcase_input_value(model : Model) -> String {
 
 ///|
 fn showcase_input_body(model : Model) -> String {
-  let field = @styling.style()
+  let field = @pippa.style()
     .background_hex(showcase_chip_hex)
-    .border(@styling.border_rounded())
-    .border_foreground(@styling.color_hex(showcase_sun_hex))
+    .border(@pippa.border_rounded())
+    .border_foreground(@pippa.color_hex(showcase_sun_hex))
     .padding(0, 1, 0, 1)
     .width(60)
     .render((text_input_comp.view)(model.text_input))
-  let stats = @styling.row <| [
+  let stats = @pippa.row <| [
     showcase_stat_card(
       "CURSOR",
       model.text_input.cursor.to_string(),
@@ -516,7 +516,7 @@ fn showcase_input_body(model : Model) -> String {
   showcase_panel(
     "INPUT",
     showcase_sun_hex,
-    @styling.col <| [
+    @pippa.col <| [
       showcase_whisper(
         "Printable keys, backspace, and left/right stay routed into TextInput here.",
       ),
@@ -546,16 +546,16 @@ fn showcase_viewport_status(model : Model) -> String {
 
 ///|
 fn showcase_viewport_body(model : Model) -> String {
-  let framed_viewport = @styling.style()
+  let framed_viewport = @pippa.style()
     .background_hex(showcase_chip_hex)
-    .border(@styling.border_rounded())
-    .border_foreground(@styling.color_hex(showcase_tide_hex))
+    .border(@pippa.border_rounded())
+    .border_foreground(@pippa.color_hex(showcase_tide_hex))
     .padding(0, 1, 0, 1)
     .render((viewport_comp.view)(model.viewport))
   showcase_panel(
     "VIEWPORT",
     showcase_tide_hex,
-    @styling.col <| [
+    @pippa.col <| [
       showcase_whisper(
         "A fixed-size window over longer copy, with keyboard scrolling and stable diffing.",
       ),
@@ -585,8 +585,8 @@ fn showcase_footer(model : Model) -> String {
     2 => "up/down and page keys scroll the viewport"
     _ => "q quit"
   }
-  @styling.col <| [
-    @styling.row <| [
+  @pippa.col <| [
+    @pippa.row <| [
       showcase_outline_badge("tab", showcase_accent_hex(model.tab)),
       " ",
       showcase_whisper("next"),
@@ -615,14 +615,14 @@ fn showcase_view(model : Model) -> String {
   }
   let fps = if avg > 0L { 1000L / avg } else { 0L }
   "FPS \{fps_frames.val}f  last=\{fps_last.val}ms  avg=\{avg}ms  ~\{fps}fps\n" +
-  @styling.style()
+  @pippa.style()
   .background_hex(showcase_shell_hex)
-  .border(@styling.border_rounded())
-  .border_foreground(@styling.color_hex(showcase_moon_hex))
+  .border(@pippa.border_rounded())
+  .border_foreground(@pippa.color_hex(showcase_moon_hex))
   .padding(1, 2, 1, 2)
   .width(74)
   .render(
-    @styling.col <| [
+    @pippa.col <| [
       showcase_header(model),
       "",
       showcase_body(model),

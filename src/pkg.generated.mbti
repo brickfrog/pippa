@@ -51,6 +51,8 @@ pub fn clear_terminal_progress() -> String
 
 pub fn clear_window_title() -> String
 
+pub fn col(Array[String]) -> String
+
 pub fn color_adaptive(Color, Color) -> Color
 
 pub fn color_ansi(Int) -> Color
@@ -95,11 +97,15 @@ pub fn fg_color(Int) -> String
 
 pub fn fg_rgb(Int, Int, Int) -> String
 
+pub fn gap(n? : Int) -> String
+
 pub fn help_binding() -> Binding
 
 pub fn help_model(keymap~ : KeyMap, width? : Int, show_full? : Bool) -> HelpModel
 
 pub fn help_view(HelpModel) -> String
+
+pub fn hgap(n? : Int) -> String
 
 pub fn hide_cursor() -> String
 
@@ -118,6 +124,8 @@ pub fn keymap_group(String, Array[Binding]) -> KeyMapGroup
 pub fn left_binding() -> Binding
 
 pub fn line_count(String) -> Int
+
+pub fn lines(Array[String]) -> String
 
 pub fn matches(Binding, KeyMsg) -> Bool
 
@@ -165,6 +173,8 @@ pub fn reverse() -> String
 
 pub fn right_binding() -> Binding
 
+pub fn row(Array[String]) -> String
+
 pub fn set_disabled(Binding, Bool) -> Binding
 
 pub fn set_help(Binding, String, String) -> Binding
@@ -184,6 +194,8 @@ pub fn strikethrough() -> String
 pub fn strip_ansi(String) -> String
 
 pub fn style() -> Style
+
+pub fn text(String) -> String
 
 pub fn toggle_help(HelpModel) -> HelpModel
 

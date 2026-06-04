@@ -1,7 +1,4 @@
 ///|
-using @debug {assert_eq}
-
-///|
 test "col joins children vertically" {
   let result = col <| [
     "hello", "world",
@@ -32,7 +29,6 @@ test "nested col and row" {
     ],
     "footer",
   ]
-  // col (join_vertical) pads lines to equal width
   assert_eq(result, "header      \nleft | right\nfooter      ")
 }
 

@@ -25,9 +25,10 @@ lists, selection lists, tables, paginators, viewports, timers, stopwatches,
 file pickers, and animated progress bars — each implemented as composable
 Models that can be embedded in larger applications.
 
-A richer `styling` package is also included for layout and visual styling:
-hex/RGB colors, borders, padding, margins, joins, placement, and higher-level
-composition primitives.
+The main `@pippa` package includes visual styling and layout helpers:
+hex/RGB colors, borders, padding, margins, joins, placement, and the
+`col`/`row`/`lines`/`text`/`gap`/`hgap` layout DSL. There is no separate
+styling package.
 
 ## Quick Start
 
@@ -93,12 +94,11 @@ src/                          # Source root (moon.mod.json → source: "src")
 ├── command.mbt               # Command helpers and composition
 ├── program.mbt               # Program[Model, Msg] entry point
 ├── ansi.mbt                  # ANSI escape sequence helpers
+├── style.mbt                 # Style, Color, borders, and placement
+├── view.mbt                  # col/row/lines/text/gap/hgap layout DSL
 ├── component/                # Composable component sub-package
 │   ├── moon.pkg
 │   └── ...                   # Spinner, textarea, viewport, progress, etc.
-├── styling/                  # Higher-level styling and layout package
-│   ├── moon.pkg
-│   └── styling.mbt
 └── examples/
     ├── hello/                # Minimal example app
     ├── structured-view/      # View.content plus per-frame terminal state

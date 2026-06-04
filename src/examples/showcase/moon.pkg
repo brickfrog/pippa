@@ -1,7 +1,6 @@
 import {
   "brickfrog/pippa",
   "brickfrog/pippa/component",
-  "brickfrog/pippa/styling",
 }
 
 import {
