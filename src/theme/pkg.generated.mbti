@@ -1,0 +1,37 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "brickfrog/pippa/theme"
+
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/profile",
+}
+
+// Values
+pub fn default_theme() -> Theme
+
+// Errors
+
+// Types and methods
+pub(all) struct RoleKey {
+  namespace : String
+  name : String
+} derive(Eq, Hash, Show)
+pub fn RoleKey::form(String) -> Self
+pub fn RoleKey::markdown(String) -> Self
+pub fn RoleKey::new(namespace~ : String, name~ : String) -> Self
+pub fn RoleKey::syntax(String) -> Self
+pub fn RoleKey::ui(String) -> Self
+
+pub struct Theme {
+  roles : Map[RoleKey, @pippa.Style]
+  fallback : @pippa.Style
+}
+pub fn Theme::new(fallback? : @pippa.Style) -> Self
+pub fn Theme::render(Self, RoleKey, String, @profile.RenderContext) -> String
+pub fn Theme::style(Self, RoleKey) -> @pippa.Style
+pub fn Theme::with_role(Self, RoleKey, @pippa.Style) -> Self
+
+// Type aliases
+
+// Traits
+
