@@ -577,6 +577,49 @@ fn base64_value(b : Int) -> Int? {
 }
 
 ///|
+fn base64_digit(value : Int) -> Char {
+  if value < 26 {
+    (0x41 + value).unsafe_to_char()
+  } else if value < 52 {
+    (0x61 + value - 26).unsafe_to_char()
+  } else if value < 62 {
+    (0x30 + value - 52).unsafe_to_char()
+  } else if value == 62 {
+    '+'
+  } else {
+    '/'
+  }
+}
+
+///|
+fn encode_base64_utf8(input : String) -> String {
+  let bytes = @utf8.encode(input)
+  let buf = StringBuilder::new(size_hint=(bytes.length() + 2) / 3 * 4)
+  let mut i = 0
+  while i < bytes.length() {
+    let a = bytes[i].to_int()
+    let has_b = i + 1 < bytes.length()
+    let has_c = i + 2 < bytes.length()
+    let b = if has_b { bytes[i + 1].to_int() } else { 0 }
+    let c = if has_c { bytes[i + 2].to_int() } else { 0 }
+    buf.write_char(base64_digit((a >> 2) & 0x3F))
+    buf.write_char(base64_digit(((a & 0x03) << 4) | ((b >> 4) & 0x0F)))
+    if has_b {
+      buf.write_char(base64_digit(((b & 0x0F) << 2) | ((c >> 6) & 0x03)))
+    } else {
+      buf.write_char('=')
+    }
+    if has_c {
+      buf.write_char(base64_digit(c & 0x3F))
+    } else {
+      buf.write_char('=')
+    }
+    i = i + 3
+  }
+  buf.to_string()
+}
+
+///|
 fn decode_base64_slice(bv : BytesView, start : Int, end : Int) -> Bytes? {
   let values : Array[Int] = []
   let mut saw_padding = false

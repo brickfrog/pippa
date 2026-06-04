@@ -242,6 +242,12 @@ pub fn request_clipboard(selection : ClipboardSelection) -> String {
 }
 
 ///|
+/// Set clipboard contents for an OSC 52 selection.
+pub fn set_clipboard(selection : ClipboardSelection, data : String) -> String {
+  "\{OSC}52;\{clipboard_selection_code(selection)};\{encode_base64_utf8(data)}\{ST}"
+}
+
+///|
 fn osc8(params : String, uri : String, label : String) -> String {
   "\{OSC}8;\{params};\{uri}\{ST}\{label}\{OSC}8;;\{ST}"
 }

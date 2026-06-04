@@ -783,6 +783,7 @@ priv enum RuntimeTerminalCommand {
   RuntimeRequestBackgroundColor
   RuntimeRequestCapability(String)
   RuntimeRequestClipboard(ClipboardSelection)
+  RuntimeSetClipboard(ClipboardSelection, String)
   RuntimeSetFocusReporting(Bool)
   RuntimeSetBracketedPaste(Bool)
   RuntimeSetMouseMode(ViewMouseMode)
@@ -1091,6 +1092,7 @@ fn terminal_command_sequence(command : RuntimeTerminalCommand) -> String {
     RuntimeRequestBackgroundColor => request_background_color()
     RuntimeRequestCapability(name) => request_capability(name)
     RuntimeRequestClipboard(selection) => request_clipboard(selection)
+    RuntimeSetClipboard(selection, data) => set_clipboard(selection, data)
     RuntimeSetFocusReporting(true) => enable_focus_reporting()
     RuntimeSetFocusReporting(false) => disable_focus_reporting()
     RuntimeSetBracketedPaste(true) => enable_bracketed_paste()
@@ -1674,6 +1676,8 @@ fn[Msg] queue_cmd_effects(
         pending.push(RuntimeTerminal(RuntimeRequestCapability(name)))
       RequestClipboard(selection) =>
         pending.push(RuntimeTerminal(RuntimeRequestClipboard(selection)))
+      SetClipboard(selection, text) =>
+        pending.push(RuntimeTerminal(RuntimeSetClipboard(selection, text)))
       SetFocusReporting(enabled) =>
         pending.push(RuntimeTerminal(RuntimeSetFocusReporting(enabled)))
       SetBracketedPaste(enabled) =>
