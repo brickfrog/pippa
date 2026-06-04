@@ -3,6 +3,7 @@ package "brickfrog/pippa/markdown"
 
 import {
   "brickfrog/pippa/profile",
+  "brickfrog/pippa/syntax",
   "brickfrog/pippa/theme",
   "moonbit-community/cmark/cmark",
 }
@@ -32,11 +33,13 @@ pub(all) struct MarkdownOptions {
   flavor : MarkdownFlavor
   table_narrow_mode : TableNarrowMode
   task_checkbox_style : TaskCheckboxStyle
+  syntax_registry : @syntax.SyntaxRegistry?
 } derive(Eq)
 pub fn MarkdownOptions::commonmark() -> Self
 pub fn MarkdownOptions::default() -> Self
 pub fn MarkdownOptions::gfm() -> Self
 pub fn MarkdownOptions::with_flavor(Self, MarkdownFlavor) -> Self
+pub fn MarkdownOptions::with_syntax_registry(Self, @syntax.SyntaxRegistry) -> Self
 pub fn MarkdownOptions::with_table_narrow_mode(Self, TableNarrowMode) -> Self
 pub fn MarkdownOptions::with_task_checkbox_style(Self, TaskCheckboxStyle) -> Self
 

@@ -419,3 +419,92 @@ test "gfm table width fits except below structural minimum" {
   assert_eq(max_line_width(stripped(wide_structural_overflow)), 10)
   assert_true(max_line_width(stripped(wide_structural_overflow)) > 9)
 }
+
+///|
+fn markdown_syntax_theme() -> @theme.Theme {
+  @theme.Theme::new()
+  .with_role(@theme.RoleKey::markdown("code.block"), @pippa.style())
+  .with_role(
+    @theme.RoleKey::syntax("keyword"),
+    @pippa.style().foreground(@pippa.color_ansi(2)).bold(),
+  )
+}
+
+///|
+fn ansi16_ctx() -> @profile.RenderContext {
+  @profile.RenderContext::default().with_color_profile(@profile.Ansi16)
+}
+
+///|
+test "fenced code highlighting is opt in via syntax registry" {
+  let source =
+    #|```moonbit
+    #|fn main
+    #|```
+  let theme = markdown_syntax_theme()
+  let ctx = ansi16_ctx()
+  let plain = render(source, width=80, theme~, ctx~, link_mode=Plain)
+  assert_eq(stripped(plain), "fn main")
+  assert_true(!plain.contains("\u001b[32m"))
+
+  let highlighted = render(
+    source,
+    width=80,
+    theme~,
+    ctx~,
+    link_mode=Plain,
+    options=MarkdownOptions::default().with_syntax_registry(
+      @syntax.SyntaxRegistry::default(),
+    ),
+  )
+  assert_eq(stripped(highlighted), "fn main")
+  assert_true(highlighted.contains("\u001b[32m"))
+  assert_true(highlighted.contains("\u001b[1mfn"))
+
+  let unknown_source =
+    #|```unknown
+    #|fn main
+    #|```
+  let unknown = render(
+    unknown_source,
+    width=80,
+    theme~,
+    ctx~,
+    link_mode=Plain,
+    options=MarkdownOptions::default().with_syntax_registry(
+      @syntax.SyntaxRegistry::default(),
+    ),
+  )
+  assert_eq(stripped(unknown), "fn main")
+  assert_true(!unknown.contains("\u001b[32m"))
+}
+
+///|
+test "highlighted text fences keep markdown code block base styling" {
+  let source =
+    #|```text
+    #|plain text
+    #|```
+  let theme = @theme.Theme::new()
+    .with_role(
+      @theme.RoleKey::markdown("code.block"),
+      @pippa.style().foreground(@pippa.color_ansi(5)),
+    )
+    .with_role(
+      @theme.RoleKey::syntax("text"),
+      @pippa.style().foreground(@pippa.color_ansi(2)),
+    )
+  let highlighted = render(
+    source,
+    width=80,
+    theme~,
+    ctx=ansi16_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::default().with_syntax_registry(
+      @syntax.SyntaxRegistry::default(),
+    ),
+  )
+  assert_eq(stripped(highlighted), "plain text")
+  assert_true(highlighted.contains("\u001b[35mplain text"))
+  assert_true(!highlighted.contains("\u001b[32mplain text"))
+}

@@ -52,6 +52,7 @@ pub(all) struct MarkdownOptions {
   flavor : MarkdownFlavor
   table_narrow_mode : TableNarrowMode
   task_checkbox_style : TaskCheckboxStyle
+  syntax_registry : @syntax.SyntaxRegistry?
 } derive(Eq)
 
 ///|
@@ -60,6 +61,7 @@ pub fn MarkdownOptions::default() -> MarkdownOptions {
     flavor: CommonMark,
     table_narrow_mode: Wrap,
     task_checkbox_style: UnicodeCheckbox,
+    syntax_registry: None,
   }
 }
 
@@ -95,6 +97,14 @@ pub fn MarkdownOptions::with_task_checkbox_style(
   task_checkbox_style : TaskCheckboxStyle,
 ) -> MarkdownOptions {
   { ..self, task_checkbox_style, }
+}
+
+///|
+pub fn MarkdownOptions::with_syntax_registry(
+  self : MarkdownOptions,
+  syntax_registry : @syntax.SyntaxRegistry,
+) -> MarkdownOptions {
+  { ..self, syntax_registry: Some(syntax_registry) }
 }
 
 ///|
@@ -395,10 +405,64 @@ fn render_code_block_lines(
 ) -> Array[String] {
   let role = @theme.RoleKey::markdown("code.block")
   let out : Array[String] = []
+  let language = code_block_language(code)
   for line in code_lines(code.code) {
-    out.push(render_plain_line(line, role, state))
+    match render_syntax_code_line(line, language, state) {
+      Some(rendered) => out.push(rendered)
+      None => out.push(render_plain_line(line, role, state))
+    }
   }
   out
+}
+
+///|
+fn code_block_language(code : @cmark.CodeBlock) -> String? {
+  match code.info_string {
+    Some(info) =>
+      match @cmark.CodeBlock::language_of_info_string(info.v) {
+        Some((language, _rest)) => Some(language)
+        None => None
+      }
+    None => None
+  }
+}
+
+///|
+fn render_syntax_code_line(
+  line : String,
+  language : String?,
+  state : RenderState,
+) -> String? {
+  match (state.options.syntax_registry, language) {
+    (Some(registry), Some(language)) =>
+      match @syntax.highlight(registry, language, line) {
+        Ok(highlighted) =>
+          Some(
+            @syntax.render_highlighted(
+              highlighted,
+              markdown_code_syntax_theme(),
+              state.theme,
+              state.ctx,
+            ),
+          )
+        Err(_) => None
+      }
+    _ => None
+  }
+}
+
+///|
+fn markdown_code_syntax_theme() -> @syntax.SyntaxTheme {
+  @syntax.SyntaxTheme::{ role_for: markdown_code_syntax_role }
+}
+
+///|
+fn markdown_code_syntax_role(kind : @syntax.SyntaxKind) -> @theme.RoleKey {
+  match kind {
+    @syntax.SyntaxKind::Text | @syntax.SyntaxKind::Whitespace =>
+      @theme.RoleKey::markdown("code.block")
+    _ => @syntax.SyntaxTheme::default().role(kind)
+  }
 }
 
 ///|
