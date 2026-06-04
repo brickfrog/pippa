@@ -161,6 +161,74 @@ test "form focus skips hidden and disabled fields" {
 }
 
 ///|
+test "field from_spec syncs embedded text model disabled and focused state" {
+  let text = Field::text(id=name_id(), label="Name")
+  let text_spec = text.to_spec()
+  let text_kind = match text_spec.kind {
+    Text(model) => FieldKind::Text({ ..model, disabled: false, focused: true })
+    _ => fail("expected text kind")
+  }
+  let restored_text = Field::from_spec({
+    ..text_spec,
+    kind: text_kind,
+    disabled: true,
+  })
+  assert_true(restored_text.disabled)
+  match restored_text.kind {
+    Text(model) => {
+      assert_true(model.disabled)
+      assert_true(!model.focused)
+    }
+    _ => fail("expected restored text kind")
+  }
+
+  let password = Field::password(id=password_id(), label="Password")
+  let password_spec = password.to_spec()
+  let password_kind = match password_spec.kind {
+    Password(model) =>
+      FieldKind::Password({ ..model, disabled: true, focused: true })
+    _ => fail("expected password kind")
+  }
+  let restored_password = Field::from_spec({
+    ..password_spec,
+    kind: password_kind,
+    disabled: false,
+  })
+  assert_true(!restored_password.disabled)
+  match restored_password.kind {
+    Password(model) => {
+      assert_true(!model.disabled)
+      assert_true(!model.focused)
+    }
+    _ => fail("expected restored password kind")
+  }
+}
+
+///|
+test "form set value empty clears select cursor and selection" {
+  let select = Field::select(id=color_id(), label="Favorite color", options=[
+    "red", "blue",
+  ])
+  let spec = select.to_spec()
+  let skewed_kind = match spec.kind {
+    Select(model) => FieldKind::Select({ ..model, cursor: 99, selected: 1 })
+    _ => fail("expected select kind")
+  }
+  let skewed = Field::from_spec({ ..spec, kind: skewed_kind })
+  let form : Form[Unit] = Form::new(fields=[skewed], decode=fn(_values) {
+    Ok(())
+  })
+  let (cleared, _, _) = form.update(Field(color_id(), SetValue(Empty)))
+  match cleared.fields[0].kind {
+    Select(model) => {
+      @test.assert_eq(model.cursor, 0)
+      @test.assert_eq(model.selected, -1)
+    }
+    _ => fail("expected select kind")
+  }
+}
+
+///|
 test "form submit decodes valid values and updates status" {
   let (f1, _, _) = account_form().update(
     Field(name_id(), TextInput(@component.InsertText("Ada"))),

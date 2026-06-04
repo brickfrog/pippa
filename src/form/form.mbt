@@ -412,12 +412,23 @@ pub fn Field::to_spec(self : Field) -> FieldSpec {
 }
 
 ///|
+fn field_kind_from_spec(kind : FieldKind, disabled : Bool) -> FieldKind {
+  match kind {
+    Text(model) => FieldKind::Text({ ..model, disabled, focused: false })
+    Password(model) =>
+      FieldKind::Password({ ..model, disabled, focused: false })
+    Select(model) => FieldKind::Select(model)
+    Confirm(value) => FieldKind::Confirm(value)
+  }
+}
+
+///|
 pub fn Field::from_spec(spec : FieldSpec) -> Field {
   {
     id: spec.id,
     label: spec.label,
     help: spec.help,
-    kind: spec.kind,
+    kind: field_kind_from_spec(spec.kind, spec.disabled),
     validators: spec.validators,
     disabled: spec.disabled,
     visible: spec.visible,
@@ -536,7 +547,7 @@ fn field_set_value(field : Field, value : FieldValue) -> Field {
       let selected = select_index_for_value(model.items, value)
       Select({ ..model, cursor: selected.max(0), selected })
     }
-    (Select(model), Empty) => Select({ ..model, selected: -1 })
+    (Select(model), Empty) => Select({ ..model, cursor: 0, selected: -1 })
     (Confirm(_), Bool(value)) => Confirm(value)
     (kind, _) => kind
   }
@@ -1049,14 +1060,15 @@ fn[A] form_update_field(
       let before_value = field.value()
       let (updated, field_cmd) = field_update(field, msg)
       let fields = form_replace_field(form.fields, updated)
-      let values = form_values_from_fields(fields)
-      let changed = updated.value() != before_value
+      let updated_value = updated.value()
+      let values = form.values.set(id, updated_value)
+      let changed = updated_value != before_value
       let (fields, errors) = if form.validate_on == Change && changed {
         form_validate_field_by_id(fields, values, id)
       } else {
         (fields, [])
       }
-      let event = if changed { Changed(id, updated.value()) } else { None }
+      let event = if changed { Changed(id, updated_value) } else { None }
       (
         {
           ..form,
