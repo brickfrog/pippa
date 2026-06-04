@@ -133,6 +133,76 @@ test "tree multiline non-last child keeps branch pipe" {
 }
 
 ///|
+test "tree block-joins multiline connector with single-line item" {
+  let actual = new()
+    .enumerator_func(fn(_children, _index) { "|\n|" })
+    .child_leaf("Leaf")
+    .render()
+  assert_eq(actual, "| Leaf\n|")
+}
+
+///|
+test "tree block-joins multiline connector with multiline item" {
+  let actual = new()
+    .enumerator_func(fn(_children, _index) { "|\n|" })
+    .child_leaf("Top\nBottom")
+    .render()
+  assert_eq(actual, "| Top\n| Bottom")
+}
+
+///|
+test "tree pads every line of multiline sibling connectors" {
+  let actual = new()
+    .enumerator_func(fn(_children, i) {
+      if i == 0 {
+        "|\n||"
+      } else {
+        "====\n==="
+      }
+    })
+    .child_leaf("A")
+    .child_leaf("B")
+    .render()
+  let expected = "   | A\n  ||\n==== B\n ==="
+  assert_eq(actual, expected)
+}
+
+///|
+test "tree trims join padding before styled multiline item resets" {
+  let actual = new()
+    .enumerator_func(fn(_children, _index) { "|\n|" })
+    .item_style(@pippa.style().fg_color(2))
+    .child_leaf("Long\nB")
+    .render()
+  let expected = "| " +
+    @pippa.fg_color(2) +
+    "Long" +
+    @pippa.reset() +
+    "\n| " +
+    @pippa.fg_color(2) +
+    "B" +
+    @pippa.reset()
+  assert_eq(actual, expected)
+}
+
+///|
+test "tree styles multiline connector lines independently" {
+  let actual = new()
+    .enumerator_func(fn(_children, _index) { "|\n|" })
+    .enumerator_style(@pippa.style().bg_color(5))
+    .child_leaf("A")
+    .render()
+  let expected = @pippa.bg_color(5) +
+    "|" +
+    @pippa.reset() +
+    " A\n" +
+    @pippa.bg_color(5) +
+    "|" +
+    @pippa.reset()
+  assert_eq(actual, expected)
+}
+
+///|
 test "tree styles connector alignment padding" {
   let actual = new()
     .enumerator_func(fn(_children, i) { if i == 0 { ">" } else { "====>" } })
