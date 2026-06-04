@@ -45,7 +45,9 @@ test "pippa ansi set clipboard emits exact OSC 52 selection bytes" {
     set_clipboard(PrimarySelection, "hello"),
     "\u001b]52;p;aGVsbG8=\u001b\\",
   )
+  assert_eq(set_clipboard(SecondarySelection, "M"), "\u001b]52;s;TQ==\u001b\\")
   assert_eq(set_clipboard(CutBuffer(3), "M"), "\u001b]52;3;TQ==\u001b\\")
+  assert_eq(set_clipboard(NamedSelection("x"), "M"), "\u001b]52;x;TQ==\u001b\\")
 }
 
 ///|
