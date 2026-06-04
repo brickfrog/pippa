@@ -11,10 +11,27 @@ fn is_csi_terminator(ch : Char) -> Bool {
 }
 
 ///|
+fn skip_osc_sequence(chars : Array[Char], start : Int) -> Int {
+  let n = chars.length()
+  let mut i = start
+  while i < n {
+    if chars[i] == '\u0007' {
+      return i + 1
+    }
+    if chars[i] == '\u001b' && i + 1 < n && chars[i + 1] == '\\' {
+      return i + 2
+    }
+    i = i + 1
+  }
+  start
+}
+
+///|
 /// Remove all ANSI escape sequences from `s`.
 ///
-/// Handles CSI sequences (`ESC [` … letter) and bare two-char sequences
-/// (`ESC` followed by any single non-`[` character).
+/// Handles CSI sequences (`ESC [` … letter), OSC sequences (`ESC ]` … BEL/ST),
+/// and bare two-char sequences (`ESC` followed by any single non-`[`/`]`
+/// character).
 pub fn strip_ansi(s : String) -> String {
   let chars = s.to_array()
   let n = chars.length()
@@ -35,6 +52,9 @@ pub fn strip_ansi(s : String) -> String {
           if i < n {
             i = i + 1
           }
+        } else if next == ']' {
+          i = i + 1
+          i = skip_osc_sequence(chars, i)
         } else {
           // Single char after ESC — skip it.
           i = i + 1

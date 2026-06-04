@@ -9,6 +9,16 @@ test "strip_ansi removes bare ESC sequences" {
 }
 
 ///|
+test "strip_ansi removes OSC 8 hyperlink wrappers" {
+  assert_eq(strip_ansi(hyperlink("http://example.com", "label")), "label")
+}
+
+///|
+test "strip_ansi does not hide unterminated OSC text" {
+  assert_eq(strip_ansi("\u001b]8;;http://xvisible"), "8;;http://xvisible")
+}
+
+///|
 test "strip_ansi plain string unchanged" {
   assert_eq(strip_ansi("hello"), "hello")
 }
