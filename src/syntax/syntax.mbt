@@ -419,6 +419,7 @@ pub fn shell_lexer() -> Lexer {
         Regex("[$]([A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*#?!\\-])"),
         Emit(Name(Variable)),
       ),
+      rule(Regex("-[A-Za-z][A-Za-z0-9_\\-]*"), Emit(Name(Attribute))),
       rule(Regex("[0-9]+([.][0-9]+)?"), Emit(Literal(Number))),
       rule(Regex("[A-Za-z_][A-Za-z0-9_]*"), Emit(Name(Variable))),
       rule(CharSet("|&;=<>"), Emit(Operator)),
@@ -552,11 +553,12 @@ fn match_regex(
   pattern : String,
 ) -> Result[Int, LexError] {
   let suffix = byte_slice_text(bytes, index, bytes.length())
-  let regex : @string.Regex = @string.Regex(pattern[:]) catch {
+  let anchored_pattern = "^(?:" + pattern + ")"
+  let regex : @string.Regex = @string.Regex(anchored_pattern[:]) catch {
     _ => return Err(InvalidRegex(pattern))
   }
   match regex.execute(suffix[:], last_index=0) {
-    Some(matched) if matched.before().length() == 0 => {
+    Some(matched) => {
       let consumed = encoded(matched.content().to_owned()).length()
       if consumed == 0 {
         Err(EmptyRegexMatch(pattern))

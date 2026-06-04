@@ -86,6 +86,7 @@ test "seed lexers classify representative tokens and preserve coverage" {
   assert_true(has_kind(shell.tokens, Keyword))
   assert_true(has_kind(shell.tokens, Literal(String)))
   assert_true(has_kind(shell.tokens, Name(Variable)))
+  assert_true(!has_kind(shell.tokens, Error))
 
   let diff = checked_highlight(registry, "diff", "@@ -1 +1 @@\n-old\n+new\n")
   assert_covers_all(diff.tokens, @utf8.encode(diff.source[:]).length())

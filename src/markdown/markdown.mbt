@@ -440,7 +440,7 @@ fn render_syntax_code_line(
           Some(
             @syntax.render_highlighted(
               highlighted,
-              @syntax.SyntaxTheme::default(),
+              markdown_code_syntax_theme(),
               state.theme,
               state.ctx,
             ),
@@ -448,6 +448,20 @@ fn render_syntax_code_line(
         Err(_) => None
       }
     _ => None
+  }
+}
+
+///|
+fn markdown_code_syntax_theme() -> @syntax.SyntaxTheme {
+  @syntax.SyntaxTheme::{ role_for: markdown_code_syntax_role }
+}
+
+///|
+fn markdown_code_syntax_role(kind : @syntax.SyntaxKind) -> @theme.RoleKey {
+  match kind {
+    @syntax.SyntaxKind::Text | @syntax.SyntaxKind::Whitespace =>
+      @theme.RoleKey::markdown("code.block")
+    _ => @syntax.SyntaxTheme::default().role(kind)
   }
 }
 

@@ -478,3 +478,33 @@ test "fenced code highlighting is opt in via syntax registry" {
   assert_eq(stripped(unknown), "fn main")
   assert_true(!unknown.contains("\u001b[32m"))
 }
+
+///|
+test "highlighted text fences keep markdown code block base styling" {
+  let source =
+    #|```text
+    #|plain text
+    #|```
+  let theme = @theme.Theme::new()
+    .with_role(
+      @theme.RoleKey::markdown("code.block"),
+      @pippa.style().foreground(@pippa.color_ansi(5)),
+    )
+    .with_role(
+      @theme.RoleKey::syntax("text"),
+      @pippa.style().foreground(@pippa.color_ansi(2)),
+    )
+  let highlighted = render(
+    source,
+    width=80,
+    theme~,
+    ctx=ansi16_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::default().with_syntax_registry(
+      @syntax.SyntaxRegistry::default(),
+    ),
+  )
+  assert_eq(stripped(highlighted), "plain text")
+  assert_true(highlighted.contains("\u001b[35mplain text"))
+  assert_true(!highlighted.contains("\u001b[32mplain text"))
+}
