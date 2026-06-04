@@ -8,11 +8,11 @@ import {
 }
 
 // Values
-pub fn parse(String) -> @cmark.Doc
+pub fn parse(String, options? : MarkdownOptions) -> @cmark.Doc
 
-pub fn render(String, width~ : Int, theme~ : @theme.Theme, ctx~ : @profile.RenderContext, link_mode? : LinkMode) -> String
+pub fn render(String, width~ : Int, theme~ : @theme.Theme, ctx~ : @profile.RenderContext, link_mode? : LinkMode, options? : MarkdownOptions) -> String
 
-pub fn render_doc(@cmark.Doc, width~ : Int, theme~ : @theme.Theme, ctx~ : @profile.RenderContext, link_mode? : LinkMode) -> String
+pub fn render_doc(@cmark.Doc, width~ : Int, theme~ : @theme.Theme, ctx~ : @profile.RenderContext, link_mode? : LinkMode, options? : MarkdownOptions) -> String
 
 // Errors
 
@@ -21,6 +21,33 @@ pub(all) enum LinkMode {
   Osc8
   Footnote
   Plain
+} derive(Eq)
+
+pub(all) enum MarkdownFlavor {
+  CommonMark
+  Gfm
+} derive(Eq)
+
+pub(all) struct MarkdownOptions {
+  flavor : MarkdownFlavor
+  table_narrow_mode : TableNarrowMode
+  task_checkbox_style : TaskCheckboxStyle
+} derive(Eq)
+pub fn MarkdownOptions::commonmark() -> Self
+pub fn MarkdownOptions::default() -> Self
+pub fn MarkdownOptions::gfm() -> Self
+pub fn MarkdownOptions::with_flavor(Self, MarkdownFlavor) -> Self
+pub fn MarkdownOptions::with_table_narrow_mode(Self, TableNarrowMode) -> Self
+pub fn MarkdownOptions::with_task_checkbox_style(Self, TaskCheckboxStyle) -> Self
+
+pub(all) enum TableNarrowMode {
+  Wrap
+  Truncate
+} derive(Eq)
+
+pub(all) enum TaskCheckboxStyle {
+  UnicodeCheckbox
+  AsciiCheckbox
 } derive(Eq)
 
 // Type aliases

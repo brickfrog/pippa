@@ -180,3 +180,130 @@ test "non-positive width disables paragraph blockquote and list wrapping" {
     expected,
   )
 }
+
+///|
+test "default markdown flavor remains CommonMark strict" {
+  let source =
+    #|| A | B |
+    #||---|---|
+    #|| 1 | 2 |
+    #|
+    #|~~gone~~
+  let rendered = render(
+    source,
+    width=80,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+  )
+  let expected =
+    #|| A | B | |---|---| | 1 | 2 |
+    #|
+    #|~~gone~~
+  assert_eq(stripped(rendered), expected)
+}
+
+///|
+test "gfm task list markers render unicode checkboxes with ascii fallback" {
+  let source =
+    #|- [x] done
+    #|- [ ] todo
+  let theme = @theme.default_theme()
+  let ctx = no_color_ctx()
+  let unicode = render(
+    source,
+    width=80,
+    theme~,
+    ctx~,
+    link_mode=Plain,
+    options=MarkdownOptions::gfm(),
+  )
+  assert_eq(stripped(unicode), "- ☑ done\n- ☐ todo")
+
+  let ascii = render(
+    source,
+    width=80,
+    theme~,
+    ctx~,
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_task_checkbox_style(AsciiCheckbox),
+  )
+  assert_eq(stripped(ascii), "- [x] done\n- [ ] todo")
+}
+
+///|
+test "gfm strikethrough and autolinks render through styled spans" {
+  let theme = @theme.default_theme()
+  let no_color = render(
+    "~~gone~~ and <https://example.com>",
+    width=80,
+    theme~,
+    ctx=no_color_ctx(),
+    link_mode=Osc8,
+    options=MarkdownOptions::gfm(),
+  )
+  assert_eq(stripped(no_color), "gone and https://example.com")
+  assert_true(no_color.contains("\u001b]8;;https://example.com\u001b\\"))
+  assert_true(no_color.contains("\u001b]8;;\u001b\\"))
+
+  let styled = render(
+    "~~gone~~",
+    width=80,
+    theme~,
+    ctx=@profile.RenderContext::default(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm(),
+  )
+  assert_true(styled.contains("\u001b[9m"))
+}
+
+///|
+test "gfm tables align columns and wrap narrow cells by visible width" {
+  let source =
+    #|| Left | Right | Center |
+    #||:-----|------:|:------:|
+    #|| alpha beta | 12 | mid |
+    #|| long words here | 300 | centered |
+  let rendered = render(
+    source,
+    width=34,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Wrap),
+  )
+  let expected =
+    #|| Left     |    Right |  Center  |
+    #|| :------- | -------: | :------: |
+    #|| alpha    |       12 |   mid    |
+    #|| beta     |          |          |
+    #|| long     |      300 | centered |
+    #|| words    |          |          |
+    #|| here     |          |          |
+  assert_eq(stripped(rendered), expected)
+  assert_line_widths_at_most(stripped(rendered), 34)
+}
+
+///|
+test "gfm tables can truncate narrow cells by visible width" {
+  let source =
+    #|| Left | Right | Center |
+    #||:-----|------:|:------:|
+    #|| alpha beta | 12 | mid |
+    #|| long words here | 300 | centered |
+  let rendered = render(
+    source,
+    width=34,
+    theme=@theme.default_theme(),
+    ctx=no_color_ctx(),
+    link_mode=Plain,
+    options=MarkdownOptions::gfm().with_table_narrow_mode(Truncate),
+  )
+  let expected =
+    #|| Left     |    Right |  Center  |
+    #|| :------- | -------: | :------: |
+    #|| alpha be |       12 |   mid    |
+    #|| long wor |      300 | centered |
+  assert_eq(stripped(rendered), expected)
+  assert_line_widths_at_most(stripped(rendered), 34)
+}
