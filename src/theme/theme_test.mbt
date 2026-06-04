@@ -41,3 +41,27 @@ test "default ui error adapts at render time and honors no color profile" {
   let no_color = dark.with_color_profile(@profile.NoColor)
   assert_eq(theme.render(role, "boom", no_color), "boom")
 }
+
+///|
+test "default ui error downsampling follows profile and background" {
+  let theme = default_theme()
+  let role = RoleKey::ui("error")
+  let dark = @profile.RenderContext::default().with_background(@profile.Dark)
+  let light = @profile.RenderContext::default().with_background(@profile.Light)
+  assert_eq(
+    theme.render(role, "boom", dark.with_color_profile(@profile.Ansi256)),
+    "\u001b[38;5;203mboom\u001b[0m",
+  )
+  assert_eq(
+    theme.render(role, "boom", dark.with_color_profile(@profile.Ansi16)),
+    "\u001b[91mboom\u001b[0m",
+  )
+  assert_eq(
+    theme.render(role, "boom", light.with_color_profile(@profile.Ansi256)),
+    "\u001b[38;5;124mboom\u001b[0m",
+  )
+  assert_eq(
+    theme.render(role, "boom", light.with_color_profile(@profile.Ansi16)),
+    "\u001b[31mboom\u001b[0m",
+  )
+}

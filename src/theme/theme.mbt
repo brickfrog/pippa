@@ -2,7 +2,12 @@
 pub(all) struct RoleKey {
   scope : String
   name : String
-} derive(Eq, Show, Hash)
+} derive(Eq, Hash)
+
+///|
+pub impl Show for RoleKey with fn output(self, logger) {
+  logger.write_string("RoleKey(scope=\{self.scope}, name=\{self.name})")
+}
 
 ///|
 struct Theme {
