@@ -255,6 +255,20 @@ test "gfm strikethrough and autolinks render through styled spans" {
     options=MarkdownOptions::gfm(),
   )
   assert_true(styled.contains("\u001b[9m"))
+
+  let nested = render(
+    "~~**bold** [link](https://example.com)~~",
+    width=80,
+    theme~,
+    ctx=@profile.RenderContext::default(),
+    link_mode=Osc8,
+    options=MarkdownOptions::gfm(),
+  )
+  assert_eq(stripped(nested), "bold link")
+  assert_true(nested.contains("\u001b[1m"))
+  assert_true(nested.contains("\u001b[4m"))
+  assert_true(nested.contains("\u001b[9m"))
+  assert_true(nested.contains("\u001b]8;;https://example.com\u001b\\"))
 }
 
 ///|

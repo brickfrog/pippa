@@ -148,14 +148,17 @@ fn spans_with_role(
 }
 
 ///|
-fn spans_with_role_and_style(
+fn spans_with_strikethrough_style(
   spans : Array[@theme.StyledSpan],
-  role : @theme.RoleKey,
-  style : @pippa.Style,
+  state : RenderState,
 ) -> Array[@theme.StyledSpan] {
   let out : Array[@theme.StyledSpan] = []
   for item in spans {
-    out.push({ ..item, role, style_override: Some(style) })
+    let style = match item.style_override {
+      Some(style) => style
+      None => state.theme.style(item.role)
+    }
+    out.push({ ..item, style_override: Some(style.strikethrough()) })
   }
   out
 }
@@ -259,11 +262,7 @@ fn strikethrough_spans(
   state : RenderState,
 ) -> Array[@theme.StyledSpan] {
   let role = @theme.RoleKey::markdown("strikethrough")
-  spans_with_role_and_style(
-    inline_spans(inline, role, state),
-    role,
-    state.theme.style(role).strikethrough(),
-  )
+  spans_with_strikethrough_style(inline_spans(inline, role, state), state)
 }
 
 ///|
