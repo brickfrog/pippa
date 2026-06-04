@@ -12,6 +12,10 @@ keywords = [ "tui", "terminal", "framework", "elm", "bubbletea", "ansi" ]
 
 description = "A terminal UI framework for MoonBit, inspired by bubbletea (Go) and Elm architecture. Provides a Model-Update-View pattern with typed messages, ANSI rendering, and composable components."
 
+import {
+  "moonbit-community/cmark@0.4.4",
+}
+
 options(
   source: "src",
 )

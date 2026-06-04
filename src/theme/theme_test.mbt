@@ -65,3 +65,30 @@ test "default ui error downsampling follows profile and background" {
     "\u001b[31mboom\u001b[0m",
   )
 }
+
+///|
+test "styled spans wrap on plaintext and render ANSI last" {
+  let theme = Theme::new()
+    .with_role(RoleKey::markdown("paragraph"), @pippa.style())
+    .with_role(
+      RoleKey::markdown("strong"),
+      @pippa.style().foreground(@pippa.color_ansi(2)).bold(),
+    )
+  let ctx = @profile.RenderContext::default().with_color_profile(
+    @profile.Ansi16,
+  )
+  let spans = [
+    StyledSpan::new("alpha ", RoleKey::markdown("paragraph")),
+    StyledSpan::new("strong words", RoleKey::markdown("strong"), no_wrap=true),
+    StyledSpan::new(" tail", RoleKey::markdown("paragraph")),
+  ]
+  let lines = wrap_spans(spans, 12)
+  assert_eq(lines.length(), 3)
+  let rendered = render_span_lines(lines, theme, ctx)
+  assert_eq(@pippa.strip_ansi(rendered), "alpha\nstrong words\ntail")
+  for line in @pippa.split_lines(rendered) {
+    assert_true(@pippa.visible_width(line) <= 12)
+  }
+  assert_true(rendered.contains("\u001b[32m"))
+  assert_true(rendered.contains("\u001b[1mstrong words"))
+}

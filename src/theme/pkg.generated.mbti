@@ -9,6 +9,16 @@ import {
 // Values
 pub fn default_theme() -> Theme
 
+pub fn render_span_lines(Array[Array[StyledSpan]], Theme, @profile.RenderContext) -> String
+
+pub fn render_spans(Array[StyledSpan], Theme, @profile.RenderContext) -> String
+
+pub fn render_wrapped_spans(Array[StyledSpan], Int, Theme, @profile.RenderContext) -> String
+
+pub fn span_plain_text(Array[StyledSpan]) -> String
+
+pub fn wrap_spans(Array[StyledSpan], Int) -> Array[Array[StyledSpan]]
+
 // Errors
 
 // Types and methods
@@ -23,9 +33,23 @@ pub fn RoleKey::syntax(String) -> Self
 pub fn RoleKey::ui(String) -> Self
 pub impl Show for RoleKey
 
+pub(all) struct StyledSpan {
+  text : String
+  role : RoleKey
+  style_override : @pippa.Style?
+  href : String?
+  no_wrap : Bool
+} derive(Eq)
+pub fn StyledSpan::new(String, RoleKey, style_override? : @pippa.Style?, href? : String?, no_wrap? : Bool) -> Self
+pub fn StyledSpan::with_href(Self, String) -> Self
+pub fn StyledSpan::with_style(Self, @pippa.Style) -> Self
+pub fn StyledSpan::with_text(Self, String) -> Self
+pub fn StyledSpan::without_wrap(Self) -> Self
+
 type Theme
 pub fn Theme::new(fallback? : @pippa.Style) -> Self
 pub fn Theme::render(Self, RoleKey, String, @profile.RenderContext) -> String
+pub fn Theme::render_span(Self, StyledSpan, @profile.RenderContext) -> String
 pub fn Theme::style(Self, RoleKey) -> @pippa.Style
 pub fn Theme::with_role(Self, RoleKey, @pippa.Style) -> Self
 
