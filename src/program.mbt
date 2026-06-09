@@ -53,7 +53,11 @@ pub(all) struct Program[Model, Msg] {
   raw_input : (() -> Bytes)?
   /// Optional cancellation predicate polled by the runtime between waits.
   cancelled : (() -> Bool)?
-  /// Optional monotonic millisecond clock used by this program's runtime.
+  /// Optional monotonic millisecond clock. This is NOT isolated per program
+  /// instance: when set, `run_internal` installs it into the process-global
+  /// `runtime_clock_override` for the duration of this program's run and restores
+  /// the prior override on exit (LIFO save/restore), so nested or re-entrant runs
+  /// stack their overrides rather than each observing a private clock.
   clock : (() -> Int64)?
   /// Maximum renderer FPS. Values outside 1..120 are clamped by the runtime.
   fps : Int
@@ -308,7 +312,13 @@ pub fn[Model, Msg] Program::with_cancelled(
 }
 
 ///|
-/// Use a deterministic monotonic millisecond clock while this program runs.
+/// Install a monotonic millisecond clock for the duration of this program's run.
+///
+/// The clock is not isolated per program instance: at run time it is pushed onto
+/// the process-global `runtime_clock_override` and the previous override is
+/// restored when the run unwinds (LIFO save/restore). Concurrent or nested runs
+/// on the same process therefore share and stack this override rather than each
+/// observing a private clock.
 pub fn[Model, Msg] Program::with_clock(
   self : Program[Model, Msg],
   clock : () -> Int64,

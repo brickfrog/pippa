@@ -7,7 +7,7 @@ import {
 }
 
 // Values
-pub fn encode(String) -> Bytes
+pub fn encode(String) -> Bytes raise EncodeError
 
 pub fn[Model, Msg] maybe_run_replay(@pippa.Program[Model, Msg]) -> Bool
 
@@ -20,6 +20,9 @@ pub fn[Model, Msg] replay(@pippa.Program[Model, Msg], String, ReplayOptions) -> 
 pub fn[Model, Msg] replay_frames(init~ : () -> @pippa.UpdateResult[Model, Msg], update~ : (Model, Msg) -> @pippa.UpdateResult[Model, Msg], view~ : (Model) -> String, script~ : Array[ReplayStep[Msg]], sub? : (@pippa.InputEvent) -> Msg?, ctx? : @profile.RenderContext) -> Array[String]
 
 // Errors
+pub suberror EncodeError {
+  EncodeError(String)
+}
 
 // Types and methods
 pub(all) struct ReplayOptions {
@@ -31,7 +34,6 @@ pub(all) struct ReplayOptions {
 }
 pub fn ReplayOptions::default() -> Self
 pub fn ReplayOptions::with_clock(Self, () -> Int64) -> Self
-pub fn ReplayOptions::with_drain_empty_polls(Self, Int) -> Self
 pub fn ReplayOptions::with_raw_ansi(Self, Bool) -> Self
 pub fn ReplayOptions::with_window_size(Self, Int, Int) -> Self
 

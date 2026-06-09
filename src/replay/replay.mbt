@@ -21,6 +21,9 @@ pub(all) struct ReplayOptions {
   /// Optional deterministic monotonic clock for `Program::with_clock`.
   clock : (() -> Int64)?
   /// Empty raw-input polls to wait after the script has drained before cancel.
+  /// Clamped to at least 1 at use-site in `replay`, so a 0 (or negative) value
+  /// cannot fire cancellation before the scripted input is processed and
+  /// rendered.
   drain_empty_polls : Int
 }
 
@@ -34,7 +37,12 @@ pub(all) struct ReplayResult[Model] {
 }
 
 ///|
-/// Default replay options: 80x24, normalized output, and a deterministic clock.
+/// Default replay options: an 80x24 terminal, normalized output, no explicit
+/// clock, and a 4-poll post-script drain window.
+///
+/// `clock` is `None` here; determinism does not come from this default but from
+/// `replay`, which falls back to `replay_clock`'s monotonic +20ms counter when
+/// no clock is supplied.
 pub fn ReplayOptions::default() -> ReplayOptions {
   { width: 80, height: 24, raw_ansi: false, clock: None, drain_empty_polls: 4 }
 }
@@ -65,15 +73,6 @@ pub fn ReplayOptions::with_clock(
   clock : () -> Int64,
 ) -> ReplayOptions {
   { ..self, clock: Some(clock) }
-}
-
-///|
-/// Return options with a different post-script drain poll count.
-pub fn ReplayOptions::with_drain_empty_polls(
-  self : ReplayOptions,
-  drain_empty_polls : Int,
-) -> ReplayOptions {
-  { ..self, drain_empty_polls: drain_empty_polls.max(1) }
 }
 
 ///|
@@ -157,7 +156,16 @@ fn ctrl_token_byte(token : String) -> Byte? {
 }
 
 ///|
-fn encode_token(out : Array[Byte], token : String) -> Unit {
+/// Raised by `encode` for a token that is neither a recognized key name, a
+/// `ctrl+<a-z>` chord, a single literal character, nor a `text:` escape. The
+/// payload is a human-readable diagnostic. `replay` surfaces this as a loud
+/// abort; callers that drive `encode` directly can catch it.
+pub suberror EncodeError {
+  EncodeError(String)
+}
+
+///|
+fn encode_token(out : Array[Byte], token : String) -> Unit raise EncodeError {
   let lower = token.to_lower()
   match lower {
     "" => ()
@@ -170,20 +178,62 @@ fn encode_token(out : Array[Byte], token : String) -> Unit {
     "down" => push_byte_values(out, [b'\x1B', b'[', b'B'])
     "right" => push_byte_values(out, [b'\x1B', b'[', b'C'])
     "left" => push_byte_values(out, [b'\x1B', b'[', b'D'])
+    "home" => push_byte_values(out, [b'\x1B', b'[', b'H'])
+    "end" => push_byte_values(out, [b'\x1B', b'[', b'F'])
+    "delete" | "del" => push_byte_values(out, [b'\x1B', b'[', b'3', b'~'])
+    "pageup" | "pgup" => push_byte_values(out, [b'\x1B', b'[', b'5', b'~'])
+    "pagedown" | "pgdn" => push_byte_values(out, [b'\x1B', b'[', b'6', b'~'])
     _ =>
       match ctrl_token_byte(lower) {
         Some(byte) => out.push(byte)
-        None => push_bytes(out, token)
+        None => encode_text_token(out, token, lower)
       }
+  }
+}
+
+///|
+/// Encode a token that is not a recognized key name as literal text, or raise
+/// `EncodeError` when it cannot be one.
+///
+/// A `text:` prefix types its remainder verbatim, so literal text that collides
+/// with a key name (e.g. `text:up`) is still expressible. A bare single
+/// character is typed as-is, which is how short literal runs like `/ f z` are
+/// written. Any other multi-character token is rejected loudly instead of being
+/// silently typed — this catches typos and unsupported key names such as
+/// `pgdown` that would otherwise masquerade as typed text.
+fn encode_text_token(
+  out : Array[Byte],
+  token : String,
+  lower : String,
+) -> Unit raise EncodeError {
+  if lower.has_prefix("text:") {
+    push_bytes(out, token[5:].to_owned())
+  } else if token.to_array().length() == 1 {
+    push_bytes(out, token)
+  } else {
+    raise EncodeError(
+      "pippa replay: unknown key token \"\{token}\". Recognized tokens: enter, return, tab, space, backspace/bs, esc/escape, up, down, left, right, home, end, delete/del, pageup/pgup, pagedown/pgdn, ctrl+<a-z>. Type literal text as single-character tokens (use the `space` token for a literal space) or with a `text:` prefix, e.g. `text:hello`.",
+    )
   }
 }
 
 ///|
 /// Encode line- or space-delimited replay key tokens as terminal input bytes.
 ///
-/// Recognized tokens include printable text, `enter`, `esc`, `tab`, `space`,
-/// `backspace`, arrows, and `ctrl+<letter>`.
-pub fn encode(script : String) -> Bytes {
+/// Recognized key tokens (case-insensitive): `enter`/`return`, `tab`, `space`,
+/// `backspace`/`bs`, `esc`/`escape`, `up`, `down`, `left`, `right`, `home`,
+/// `end`, `delete`/`del`, `pageup`/`pgup`, `pagedown`/`pgdn`, and `ctrl+<a-z>`.
+/// Their byte sequences round-trip through `@pippa.parse_input`/`parse_all`.
+///
+/// Literal text is written as single-character tokens (`/ f z` types `fz`) or
+/// with an explicit `text:` prefix (`text:hello`, including runs that collide
+/// with a key name such as `text:up`). Because tokens are whitespace-delimited,
+/// an embedded space is written with the `space` token: both `a space b` and
+/// `text:a space text:b` type `a b`.
+///
+/// Unknown multi-character tokens (e.g. a misspelled `pgdown`) raise
+/// `EncodeError` rather than being silently typed as text.
+pub fn encode(script : String) -> Bytes raise EncodeError {
   let out : Array[Byte] = []
   let mut token : Array[Char] = []
   for ch in script {
@@ -293,6 +343,16 @@ fn replay_clock(opts : ReplayOptions) -> () -> Int64 {
 }
 
 ///|
+/// Effective number of empty drain polls `replay` waits for after the script
+/// drains. Clamped to at least 1 so a 0 (or negative) configured
+/// `drain_empty_polls` cannot cancel the loop before scripted input is processed
+/// and rendered.
+#cfg(any(target="native", target="llvm"))
+fn effective_drain_polls(configured : Int) -> Int {
+  configured.max(1)
+}
+
+///|
 fn[Model] replay_model_from_run_result(
   result : @pippa.RunResult[Model],
 ) -> Model {
@@ -315,7 +375,7 @@ pub fn[Model, Msg] replay(
   script : String,
   opts : ReplayOptions,
 ) -> ReplayResult[Model] {
-  let bytes = encode(script)
+  let bytes = encode(script) catch { EncodeError(message) => abort(message) }
   let fed = Ref(false)
   let empty_polls = Ref(0)
   let frames : Array[String] = []
@@ -337,7 +397,10 @@ pub fn[Model, Msg] replay(
       bytes
     }
   }
-  let cancelled = fn() { fed.val && empty_polls.val >= opts.drain_empty_polls }
+  // Clamp to at least one drain poll so a 0 (or negative) `drain_empty_polls`
+  // cannot cancel the loop before the scripted input is processed and rendered.
+  let drain_polls = effective_drain_polls(opts.drain_empty_polls)
+  let cancelled = fn() { fed.val && empty_polls.val >= drain_polls }
   let result = program
     .headless()
     .with_rendering(true)
