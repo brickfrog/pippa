@@ -7,5 +7,7 @@ fn main {
     sub=@spinner_progress_parity.spinner_progress_parity_sub,
     should_quit=fn(model) { model.quitting },
   )
-  ignore(@pippa.Program::run(program))
+  if !@replay.maybe_run_replay(program) {
+    ignore(@pippa.Program::run(program))
+  }
 }

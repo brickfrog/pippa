@@ -1,5 +1,6 @@
 import {
   "brickfrog/pippa",
+  "brickfrog/pippa/replay",
   "brickfrog/pippa/examples/textarea-parity" @textarea_parity,
 }
 

@@ -7,5 +7,7 @@ fn main {
     sub=@timer_stopwatch_parity.timer_stopwatch_parity_sub,
     should_quit=fn(model) { model.quitting },
   )
-  ignore(@pippa.Program::run(program))
+  if !@replay.maybe_run_replay(program) {
+    ignore(@pippa.Program::run(program))
+  }
 }

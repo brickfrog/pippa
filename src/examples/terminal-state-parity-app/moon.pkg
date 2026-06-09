@@ -1,5 +1,6 @@
 import {
   "brickfrog/pippa",
+  "brickfrog/pippa/replay",
   "brickfrog/pippa/examples/terminal-state-parity" @terminal_state_parity,
 }
 

@@ -9,5 +9,7 @@ fn main {
   ).with_structured_view(
     @terminal_state_parity.terminal_state_parity_structured_view,
   )
-  ignore(@pippa.Program::run(program))
+  if !@replay.maybe_run_replay(program) {
+    ignore(@pippa.Program::run(program))
+  }
 }

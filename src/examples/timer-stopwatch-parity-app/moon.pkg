@@ -1,5 +1,6 @@
 import {
   "brickfrog/pippa",
+  "brickfrog/pippa/replay",
   "brickfrog/pippa/examples/timer-stopwatch-parity" @timer_stopwatch_parity,
 }
 
