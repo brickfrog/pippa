@@ -1,5 +1,5 @@
 hide/show, line erase, and the keystroke-driven cursor-visibility diff frame:
-  $ env -u NO_COLOR -u CLICOLOR -u CLICOLOR_FORCE -u TERM -u PIPPA_REPLAY -u PIPPA_REPLAY_RAW -u PIPPA_REPLAY_SIZE COLORTERM=truecolor terminal-state-parity-app.exe --replay "c" --raw
+  $ env -u NO_COLOR -u CLICOLOR -u CLICOLOR_FORCE -u TERM -u PIPPA_REPLAY -u PIPPA_REPLAY_RAW -u PIPPA_REPLAY_SIZE -u PIPPA_REPLAY_CLOCK_STEP -u PIPPA_REPLAY_DRAIN_POLLS COLORTERM=truecolor terminal-state-parity-app.exe --replay "c" --raw
   --- frame 0 ---
   \x1b[2J\x1b[1;1H (escaped)
   --- frame 1 ---
