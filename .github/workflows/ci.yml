@@ -40,24 +40,9 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up MoonBit (floating toolchain; MOON_VERSION is a requested reference)
-        run: |
-          set -euo pipefail
-          # Best-effort request for the reference version; the CDN only archives
-          # the rolling channels, so this normally falls back to `latest`.
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s -- "$MOON_VERSION" \
-            || curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
-          export PATH="$HOME/.moon/bin:$PATH"
-          # Honest pin report: read the actually-resolved toolchain and only
-          # claim it was pinned when it truly matches MOON_VERSION. Otherwise
-          # warn (without failing) that CI is running on a floating toolchain.
-          resolved="$(moon version 2>/dev/null || true)"
-          echo "Resolved MoonBit toolchain: ${resolved:-<unknown>}"
-          if printf '%s\n' "$resolved" | grep -qF "$MOON_VERSION"; then
-            echo "MoonBit $MOON_VERSION installed and verified (requested reference was available; pin held this run)."
-          else
-            echo "::warning title=Floating MoonBit toolchain::Requested MoonBit $MOON_VERSION is not archived on the CDN (only rolling latest/nightly are served); CI is running on a FLOATING toolchain (resolved: ${resolved:-unknown}). MOON_VERSION is a soft pin / requested reference, NOT a hard pin — see cram/README.md."
-          fi
+        uses: ./.github/actions/setup-moonbit
+        with:
+          moon-version: ${{ env.MOON_VERSION }}
 
       - name: Record toolchain version
         run: moon version --all
@@ -86,24 +71,9 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up MoonBit (floating toolchain; MOON_VERSION is a requested reference)
-        run: |
-          set -euo pipefail
-          # Best-effort request for the reference version; the CDN only archives
-          # the rolling channels, so this normally falls back to `latest`.
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s -- "$MOON_VERSION" \
-            || curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
-          export PATH="$HOME/.moon/bin:$PATH"
-          # Honest pin report: read the actually-resolved toolchain and only
-          # claim it was pinned when it truly matches MOON_VERSION. Otherwise
-          # warn (without failing) that CI is running on a floating toolchain.
-          resolved="$(moon version 2>/dev/null || true)"
-          echo "Resolved MoonBit toolchain: ${resolved:-<unknown>}"
-          if printf '%s\n' "$resolved" | grep -qF "$MOON_VERSION"; then
-            echo "MoonBit $MOON_VERSION installed and verified (requested reference was available; pin held this run)."
-          else
-            echo "::warning title=Floating MoonBit toolchain::Requested MoonBit $MOON_VERSION is not archived on the CDN (only rolling latest/nightly are served); CI is running on a FLOATING toolchain (resolved: ${resolved:-unknown}). MOON_VERSION is a soft pin / requested reference, NOT a hard pin — see cram/README.md."
-          fi
+        uses: ./.github/actions/setup-moonbit
+        with:
+          moon-version: ${{ env.MOON_VERSION }}
 
       - name: Record toolchain version
         run: moon version --all

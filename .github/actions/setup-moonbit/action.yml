@@ -1,0 +1,43 @@
+name: Set up MoonBit
+description: >-
+  Best-effort install of the requested MoonBit reference toolchain with honest
+  pin/floating reporting. The official moonbitlang CDN only archives the rolling
+  latest/nightly channels, so the requested version is a SOFT pin: the action
+  requests it, falls back to the rolling channel when the CDN no longer carries
+  it, reads the actually-resolved `moon version`, and only claims the pin held
+  when it truly matches. Otherwise it emits a non-failing ::warning:: that CI is
+  running on a floating toolchain. It intentionally does NOT hard-fail on a
+  mismatch — see cram/README.md for the criteria to turn this into a hard pin.
+
+inputs:
+  moon-version:
+    description: >-
+      Requested MoonBit reference toolchain version (a soft pin / requested
+      reference, NOT a guaranteed hard pin).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up MoonBit (floating toolchain; MOON_VERSION is a requested reference)
+      shell: bash
+      env:
+        MOON_VERSION: ${{ inputs.moon-version }}
+      run: |
+        set -euo pipefail
+        # Best-effort request for the reference version; the CDN only archives
+        # the rolling channels, so this normally falls back to `latest`.
+        curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s -- "$MOON_VERSION" \
+          || curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+        echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+        export PATH="$HOME/.moon/bin:$PATH"
+        # Honest pin report: read the actually-resolved toolchain and only
+        # claim it was pinned when it truly matches MOON_VERSION. Otherwise
+        # warn (without failing) that CI is running on a floating toolchain.
+        resolved="$(moon version 2>/dev/null || true)"
+        echo "Resolved MoonBit toolchain: ${resolved:-<unknown>}"
+        if printf '%s\n' "$resolved" | grep -qF "$MOON_VERSION"; then
+          echo "MoonBit $MOON_VERSION installed and verified (requested reference was available; pin held this run)."
+        else
+          echo "::warning title=Floating MoonBit toolchain::Requested MoonBit $MOON_VERSION is not archived on the CDN (only rolling latest/nightly are served); CI is running on a FLOATING toolchain (resolved: ${resolved:-unknown}). MOON_VERSION is a soft pin / requested reference, NOT a hard pin — see cram/README.md."
+        fi
