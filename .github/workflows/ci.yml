@@ -6,8 +6,23 @@ on:
   push:
     branches: [main]
 
+# Pinned reference toolchain.
+#
+# The official moonbitlang distribution (https://cli.moonbitlang.com) serves
+# only the rolling `latest` / `nightly` channels — individual historical builds
+# (e.g. date-stamped `0.1.YYYYMMDD` versions) are NOT archived for direct
+# download. The install steps below therefore *request* this exact version and
+# fall back to the rolling channel when the CDN no longer carries it, so CI stays
+# green. The resolved toolchain is printed by `moon version --all` for
+# auditability. See cram/README.md ("Promoting cram from advisory to required")
+# for the criteria to turn this soft pin into a hard, reproducible pin.
+env:
+  MOON_VERSION: "0.1.20260529"
+
 jobs:
+  # Blocking gate: the snapshot + unit suite must pass for a PR to be mergeable.
   test:
+    name: moon test (required)
     runs-on: ubuntu-latest
 
     permissions:
@@ -17,15 +32,62 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Set up MoonBit
+      - name: Set up MoonBit (pinned, rolling fallback)
         run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+          set -uo pipefail
+          if curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s -- "$MOON_VERSION"; then
+            echo "Installed pinned MoonBit $MOON_VERSION"
+          else
+            echo "Pinned MoonBit $MOON_VERSION is not archived on the CDN (only rolling latest/nightly are); installing latest. See cram/README.md."
+            curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          fi
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Record toolchain version
+        run: moon version --all
 
       - name: Update MoonBit dependencies
-        run: |
-          moon version --all
-          moon update
+        run: moon update
 
-      - name: Run native tests
+      - name: Run native tests (blocking gate)
         run: moon test --target native
+
+  # Advisory gate: cram end-to-end snapshots drive the real *-parity-app binaries
+  # through moon-cram. moon-cram ships with the toolchain but is experimental and
+  # hidden, so this job is NON-REQUIRED (`continue-on-error: true`) and MUST NOT
+  # be added to the branch's required status checks until the promotion criteria
+  # in cram/README.md are met.
+  cram:
+    name: moon cram test (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up MoonBit (pinned, rolling fallback)
+        run: |
+          set -uo pipefail
+          if curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s -- "$MOON_VERSION"; then
+            echo "Installed pinned MoonBit $MOON_VERSION"
+          else
+            echo "Pinned MoonBit $MOON_VERSION is not archived on the CDN (only rolling latest/nightly are); installing latest. See cram/README.md."
+            curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          fi
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Record toolchain version
+        run: moon version --all
+
+      - name: Verify moon-cram is on PATH
+        run: command -v moon-cram
+
+      - name: Update MoonBit dependencies
+        run: moon update
+
+      - name: Run cram e2e snapshots (advisory, non-blocking)
+        run: moon cram test cram/

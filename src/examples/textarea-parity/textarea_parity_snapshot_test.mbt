@@ -18,45 +18,20 @@ test "textarea parity replays full ansi multiline editing frames" {
     ],
   )
 
-  inspect(
+  @debug.debug_inspect(
     frames,
     content=(
-      #|[Textarea Parity
-      #|1 > [2mnote[0m
-      #|, Textarea Parity
-      #|1 > |   
-      #|, Textarea Parity
-      #|1 > alph
-      #|  > a   
-      #|  > bet|
-      #|, Textarea Parity
-      #|  > a   
-      #|  > beta
-      #|2 > |   
-      #|, Textarea Parity
-      #|  > beta
-      #|2 > gamm
-      #|  > a|  
-      #|, Textarea Parity
-      #|  > beta
-      #|2 > gamm
-      #|  > |a  
-      #|, Textarea Parity
-      #|  > beta
-      #|2 > gam|
-      #|  > a   
-      #|, Textarea Parity
-      #|  > beta
-      #|2 > gam!
-      #|  > |ma 
-      #|, Textarea Parity
-      #|  > beta
-      #|2 > |gam
-      #|  > ma  
-      #|, Textarea Parity
-      #|  > beta
-      #|2 > g|am
-      #|  > ma  
+      #|[
+      #|  "Textarea Parity\n1 > \u{1b}[2mnote\u{1b}[0m\n",
+      #|  "Textarea Parity\n1 > |   \n",
+      #|  "Textarea Parity\n1 > alph\n  > a   \n  > bet|\n",
+      #|  "Textarea Parity\n  > a   \n  > beta\n2 > |   \n",
+      #|  "Textarea Parity\n  > beta\n2 > gamm\n  > a|  \n",
+      #|  "Textarea Parity\n  > beta\n2 > gamm\n  > |a  \n",
+      #|  "Textarea Parity\n  > beta\n2 > gam|\n  > a   \n",
+      #|  "Textarea Parity\n  > beta\n2 > gam!\n  > |ma \n",
+      #|  "Textarea Parity\n  > beta\n2 > |gam\n  > ma  \n",
+      #|  "Textarea Parity\n  > beta\n2 > g|am\n  > ma  \n",
       #|]
     ),
   )
