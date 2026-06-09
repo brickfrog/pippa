@@ -31,9 +31,11 @@ pub(all) struct ReplayOptions {
   raw_ansi : Bool
   clock : (() -> Int64)?
   drain_empty_polls : Int
+  clock_step_ms : Int
 }
 pub fn ReplayOptions::default() -> Self
 pub fn ReplayOptions::with_clock(Self, () -> Int64) -> Self
+pub fn ReplayOptions::with_clock_step_ms(Self, Int) -> Self
 pub fn ReplayOptions::with_drain_empty_polls(Self, Int) -> Self
 pub fn ReplayOptions::with_raw_ansi(Self, Bool) -> Self
 pub fn ReplayOptions::with_window_size(Self, Int, Int) -> Self
@@ -53,6 +55,8 @@ pub(all) struct ReplayTrigger {
   raw_ansi : Bool
   width : Int
   height : Int
+  clock_step_ms : Int
+  drain_empty_polls : Int
 }
 
 // Type aliases

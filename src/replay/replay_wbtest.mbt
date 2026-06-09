@@ -56,7 +56,7 @@ test "replay_trigger_from_env ignores a blank PIPPA_REPLAY and honors a non-empt
   @env.set_env_var("PIPPA_REPLAY", "")
   assert_true(@env.get_env_var("PIPPA_REPLAY") is Some(""))
   assert_true(replay_trigger_from_env() is None)
-  // A non-empty value still triggers, with the RAW/SIZE defaults.
+  // A non-empty value still triggers, with the RAW/SIZE/clock/drain defaults.
   @env.set_env_var("PIPPA_REPLAY", "down enter")
   match replay_trigger_from_env() {
     Some(t) => {
@@ -64,8 +64,43 @@ test "replay_trigger_from_env ignores a blank PIPPA_REPLAY and honors a non-empt
       assert_false(t.raw_ansi)
       assert_eq(t.width, 80)
       assert_eq(t.height, 24)
+      assert_eq(t.clock_step_ms, 20)
+      assert_eq(t.drain_empty_polls, 4)
     }
     None => abort("expected a replay trigger for a non-empty PIPPA_REPLAY")
+  }
+  clear_replay_env()
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "replay_trigger_from_env reads the clock step and drain window, defaulting malformed values" {
+  fn clear_replay_env() -> Unit {
+    @env.unset_env_var("PIPPA_REPLAY")
+    @env.unset_env_var("PIPPA_REPLAY_CLOCK_STEP")
+    @env.unset_env_var("PIPPA_REPLAY_DRAIN_POLLS")
+  }
+
+  clear_replay_env()
+  @env.set_env_var("PIPPA_REPLAY", "s")
+  @env.set_env_var("PIPPA_REPLAY_CLOCK_STEP", "250")
+  @env.set_env_var("PIPPA_REPLAY_DRAIN_POLLS", "6")
+  match replay_trigger_from_env() {
+    Some(t) => {
+      assert_eq(t.clock_step_ms, 250)
+      assert_eq(t.drain_empty_polls, 6)
+    }
+    None => abort("expected a replay trigger")
+  }
+  // A malformed value falls back to its default (20ms / 4 polls).
+  @env.set_env_var("PIPPA_REPLAY_CLOCK_STEP", "fast")
+  @env.set_env_var("PIPPA_REPLAY_DRAIN_POLLS", "")
+  match replay_trigger_from_env() {
+    Some(t) => {
+      assert_eq(t.clock_step_ms, 20)
+      assert_eq(t.drain_empty_polls, 4)
+    }
+    None => abort("expected a replay trigger")
   }
   clear_replay_env()
 }
