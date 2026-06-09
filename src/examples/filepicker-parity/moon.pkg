@@ -4,5 +4,6 @@ import {
 }
 
 import {
+  "brickfrog/pippa/replay",
   "moonbitlang/core/test",
 } for "test"
