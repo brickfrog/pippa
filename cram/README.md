@@ -45,9 +45,11 @@ one undelimited byte-mash. The trigger can be supplied two equivalent ways:
 > built on the helper — including every shipped `*-parity-app` — into
 > replay-and-exit instead of starting interactively. There is no per-app opt-in.
 > Prefer the explicit `--replay` CLI flag, and always unset `PIPPA_REPLAY`,
-> `PIPPA_REPLAY_RAW`, and `PIPPA_REPLAY_SIZE` in tests and CI (every cram command
-> below does this with `env -u`). A blank `export PIPPA_REPLAY=` is ignored as a
-> small guard, but any non-empty value still triggers.
+> `PIPPA_REPLAY_RAW`, and `PIPPA_REPLAY_SIZE` in tests and CI (every *replay* cram
+> command below does this with `env -u`; the `color-profile.t` commands don't,
+> because `color-profile.exe` isn't a replay command). A blank
+> `export PIPPA_REPLAY=` is ignored as a small guard, but any non-empty value
+> still triggers.
 
 Output is **normalized** (control sequences stripped to readable text) by
 default; `--raw` / `PIPPA_REPLAY_RAW=1` keeps the raw runtime ANSI so escape

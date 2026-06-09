@@ -144,6 +144,13 @@ fn replay_trigger_from_env() -> ReplayTrigger? {
 /// Per-frame delimiter line marking the start of frame `index` (0-based) in
 /// joined replay output. A printable, deterministic marker so cram fixtures can
 /// assert on an individual frame instead of one undelimited byte-mash.
+///
+/// `index` counts the non-empty captured output chunks `replay` recorded — it is
+/// NOT the update-step index, and the count differs between raw and normalized
+/// modes (normalization can reduce a control-only chunk to empty, which is then
+/// dropped). The marker is a plaintext sentinel with no escaping or collision
+/// guard: an app whose own view renders a literal `--- frame N ---` line is
+/// indistinguishable from this delimiter.
 fn frame_delimiter(index : Int) -> String {
   "--- frame \{index} ---"
 }
@@ -151,9 +158,14 @@ fn frame_delimiter(index : Int) -> String {
 ///|
 /// Join captured replay frames into a single printable stream, prefixing each
 /// frame with a numbered `frame_delimiter` line so frames stay per-frame
-/// separable in cram snapshots (F3). Captured frames carry no trailing newline,
-/// so a single `\n` separates each delimiter from its frame and each frame from
-/// the next delimiter; the final newline is added by `println`.
+/// separable in cram snapshots (F3).
+///
+/// This *assumes* captured frames carry no trailing newline — true for the
+/// headless runtime's rendered chunks today, but an assumption rather than a
+/// guarantee. Under it, a single `\n` separates each delimiter from its frame and
+/// each frame from the next delimiter, and the final newline is added by
+/// `println`; a frame that did end in `\n` would simply render a blank line ahead
+/// of the next delimiter.
 fn join_replay_frames(frames : Array[String]) -> String {
   let buf = StringBuilder::new()
   for i, frame in frames {

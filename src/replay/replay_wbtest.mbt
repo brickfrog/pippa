@@ -36,3 +36,36 @@ test "join_replay_frames renders a single frame with its own delimiter" {
     ),
   )
 }
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "replay_trigger_from_env ignores a blank PIPPA_REPLAY and honors a non-empty one" {
+  fn clear_replay_env() -> Unit {
+    @env.unset_env_var("PIPPA_REPLAY")
+    @env.unset_env_var("PIPPA_REPLAY_RAW")
+    @env.unset_env_var("PIPPA_REPLAY_SIZE")
+  }
+
+  clear_replay_env()
+  // Unset: there is no env trigger at all.
+  assert_true(replay_trigger_from_env() is None)
+  // F10 guard: a blank `export PIPPA_REPLAY=` must NOT flip the app into
+  // replay-and-exit. This runtime reports a set-but-empty var as `Some("")`, so
+  // the guard's `Some("")` arm is the one exercised here; the matching `None`
+  // arm covers any platform that instead collapses an empty var to `None`.
+  @env.set_env_var("PIPPA_REPLAY", "")
+  assert_true(@env.get_env_var("PIPPA_REPLAY") is Some(""))
+  assert_true(replay_trigger_from_env() is None)
+  // A non-empty value still triggers, with the RAW/SIZE defaults.
+  @env.set_env_var("PIPPA_REPLAY", "down enter")
+  match replay_trigger_from_env() {
+    Some(t) => {
+      assert_eq(t.script, "down enter")
+      assert_false(t.raw_ansi)
+      assert_eq(t.width, 80)
+      assert_eq(t.height, 24)
+    }
+    None => abort("expected a replay trigger for a non-empty PIPPA_REPLAY")
+  }
+  clear_replay_env()
+}

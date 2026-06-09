@@ -79,10 +79,11 @@ pub fn ReplayOptions::with_clock(
 /// Return options with a different post-script drain window: the number of empty
 /// raw-input polls `replay` waits for after the script drains before cancelling.
 ///
-/// Clamped to at least 1 so the loop cannot cancel before the scripted input is
-/// processed and rendered — the same floor `replay` enforces at use-site, kept
-/// here so callers can safely *widen* the drain (e.g. for a long async settle)
-/// without reaching for an unsafe raw record update to the `pub(all)` field.
+/// Clamped to at least 1, mirroring the floor `replay` already enforces at
+/// use-site. This builder is the *ergonomic* way to widen the drain (e.g. to let
+/// a slow render settle): the `pub(all)` field can still be set directly with a
+/// raw record update, and the use-site clamp keeps that path safe too — so the
+/// builder is a convenience for the common case, not a safety gate.
 pub fn ReplayOptions::with_drain_empty_polls(
   self : ReplayOptions,
   drain_empty_polls : Int,

@@ -260,8 +260,11 @@ test "normalize strips the trailing program-exit teardown reset-SGR" {
 
 ///|
 test "normalize keeps a mid-stream 39m/49m that is not the trailing teardown" {
-  // A reset-foreground/background pair followed by more printable text is
-  // mid-stream color, not the exit teardown, so it must be preserved.
+  // The strip is a trailing-suffix heuristic, not a semantic one: a
+  // reset-foreground/background pair is preserved here ONLY because printable
+  // text follows it, so the pair is not the stream's suffix. A frame ending
+  // exactly on the pair WOULD be stripped — a boundary that is unreachable in
+  // practice because the runtime's teardown reset is always the final bytes.
   let raw = @pippa.reset_foreground_color() +
     @pippa.reset_background_color() +
     "tail"
@@ -273,9 +276,9 @@ test "normalize keeps a mid-stream 39m/49m that is not the trailing teardown" {
 
 ///|
 test "with_drain_empty_polls clamps non-positive values and keeps larger windows" {
-  // The re-added safe builder clamps a 0/negative drain to the >=1 floor while a
-  // larger window passes through unchanged, so widening the drain no longer needs
-  // an unsafe raw record update.
+  // The re-added builder clamps a 0/negative drain to the >=1 floor while a larger
+  // window passes through unchanged, giving callers an ergonomic way to widen the
+  // drain instead of a raw record update (the use-site clamp keeps that safe too).
   assert_eq(
     ReplayOptions::default().with_drain_empty_polls(0).drain_empty_polls,
     1,
@@ -288,4 +291,59 @@ test "with_drain_empty_polls clamps non-positive values and keeps larger windows
     ReplayOptions::default().with_drain_empty_polls(9).drain_empty_polls,
     9,
   )
+}
+
+///|
+test "normalize strips the trailing reset-SGR from a realistic full teardown sequence" {
+  // Tripwire: pin `normalize` against the EXACT byte order that program.mbt's
+  // `terminal_view_reset_sequence` emits at program exit — show-cursor,
+  // cursor-style, window-title, fg-reset (ESC[39m), bg-reset (ESC[49m),
+  // clear-progress, mouse-disable. Once the cursor/OSC/mouse controls are dropped,
+  // the reset-SGR pair is the trailing content, so it is stripped. If the runtime
+  // ever reorders this teardown so the reset-SGR is no longer trailing, this test
+  // fails loudly instead of the barnacle silently reappearing in captured frames.
+  let content = @pippa.style().foreground_rgb(1, 2, 3).render("hi")
+  let teardown = @pippa.show_cursor() +
+    @pippa.set_cursor_style(@pippa.Default) +
+    @pippa.clear_window_title() +
+    @pippa.reset_foreground_color() +
+    @pippa.reset_background_color() +
+    @pippa.clear_terminal_progress() +
+    @pippa.disable_mouse()
+  assert_eq(normalize(content + teardown), content)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "replay polls the configured drain window: a larger drain polls strictly more" {
+  // Exercise the with_drain_empty_polls builder's reason to exist — widening the
+  // post-script drain. The deterministic replay clock is read once per runtime
+  // loop tick, so counting clock calls observes how long the loop kept polling
+  // for empty input before the cancellation predicate fired. A larger drain ⇒
+  // more drain ticks ⇒ strictly more clock calls.
+  fn ticks_for_drain(drain : Int) -> Int {
+    let calls = Ref(0)
+    let now = Ref(0L)
+    let clock = fn() {
+      calls.val = calls.val + 1
+      now.val = now.val + 20L
+      now.val
+    }
+    let program = @pippa.Program::new(
+      init=test_init,
+      update=test_update,
+      view=fn(model) { "count=\{model}" },
+      sub=test_sub,
+    )
+    let opts = ReplayOptions::default()
+      .with_window_size(20, 5)
+      .with_drain_empty_polls(drain)
+      .with_clock(clock)
+    let _ = replay(program, "x", opts)
+    calls.val
+  }
+
+  let small = ticks_for_drain(1)
+  let large = ticks_for_drain(12)
+  assert_true(large > small)
 }
