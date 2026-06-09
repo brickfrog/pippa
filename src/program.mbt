@@ -56,8 +56,10 @@ pub(all) struct Program[Model, Msg] {
   /// Optional monotonic millisecond clock. This is NOT isolated per program
   /// instance: when set, `run_internal` installs it into the process-global
   /// `runtime_clock_override` for the duration of this program's run and restores
-  /// the prior override on exit (LIFO save/restore), so nested or re-entrant runs
-  /// stack their overrides rather than each observing a private clock.
+  /// the prior override on exit (LIFO save/restore). That save/restore only
+  /// composes for nested or re-entrant runs on the same thread, which unwind in
+  /// last-in-first-out order; overlapping/concurrent runs are NOT supported,
+  /// because the shared global override can be clobbered or restored out of order.
   clock : (() -> Int64)?
   /// Maximum renderer FPS. Values outside 1..120 are clamped by the runtime.
   fps : Int
@@ -316,9 +318,10 @@ pub fn[Model, Msg] Program::with_cancelled(
 ///
 /// The clock is not isolated per program instance: at run time it is pushed onto
 /// the process-global `runtime_clock_override` and the previous override is
-/// restored when the run unwinds (LIFO save/restore). Concurrent or nested runs
-/// on the same process therefore share and stack this override rather than each
-/// observing a private clock.
+/// restored when the run unwinds (LIFO save/restore). That save/restore only
+/// composes for nested or re-entrant runs on the same thread, which unwind in
+/// last-in-first-out order; overlapping/concurrent runs are NOT supported,
+/// because the shared global override can be clobbered or restored out of order.
 pub fn[Model, Msg] Program::with_clock(
   self : Program[Model, Msg],
   clock : () -> Int64,

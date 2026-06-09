@@ -41,7 +41,7 @@ jobs:
 
       - name: Set up MoonBit (floating toolchain; MOON_VERSION is a requested reference)
         run: |
-          set -uo pipefail
+          set -euo pipefail
           # Best-effort request for the reference version; the CDN only archives
           # the rolling channels, so this normally falls back to `latest`.
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s -- "$MOON_VERSION" \
@@ -87,7 +87,7 @@ jobs:
 
       - name: Set up MoonBit (floating toolchain; MOON_VERSION is a requested reference)
         run: |
-          set -uo pipefail
+          set -euo pipefail
           # Best-effort request for the reference version; the CDN only archives
           # the rolling channels, so this normally falls back to `latest`.
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s -- "$MOON_VERSION" \
