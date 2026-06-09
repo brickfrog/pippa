@@ -83,6 +83,54 @@ test "encode maps replay tokens to terminal input bytes" {
 }
 
 ///|
+test "encode special-key tokens round-trip through the input parser" {
+  let (events, rest) = @pippa.parse_all(
+    encode("pageup pagedown home end delete")[:],
+  )
+  assert_eq(rest.length(), 0)
+  assert_eq(events.length(), 5)
+  assert_true(events[0] is @pippa.Key(@pippa.Special("pageup")))
+  assert_true(events[1] is @pippa.Key(@pippa.Special("pagedown")))
+  assert_true(events[2] is @pippa.Key(@pippa.Special("home")))
+  assert_true(events[3] is @pippa.Key(@pippa.Special("end")))
+  assert_true(events[4] is @pippa.Key(@pippa.Special("delete")))
+}
+
+///|
+test "encode aliases round-trip to the same parser keys" {
+  let (events, rest) = @pippa.parse_all(encode("pgup pgdn del")[:])
+  assert_eq(rest.length(), 0)
+  assert_eq(events.length(), 3)
+  assert_true(events[0] is @pippa.Key(@pippa.Special("pageup")))
+  assert_true(events[1] is @pippa.Key(@pippa.Special("pagedown")))
+  assert_true(events[2] is @pippa.Key(@pippa.Special("delete")))
+}
+
+///|
+test "encode types literal text via single-character and text: tokens" {
+  // Single-character tokens type literal characters; `space` types a space.
+  @test.assert_eq(encode("a space b").to_array(), [b'a', b' ', b'b'])
+  // `text:` types a multi-character run verbatim, including key-name collisions.
+  @test.assert_eq(encode("text:up").to_array(), [b'u', b'p'])
+  // Embedded spaces (F2) are written with the `space` token between runs.
+  @test.assert_eq(encode("text:alpha space text:beta").to_array(), [
+    b'a', b'l', b'p', b'h', b'a', b' ', b'b', b'e', b't', b'a',
+  ])
+}
+
+///|
+test "encode rejects unknown multi-character tokens loudly" {
+  // `pgdown` is a misspelling of `pgdn`/`pagedown`; encode must raise rather
+  // than silently type the letters (the pre-fix behavior).
+  assert_true((try? encode("pgdown")) is Err(_))
+  assert_true((try? encode("not_a_key")) is Err(_))
+  // Recognized tokens, single characters, and `text:` escapes still succeed.
+  assert_true((try? encode("pagedown")) is Ok(_))
+  assert_true((try? encode("f")) is Ok(_))
+  assert_true((try? encode("text:pgdown")) is Ok(_))
+}
+
+///|
 test "normalize strips runtime controls but keeps SGR and text" {
   let raw = @pippa.begin_sync_update() +
     @pippa.clear_screen() +
@@ -138,4 +186,40 @@ test "runtime replay terminates finite scripts and is deterministic" {
   let raw_joined = raw.frames.join("")
   assert_true(raw_joined.contains(@pippa.move_cursor(1, 1)))
   assert_true(raw_joined.contains(@pippa.begin_sync_update()))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "replay with a bypassed zero drain still processes scripted input" {
+  let make_clock = fn() {
+    let now = Ref(0L)
+    fn() {
+      now.val = now.val + 20L
+      now.val
+    }
+  }
+  let make_program = fn() {
+    @pippa.Program::new(
+      init=test_init,
+      update=test_update,
+      view=fn(model) { "count=\{model}" },
+      sub=test_sub,
+    )
+  }
+  // `ReplayOptions` is `pub(all)`, so a record update can bypass the builders and
+  // set `drain_empty_polls: 0`. The use-site clamp must keep this behaving like
+  // the safe default rather than cancelling early and truncating frames.
+  let safe_opts = ReplayOptions::default()
+    .with_window_size(20, 5)
+    .with_clock(make_clock())
+  let zero_opts = {
+    ..ReplayOptions::default().with_window_size(20, 5).with_clock(make_clock()),
+    drain_empty_polls: 0,
+  }
+  let safe = replay(make_program(), "x", safe_opts)
+  let zero = replay(make_program(), "x", zero_opts)
+  assert_eq(zero.final_model, 1)
+  assert_eq(zero.final_model, safe.final_model)
+  @test.assert_eq(zero.frames, safe.frames)
+  assert_true(zero.frames.join("").contains("count=1"))
 }
