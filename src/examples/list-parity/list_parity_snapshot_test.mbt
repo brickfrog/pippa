@@ -5,7 +5,9 @@ test "list parity replay frames fuzzy filter full ansi" {
     @replay.Input(@pippa.Key(@pippa.Char('f'))),
     @replay.Input(@pippa.Key(@pippa.Char('z'))),
     @replay.Input(@pippa.Key(@pippa.Special("enter"))),
-    @replay.Input(@pippa.Key(@pippa.Special("down"))),
+    // C-l clears the committed filter, restoring all three rows (the trailing
+    // `down` it replaces was inert on the single-row filtered list).
+    @replay.Input(@pippa.Key(@pippa.Modified("ctrl", "l"))),
   ]
   let frames = @replay.replay_frames(
     init=list_parity_init,
@@ -24,7 +26,7 @@ test "list parity replay frames fuzzy filter full ansi" {
       #|  "Parity Scenarios\nFilter: f|\n0:Fuzzy Finder:cursor:0\n\u{1b}[2mPage 1/1\u{1b}[0m\n\u{1b}[2m↑/k up • ↓/j down • pgup/b page up • pgdn/f page down • / filter • C-l clear filter • esc escape • enter enter • ? help • q quit\u{1b}[0m",
       #|  "Parity Scenarios\nFilter: fz|\n0:Fuzzy Finder:cursor:0,2\n\u{1b}[2mPage 1/1\u{1b}[0m\n\u{1b}[2m↑/k up • ↓/j down • pgup/b page up • pgdn/f page down • / filter • C-l clear filter • esc escape • enter enter • ? help • q quit\u{1b}[0m",
       #|  "Parity Scenarios\nFilter: fz\n0:Fuzzy Finder:cursor:0,2\n\u{1b}[2mPage 1/1\u{1b}[0m\n\u{1b}[2m↑/k up • ↓/j down • pgup/b page up • pgdn/f page down • / filter • C-l clear filter • esc escape • enter enter • ? help • q quit\u{1b}[0m",
-      #|  "Parity Scenarios\nFilter: fz\n0:Fuzzy Finder:cursor:0,2\n\u{1b}[2mPage 1/1\u{1b}[0m\n\u{1b}[2m↑/k up • ↓/j down • pgup/b page up • pgdn/f page down • / filter • C-l clear filter • esc escape • enter enter • ? help • q quit\u{1b}[0m",
+      #|  "Parity Scenarios\n0:Fuzzy Finder:cursor:\n1:Viewport Pager:idle:\n2:Table Rows:idle:\n\u{1b}[2mPage 1/1\u{1b}[0m\n\u{1b}[2m↑/k up • ↓/j down • pgup/b page up • pgdn/f page down • / filter • C-l clear filter • esc escape • enter enter • ? help • q quit\u{1b}[0m",
       #|]
     ),
   )
