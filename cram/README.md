@@ -46,7 +46,7 @@ one undelimited byte-mash. The trigger can be supplied two equivalent ways:
 Replay drives `Program::run` with a deterministic synthetic clock that advances
 `--clock-step` ms on every read (default `20`) and cancels after `--drain-polls`
 empty input polls (default `4`). The runtime fires **at most one** scheduled
-`Cmd::after` / `Cmd::every` tick per empty poll, so a timer whose interval is
+`Cmd::after` tick **per armed timer** per empty poll, so a timer whose interval is
 larger than the clock advances per poll (e.g. a 100 ms component tick under the
 default 20 ms step) reaches its deadline at most once before the drain window
 closes — capturing only the initial, barely-ticked frames.
@@ -65,7 +65,8 @@ the historical (pre-knob) behavior unchanged for the other replay cases.
 > built on the helper — including every shipped `*-parity-app` — into
 > replay-and-exit instead of starting interactively. There is no per-app opt-in.
 > Prefer the explicit `--replay` CLI flag, and always unset `PIPPA_REPLAY`,
-> `PIPPA_REPLAY_RAW`, and `PIPPA_REPLAY_SIZE` in tests and CI (every *replay* cram
+> `PIPPA_REPLAY_RAW`, `PIPPA_REPLAY_SIZE`, `PIPPA_REPLAY_CLOCK_STEP`, and
+> `PIPPA_REPLAY_DRAIN_POLLS` in tests and CI (every *replay* cram
 > command below does this with `env -u`; the `color-profile.t` commands don't,
 > because `color-profile.exe` isn't a replay command). A blank
 > `export PIPPA_REPLAY=` is ignored as a small guard, but any non-empty value

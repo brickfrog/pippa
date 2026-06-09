@@ -28,8 +28,8 @@ pub(all) struct ReplayOptions {
   drain_empty_polls : Int
   /// Per-call advance (ms) of the synthetic monotonic clock used when `clock` is
   /// `None`: every read of the runtime clock adds this many milliseconds. The
-  /// runtime fires at most one scheduled `Cmd::after`/`Cmd::every` tick per empty
-  /// drain poll, so a `clock_step_ms` at least as large as a component's tick
+  /// runtime fires at most one scheduled `Cmd::after` tick per armed timer per
+  /// empty drain poll, so a `clock_step_ms` at least as large as a component's tick
   /// interval makes that timer due on every poll — making `drain_empty_polls` the
   /// deterministic tick budget for end-to-end timer replays. Clamped to at least 1
   /// at use-site in `replay_clock` so the synthetic clock always advances. Default
@@ -99,7 +99,7 @@ pub fn ReplayOptions::with_clock(
 /// Clamped to at least 1, mirroring the floor `replay_clock` enforces at use-site,
 /// so the synthetic clock always advances. Pair a step at least as large as a
 /// component's tick interval with `with_drain_empty_polls` to make that timer fire
-/// once per drain poll: the step makes each scheduled `Cmd::after`/`Cmd::every`
+/// once per drain poll: the step makes each scheduled `Cmd::after`
 /// deadline due on the next poll, and the drain window then sets how many ticks
 /// are captured. Ignored when an explicit `clock` is supplied via `with_clock`.
 pub fn ReplayOptions::with_clock_step_ms(

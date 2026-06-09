@@ -386,10 +386,12 @@ test "replay clock_step_ms advances the deterministic clock so timers fire repro
 #cfg(any(target="native", target="llvm"))
 test "replay polls the configured drain window: a larger drain polls strictly more" {
   // Exercise the with_drain_empty_polls builder's reason to exist — widening the
-  // post-script drain. The deterministic replay clock is read once per runtime
-  // loop tick, so counting clock calls observes how long the loop kept polling
-  // for empty input before the cancellation predicate fired. A larger drain ⇒
-  // more drain ticks ⇒ strictly more clock calls.
+  // post-script drain. The deterministic replay clock is read several times per
+  // runtime loop iteration, not once per loop tick, so the clock-call count is not
+  // a literal count of polls. The assertion still holds by monotonicity, not a
+  // one-read-per-tick model: a larger drain means strictly more empty-input polls
+  // before the cancellation predicate fires, and more polls can only add clock
+  // reads — so the total clock-call count grows strictly with the drain window.
   fn ticks_for_drain(drain : Int) -> Int {
     let calls = Ref(0)
     let now = Ref(0L)

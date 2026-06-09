@@ -12,8 +12,8 @@ pub(all) struct ReplayTrigger {
   height : Int
   /// Per-call advance (ms) of the synthetic replay clock. Mirrors
   /// `ReplayOptions::clock_step_ms`; a step at least as large as a component's
-  /// tick interval lets scheduled `Cmd::after`/`Cmd::every` timers fire once per
-  /// drain poll. Default 20.
+  /// tick interval lets each armed `Cmd::after` timer fire once per drain poll.
+  /// Default 20.
   clock_step_ms : Int
   /// Empty raw-input polls to wait after the script drains before cancelling.
   /// Mirrors `ReplayOptions::drain_empty_polls`; with a large enough
@@ -268,9 +268,9 @@ fn join_replay_frames(frames : Array[String]) -> String {
 ///
 /// `--clock-step`/`PIPPA_REPLAY_CLOCK_STEP` advances the synthetic replay clock by
 /// that many ms per read; setting it at least as large as a timer component's tick
-/// interval makes a scheduled `Cmd::after`/`Cmd::every` due on every empty poll, so
-/// `--drain-polls`/`PIPPA_REPLAY_DRAIN_POLLS` becomes the number of timer ticks
-/// captured — letting a cram snapshot a real ticked progression deterministically.
+/// interval makes each armed `Cmd::after` due on every empty poll, so
+/// `--drain-polls`/`PIPPA_REPLAY_DRAIN_POLLS` becomes the per-armed-timer tick
+/// budget — letting a cram snapshot a real ticked progression deterministically.
 ///
 /// ⚠️ FOOTGUN — the environment trigger is *ambient*. Because this consults
 /// `PIPPA_REPLAY` on every launch, any shell with `export PIPPA_REPLAY=...` set
