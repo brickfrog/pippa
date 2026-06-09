@@ -18,13 +18,23 @@ pub(all) struct ReplayOptions {
   height : Int
   /// Keep raw runtime ANSI output when true. Output is normalized by default.
   raw_ansi : Bool
-  /// Optional deterministic monotonic clock for `Program::with_clock`.
+  /// Optional deterministic monotonic clock for `Program::with_clock`. When set,
+  /// it takes precedence over the synthetic clock and `clock_step_ms` is ignored.
   clock : (() -> Int64)?
   /// Empty raw-input polls to wait after the script has drained before cancel.
   /// Clamped to at least 1 at use-site in `replay`, so a 0 (or negative) value
   /// cannot fire cancellation before the scripted input is processed and
   /// rendered.
   drain_empty_polls : Int
+  /// Per-call advance (ms) of the synthetic monotonic clock used when `clock` is
+  /// `None`: every read of the runtime clock adds this many milliseconds. The
+  /// runtime fires at most one scheduled `Cmd::after`/`Cmd::every` tick per empty
+  /// drain poll, so a `clock_step_ms` at least as large as a component's tick
+  /// interval makes that timer due on every poll — making `drain_empty_polls` the
+  /// deterministic tick budget for end-to-end timer replays. Clamped to at least 1
+  /// at use-site in `replay_clock` so the synthetic clock always advances. Default
+  /// 20 preserves the historical fallback step.
+  clock_step_ms : Int
 }
 
 ///|
@@ -41,10 +51,17 @@ pub(all) struct ReplayResult[Model] {
 /// clock, and a 4-poll post-script drain window.
 ///
 /// `clock` is `None` here; determinism does not come from this default but from
-/// `replay`, which falls back to `replay_clock`'s monotonic +20ms counter when
-/// no clock is supplied.
+/// `replay`, which falls back to `replay_clock`'s monotonic counter (stepping by
+/// `clock_step_ms`, default 20) when no clock is supplied.
 pub fn ReplayOptions::default() -> ReplayOptions {
-  { width: 80, height: 24, raw_ansi: false, clock: None, drain_empty_polls: 4 }
+  {
+    width: 80,
+    height: 24,
+    raw_ansi: false,
+    clock: None,
+    drain_empty_polls: 4,
+    clock_step_ms: 20,
+  }
 }
 
 ///|
@@ -73,6 +90,23 @@ pub fn ReplayOptions::with_clock(
   clock : () -> Int64,
 ) -> ReplayOptions {
   { ..self, clock: Some(clock) }
+}
+
+///|
+/// Return options with a different synthetic-clock step: the per-call advance (ms)
+/// of the monotonic clock `replay` uses when no explicit `clock` is set.
+///
+/// Clamped to at least 1, mirroring the floor `replay_clock` enforces at use-site,
+/// so the synthetic clock always advances. Pair a step at least as large as a
+/// component's tick interval with `with_drain_empty_polls` to make that timer fire
+/// once per drain poll: the step makes each scheduled `Cmd::after`/`Cmd::every`
+/// deadline due on the next poll, and the drain window then sets how many ticks
+/// are captured. Ignored when an explicit `clock` is supplied via `with_clock`.
+pub fn ReplayOptions::with_clock_step_ms(
+  self : ReplayOptions,
+  clock_step_ms : Int,
+) -> ReplayOptions {
+  { ..self, clock_step_ms: clock_step_ms.max(1) }
 }
 
 ///|
@@ -404,14 +438,24 @@ pub fn normalize(output : String) -> String {
 }
 
 ///|
+/// Effective synthetic-clock step. Clamped to at least 1 ms so the monotonic
+/// counter always advances even if a raw record-update bypassed the
+/// `with_clock_step_ms` builder's floor with a 0 (or negative) value.
+#cfg(any(target="native", target="llvm"))
+fn effective_clock_step_ms(configured : Int) -> Int64 {
+  configured.max(1).to_int64()
+}
+
+///|
 #cfg(any(target="native", target="llvm"))
 fn replay_clock(opts : ReplayOptions) -> () -> Int64 {
   match opts.clock {
     Some(clock) => clock
     None => {
+      let step = effective_clock_step_ms(opts.clock_step_ms)
       let now = Ref(0L)
       fn() {
-        now.val = now.val + 20L
+        now.val = now.val + step
         now.val
       }
     }

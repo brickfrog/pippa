@@ -38,6 +38,26 @@ one undelimited byte-mash. The trigger can be supplied two equivalent ways:
 | Script (key tokens) | `--replay "<tokens>"` | `PIPPA_REPLAY=<tokens>` |
 | Keep raw ANSI output | `--raw` / `--ansi` | `PIPPA_REPLAY_RAW=1` |
 | Initial terminal size | `--size <WxH>` | `PIPPA_REPLAY_SIZE=<WxH>` (default `80x24`) |
+| Synthetic clock step (ms) | `--clock-step <ms>` | `PIPPA_REPLAY_CLOCK_STEP=<ms>` (default `20`) |
+| Post-script drain window | `--drain-polls <n>` | `PIPPA_REPLAY_DRAIN_POLLS=<n>` (default `4`) |
+
+### Driving timers: advancing the replay clock (`--clock-step` / `--drain-polls`)
+
+Replay drives `Program::run` with a deterministic synthetic clock that advances
+`--clock-step` ms on every read (default `20`) and cancels after `--drain-polls`
+empty input polls (default `4`). The runtime fires **at most one** scheduled
+`Cmd::after` / `Cmd::every` tick per empty poll, so a timer whose interval is
+larger than the clock advances per poll (e.g. a 100 ms component tick under the
+default 20 ms step) reaches its deadline at most once before the drain window
+closes — capturing only the initial, barely-ticked frames.
+
+Set `--clock-step` **at least as large as the component's tick interval** and the
+clock crosses that deadline on every poll, so `--drain-polls` becomes the
+deterministic *tick budget*: N drain polls capture N timer ticks. `replay-timer.t`
+uses `--clock-step 200 --drain-polls 6/8` to snapshot a real ticked progression —
+the timer counting `0:00.3 -> 0:00.0` and the spinner glyph / progress bar
+advancing — through the actual `*-parity-app` binaries. The default `20`/`4` keep
+the historical (pre-knob) behavior unchanged for the other replay cases.
 
 > ⚠️ **Footgun — the `PIPPA_REPLAY` environment trigger is *ambient*.**
 > `maybe_run_replay` consults `PIPPA_REPLAY` on **every** app launch, so any
@@ -65,8 +85,9 @@ mid-stream SGR color is preserved.
 | `color-profile.t` | 3 | `color-profile.exe` | Color-profile detection: TrueColor → 24-bit SGR, `xterm-256color` → 256-color downsample, and `NO_COLOR` → colors stripped while the bold attribute is retained. |
 | `replay-normalized.t` | 1 | `list-parity-app.exe --replay "/ f z enter"` | The **normalized** keystroke-driven frame sequence (fuzzy-filter a list and select a row). |
 | `replay-raw-ansi.t` | 1 | `terminal-state-parity-app.exe --replay "c" --raw` | The **raw ANSI** control stream: alt-screen enter/exit, cursor show/hide, line erase, and the keystroke-driven cursor-visibility diff frame. |
+| `replay-timer.t` | 2 | `timer-stopwatch-parity-app.exe` / `spinner-progress-parity-app.exe` with `--clock-step`/`--drain-polls` | The **ticked timer progression** end to end: with the replay clock advanced past the component tick interval, the timer counts `0:00.3 -> 0:00.0` while the stopwatch climbs, and the spinner glyph advances as the progress bar fills (real `Cmd::after`-driven ticks, not just the initial frame). |
 
-Total: **5 testcases across 3 files.**
+Total: **7 testcases across 4 files.**
 
 ## Per-command environment pinning
 
@@ -84,11 +105,12 @@ TrueColor (COLORTERM=truecolor) -> 24-bit SGR escapes:
   ...
 ```
 
-The replay tests additionally unset `PIPPA_REPLAY`, `PIPPA_REPLAY_RAW`, and
-`PIPPA_REPLAY_SIZE` so an exported trigger in the surrounding shell can never
-leak into the fixture. Keep this discipline for any new command: never rely on
-the inherited environment. The `(escaped)` suffix on an expectation line means
-`moon-cram` escaped non-printable bytes in that line.
+The replay tests additionally unset `PIPPA_REPLAY`, `PIPPA_REPLAY_RAW`,
+`PIPPA_REPLAY_SIZE`, `PIPPA_REPLAY_CLOCK_STEP`, and `PIPPA_REPLAY_DRAIN_POLLS` so
+an exported trigger in the surrounding shell can never leak into the fixture.
+Keep this discipline for any new command: never rely on the inherited
+environment. The `(escaped)` suffix on an expectation line means `moon-cram`
+escaped non-printable bytes in that line.
 
 ## Authoring and updating expectations
 

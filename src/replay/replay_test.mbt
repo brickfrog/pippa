@@ -314,6 +314,75 @@ test "normalize strips the trailing reset-SGR from a realistic full teardown seq
 }
 
 ///|
+/// Only the native/llvm runtime-driving test below uses these timer helpers, so
+/// they are cfg-gated to that target to avoid unused-value warnings elsewhere.
+#cfg(any(target="native", target="llvm"))
+priv enum TimerTestMsg {
+  TimerTick
+}
+
+///|
+/// A program whose `init` schedules a self-rescheduling `Cmd::after(100ms)` tick
+/// and whose `update` counts each tick and re-arms the next one. With the default
+/// replay clock step (+20ms/call) a 100ms `after` deadline is reached at most once
+/// before the drain window cancels; widening `clock_step_ms` makes the clock cross
+/// the deadline every poll, so the tick count tracks the drain window.
+#cfg(any(target="native", target="llvm"))
+fn timer_test_init() -> @pippa.UpdateResult[Int, TimerTestMsg] {
+  @pippa.UpdateResult::new(
+    model=0,
+    cmd=@pippa.Cmd::after(100, fn() { TimerTick }),
+  )
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn timer_test_update(
+  model : Int,
+  _msg : TimerTestMsg,
+) -> @pippa.UpdateResult[Int, TimerTestMsg] {
+  @pippa.UpdateResult::new(
+    model=model + 1,
+    cmd=@pippa.Cmd::after(100, fn() { TimerTick }),
+  )
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "replay clock_step_ms advances the deterministic clock so timers fire reproducibly" {
+  // F5: with the default +20ms/call step a 100ms `Cmd::after` deadline is barely
+  // (if ever) crossed inside the drain window, so timer ticks are not exercised
+  // end to end. A `clock_step_ms` at least as large as the timer interval makes
+  // the clock cross the deadline on every empty poll, so the number of ticks
+  // tracks the drain window — and the run stays fully deterministic.
+  fn ticks(step : Int, drain : Int) -> Int {
+    let program = @pippa.Program::new(
+      init=timer_test_init,
+      update=timer_test_update,
+      view=fn(model) { "ticks=\{model}" },
+    )
+    let opts = ReplayOptions::default()
+      .with_window_size(20, 5)
+      .with_clock_step_ms(step)
+      .with_drain_empty_polls(drain)
+    replay(program, "", opts).final_model
+  }
+
+  // A larger per-call clock step fires strictly more ticks within the same drain
+  // window: the timer goes from barely-ticking to ticking every poll.
+  let slow = ticks(20, 8)
+  let fast = ticks(200, 8)
+  assert_true(fast > slow)
+  // With the clock crossing the deadline every poll, the tick count grows with
+  // the drain window — the drain is the deterministic tick budget.
+  assert_true(ticks(200, 12) > ticks(200, 4))
+  // At least one timer Cmd fires end to end under the knob.
+  assert_true(fast >= 1)
+  // Reproducible: identical options yield an identical tick count.
+  assert_eq(ticks(200, 8), ticks(200, 8))
+}
+
+///|
 #cfg(any(target="native", target="llvm"))
 test "replay polls the configured drain window: a larger drain polls strictly more" {
   // Exercise the with_drain_empty_polls builder's reason to exist — widening the
