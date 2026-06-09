@@ -1,0 +1,9 @@
+import {
+  "brickfrog/pippa",
+  "brickfrog/pippa/profile",
+  "moonbitlang/core/encoding/utf8",
+}
+
+import {
+  "moonbitlang/core/test",
+} for "test"
