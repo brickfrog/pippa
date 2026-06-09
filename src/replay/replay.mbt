@@ -165,7 +165,11 @@ pub suberror EncodeError {
 }
 
 ///|
-fn encode_token(out : Array[Byte], token : String) -> Unit raise EncodeError {
+fn encode_token(
+  out : Array[Byte],
+  token : String,
+  is_final~ : Bool,
+) -> Unit raise EncodeError {
   let lower = token.to_lower()
   match lower {
     "" => ()
@@ -173,7 +177,18 @@ fn encode_token(out : Array[Byte], token : String) -> Unit raise EncodeError {
     "tab" => out.push(b'\t')
     "space" => out.push(b' ')
     "backspace" | "bs" => out.push(b'\x7F')
-    "esc" | "escape" => push_byte_values(out, [b'\x1B', b'\x1B'])
+    "esc" | "escape" =>
+      // `esc` encodes ESC ESC so the first ESC parses as a definite standalone
+      // escape; a lone trailing ESC would be Incomplete (ambiguous with a CSI
+      // start). A non-final ESC would bind to the next token's first byte
+      // (Alt+key) or inject an extra escape, so it is rejected loudly here.
+      if is_final {
+        push_byte_values(out, [b'\x1B', b'\x1B'])
+      } else {
+        raise EncodeError(
+          "pippa replay: `esc`/`escape` may only appear as the final token of a script. A terminal byte stream cannot distinguish a standalone ESC keypress from ESC+key (Alt) without timing, so a mid-script `esc` would corrupt the following token. Move `esc` to the end of the script, or drop it.",
+        )
+      }
     "up" => push_byte_values(out, [b'\x1B', b'[', b'A'])
     "down" => push_byte_values(out, [b'\x1B', b'[', b'B'])
     "right" => push_byte_values(out, [b'\x1B', b'[', b'C'])
@@ -218,12 +233,43 @@ fn encode_text_token(
 }
 
 ///|
+/// Split a script into its whitespace-delimited tokens, preserving order and
+/// dropping the empty runs between separators.
+fn tokenize(script : String) -> Array[String] {
+  let tokens : Array[String] = []
+  let mut token : Array[Char] = []
+  for ch in script {
+    if is_token_separator(ch) {
+      if !token.is_empty() {
+        tokens.push(String::from_array(token))
+        token = []
+      }
+    } else {
+      token.push(ch)
+    }
+  }
+  if !token.is_empty() {
+    tokens.push(String::from_array(token))
+  }
+  tokens
+}
+
+///|
 /// Encode line- or space-delimited replay key tokens as terminal input bytes.
 ///
 /// Recognized key tokens (case-insensitive): `enter`/`return`, `tab`, `space`,
 /// `backspace`/`bs`, `esc`/`escape`, `up`, `down`, `left`, `right`, `home`,
 /// `end`, `delete`/`del`, `pageup`/`pgup`, `pagedown`/`pgdn`, and `ctrl+<a-z>`.
-/// Their byte sequences round-trip through `@pippa.parse_input`/`parse_all`.
+/// Apart from `esc`/`escape` (see below), their byte sequences round-trip
+/// through `@pippa.parse_input`/`parse_all`.
+///
+/// `esc`/`escape` is only accepted as the **final** token of a script. A
+/// terminal byte stream cannot distinguish a standalone ESC keypress from
+/// ESC+key (Alt) without timing, so `esc` encodes `ESC ESC` to make the first
+/// ESC parse as a definite standalone `escape` (the trailing ESC is left as an
+/// incomplete byte). As the final token it therefore round-trips to a single
+/// `escape` event; a non-final `esc` would corrupt the following token and so
+/// raises `EncodeError`.
 ///
 /// Literal text is written as single-character tokens (`/ f z` types `fz`) or
 /// with an explicit `text:` prefix (`text:hello`, including runs that collide
@@ -234,20 +280,11 @@ fn encode_text_token(
 /// Unknown multi-character tokens (e.g. a misspelled `pgdown`) raise
 /// `EncodeError` rather than being silently typed as text.
 pub fn encode(script : String) -> Bytes raise EncodeError {
+  let tokens = tokenize(script)
   let out : Array[Byte] = []
-  let mut token : Array[Char] = []
-  for ch in script {
-    if is_token_separator(ch) {
-      if !token.is_empty() {
-        encode_token(out, String::from_array(token))
-        token = []
-      }
-    } else {
-      token.push(ch)
-    }
-  }
-  if !token.is_empty() {
-    encode_token(out, String::from_array(token))
+  let last = tokens.length() - 1
+  for i, token in tokens {
+    encode_token(out, token, is_final=i == last)
   }
   Bytes::from_array(out)
 }
@@ -369,6 +406,10 @@ fn[Model] replay_model_from_run_result(
 ///|
 /// Drive a `Program::run` loop headlessly through public runtime seams and
 /// capture rendered output chunks plus the final model.
+///
+/// Aborts the process if `script` fails to `encode` (an unknown key token or a
+/// non-final `esc`); callers that need to recover should `encode` the script
+/// themselves and handle `EncodeError`.
 #cfg(any(target="native", target="llvm"))
 pub fn[Model, Msg] replay(
   program : @pippa.Program[Model, Msg],

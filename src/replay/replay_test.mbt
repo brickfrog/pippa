@@ -107,6 +107,28 @@ test "encode aliases round-trip to the same parser keys" {
 }
 
 ///|
+test "encode esc round-trips only as the final token" {
+  // `esc`/`escape` is only safe as the FINAL token: it encodes ESC ESC so the
+  // first ESC parses as a definite standalone escape key. As the final token it
+  // round-trips to a single `escape` event; the trailing ESC stays an
+  // incomplete leftover byte, exactly as a real terminal would buffer a lone
+  // ESC (which is otherwise ambiguous with a CSI start).
+  let (events, rest) = @pippa.parse_all(encode("esc")[:])
+  assert_eq(events.length(), 1)
+  assert_true(events[0] is @pippa.Key(@pippa.Special("escape")))
+  assert_eq(rest.length(), 1)
+  // The `escape` alias and a trailing `esc` after other tokens are fine too.
+  assert_true((try? encode("escape")) is Ok(_))
+  assert_true((try? encode("x escape")) is Ok(_))
+  // A mid-script `esc` would corrupt the following token (the 2nd ESC binds to
+  // the next byte as Alt+key or injects an extra escape), so encode raises
+  // rather than silently mis-encoding — consistent with the unknown-token path.
+  assert_true((try? encode("esc x")) is Err(_))
+  assert_true((try? encode("esc enter")) is Err(_))
+  assert_true((try? encode("escape x")) is Err(_))
+}
+
+///|
 test "encode types literal text via single-character and text: tokens" {
   // Single-character tokens type literal characters; `space` types a space.
   @test.assert_eq(encode("a space b").to_array(), [b'a', b' ', b'b'])
