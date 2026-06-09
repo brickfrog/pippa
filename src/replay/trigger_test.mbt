@@ -46,6 +46,53 @@ test "parse_replay_args returns None without --replay" {
 }
 
 ///|
+test "parse_replay_args reads --clock-step and --drain-polls in both forms" {
+  match
+    parse_replay_args([
+      "--replay", "s", "--clock-step", "250", "--drain-polls", "6",
+    ]) {
+    Some(t) => {
+      assert_eq(t.clock_step_ms, 250)
+      assert_eq(t.drain_empty_polls, 6)
+    }
+    None => abort("expected a replay trigger")
+  }
+  match
+    parse_replay_args(["--replay=s", "--clock-step=300", "--drain-polls=9"]) {
+    Some(t) => {
+      assert_eq(t.clock_step_ms, 300)
+      assert_eq(t.drain_empty_polls, 9)
+    }
+    None => abort("expected a replay trigger")
+  }
+}
+
+///|
+test "parse_replay_args defaults the clock step and drain window and ignores malformed values" {
+  // Absent flags fall back to the ReplayOptions defaults (20ms / 4 polls).
+  match parse_replay_args(["--replay", "s"]) {
+    Some(t) => {
+      assert_eq(t.clock_step_ms, 20)
+      assert_eq(t.drain_empty_polls, 4)
+    }
+    None => abort("expected a replay trigger")
+  }
+  // A non-numeric value keeps the default; a following `--...` is not swallowed
+  // as the value, so it still parses on its own (here `--raw`).
+  match
+    parse_replay_args([
+      "--replay", "s", "--clock-step", "fast", "--drain-polls", "--raw",
+    ]) {
+    Some(t) => {
+      assert_eq(t.clock_step_ms, 20)
+      assert_eq(t.drain_empty_polls, 4)
+      assert_true(t.raw_ansi)
+    }
+    None => abort("expected a replay trigger")
+  }
+}
+
+///|
 test "parse_replay_args does not swallow a following --flag as the --replay script" {
   match parse_replay_args(["--replay", "--raw"]) {
     Some(t) => {

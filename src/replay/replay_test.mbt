@@ -245,3 +245,176 @@ test "replay with a bypassed zero drain still processes scripted input" {
   @test.assert_eq(zero.frames, safe.frames)
   assert_true(zero.frames.join("").contains("count=1"))
 }
+
+///|
+test "normalize strips the trailing program-exit teardown reset-SGR" {
+  // The runtime's view-reset teardown emits reset-foreground then
+  // reset-background at program exit, which `normalize` would otherwise keep as
+  // SGR and leave tailing every captured stream. Strip only that trailing
+  // teardown barnacle; the view's own `reset()` is kept.
+  let raw = @pippa.style().foreground_rgb(1, 2, 3).render("hi") +
+    @pippa.reset_foreground_color() +
+    @pippa.reset_background_color()
+  assert_eq(normalize(raw), @pippa.style().foreground_rgb(1, 2, 3).render("hi"))
+}
+
+///|
+test "normalize keeps a mid-stream 39m/49m that is not the trailing teardown" {
+  // The strip is a trailing-suffix heuristic, not a semantic one: a
+  // reset-foreground/background pair is preserved here ONLY because printable
+  // text follows it, so the pair is not the stream's suffix. A frame ending
+  // exactly on the pair WOULD be stripped — a boundary that is unreachable in
+  // practice because the runtime's teardown reset is always the final bytes.
+  let raw = @pippa.reset_foreground_color() +
+    @pippa.reset_background_color() +
+    "tail"
+  assert_eq(
+    normalize(raw),
+    @pippa.reset_foreground_color() + @pippa.reset_background_color() + "tail",
+  )
+}
+
+///|
+test "with_drain_empty_polls clamps non-positive values and keeps larger windows" {
+  // The re-added builder clamps a 0/negative drain to the >=1 floor while a larger
+  // window passes through unchanged, giving callers an ergonomic way to widen the
+  // drain instead of a raw record update (the use-site clamp keeps that safe too).
+  assert_eq(
+    ReplayOptions::default().with_drain_empty_polls(0).drain_empty_polls,
+    1,
+  )
+  assert_eq(
+    ReplayOptions::default().with_drain_empty_polls(-3).drain_empty_polls,
+    1,
+  )
+  assert_eq(
+    ReplayOptions::default().with_drain_empty_polls(9).drain_empty_polls,
+    9,
+  )
+}
+
+///|
+test "normalize strips the trailing reset-SGR from a realistic full teardown sequence" {
+  // Tripwire: pin `normalize` against the EXACT byte order that program.mbt's
+  // `terminal_view_reset_sequence` emits at program exit — show-cursor,
+  // cursor-style, window-title, fg-reset (ESC[39m), bg-reset (ESC[49m),
+  // clear-progress, mouse-disable. Once the cursor/OSC/mouse controls are dropped,
+  // the reset-SGR pair is the trailing content, so it is stripped. If the runtime
+  // ever reorders this teardown so the reset-SGR is no longer trailing, this test
+  // fails loudly instead of the barnacle silently reappearing in captured frames.
+  let content = @pippa.style().foreground_rgb(1, 2, 3).render("hi")
+  let teardown = @pippa.show_cursor() +
+    @pippa.set_cursor_style(@pippa.Default) +
+    @pippa.clear_window_title() +
+    @pippa.reset_foreground_color() +
+    @pippa.reset_background_color() +
+    @pippa.clear_terminal_progress() +
+    @pippa.disable_mouse()
+  assert_eq(normalize(content + teardown), content)
+}
+
+///|
+/// Only the native/llvm runtime-driving test below uses these timer helpers, so
+/// they are cfg-gated to that target to avoid unused-value warnings elsewhere.
+#cfg(any(target="native", target="llvm"))
+priv enum TimerTestMsg {
+  TimerTick
+}
+
+///|
+/// A program whose `init` schedules a self-rescheduling `Cmd::after(100ms)` tick
+/// and whose `update` counts each tick and re-arms the next one. With the default
+/// replay clock step (+20ms/call) a 100ms `after` deadline is reached at most once
+/// before the drain window cancels; widening `clock_step_ms` makes the clock cross
+/// the deadline every poll, so the tick count tracks the drain window.
+#cfg(any(target="native", target="llvm"))
+fn timer_test_init() -> @pippa.UpdateResult[Int, TimerTestMsg] {
+  @pippa.UpdateResult::new(
+    model=0,
+    cmd=@pippa.Cmd::after(100, fn() { TimerTick }),
+  )
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+fn timer_test_update(
+  model : Int,
+  _msg : TimerTestMsg,
+) -> @pippa.UpdateResult[Int, TimerTestMsg] {
+  @pippa.UpdateResult::new(
+    model=model + 1,
+    cmd=@pippa.Cmd::after(100, fn() { TimerTick }),
+  )
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "replay clock_step_ms advances the deterministic clock so timers fire reproducibly" {
+  // F5: with the default +20ms/call step a 100ms `Cmd::after` deadline is barely
+  // (if ever) crossed inside the drain window, so timer ticks are not exercised
+  // end to end. A `clock_step_ms` at least as large as the timer interval makes
+  // the clock cross the deadline on every empty poll, so the number of ticks
+  // tracks the drain window — and the run stays fully deterministic.
+  fn ticks(step : Int, drain : Int) -> Int {
+    let program = @pippa.Program::new(
+      init=timer_test_init,
+      update=timer_test_update,
+      view=fn(model) { "ticks=\{model}" },
+    )
+    let opts = ReplayOptions::default()
+      .with_window_size(20, 5)
+      .with_clock_step_ms(step)
+      .with_drain_empty_polls(drain)
+    replay(program, "", opts).final_model
+  }
+
+  // A larger per-call clock step fires strictly more ticks within the same drain
+  // window: the timer goes from barely-ticking to ticking every poll.
+  let slow = ticks(20, 8)
+  let fast = ticks(200, 8)
+  assert_true(fast > slow)
+  // With the clock crossing the deadline every poll, the tick count grows with
+  // the drain window — the drain is the deterministic tick budget.
+  assert_true(ticks(200, 12) > ticks(200, 4))
+  // At least one timer Cmd fires end to end under the knob.
+  assert_true(fast >= 1)
+  // Reproducible: identical options yield an identical tick count.
+  assert_eq(ticks(200, 8), ticks(200, 8))
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
+test "replay polls the configured drain window: a larger drain polls strictly more" {
+  // Exercise the with_drain_empty_polls builder's reason to exist — widening the
+  // post-script drain. The deterministic replay clock is read several times per
+  // runtime loop iteration, not once per loop tick, so the clock-call count is not
+  // a literal count of polls. The assertion still holds by monotonicity, not a
+  // one-read-per-tick model: a larger drain means strictly more empty-input polls
+  // before the cancellation predicate fires, and more polls can only add clock
+  // reads — so the total clock-call count grows strictly with the drain window.
+  fn ticks_for_drain(drain : Int) -> Int {
+    let calls = Ref(0)
+    let now = Ref(0L)
+    let clock = fn() {
+      calls.val = calls.val + 1
+      now.val = now.val + 20L
+      now.val
+    }
+    let program = @pippa.Program::new(
+      init=test_init,
+      update=test_update,
+      view=fn(model) { "count=\{model}" },
+      sub=test_sub,
+    )
+    let opts = ReplayOptions::default()
+      .with_window_size(20, 5)
+      .with_drain_empty_polls(drain)
+      .with_clock(clock)
+    let _ = replay(program, "x", opts)
+    calls.val
+  }
+
+  let small = ticks_for_drain(1)
+  let large = ticks_for_drain(12)
+  assert_true(large > small)
+}

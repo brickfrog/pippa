@@ -18,13 +18,23 @@ pub(all) struct ReplayOptions {
   height : Int
   /// Keep raw runtime ANSI output when true. Output is normalized by default.
   raw_ansi : Bool
-  /// Optional deterministic monotonic clock for `Program::with_clock`.
+  /// Optional deterministic monotonic clock for `Program::with_clock`. When set,
+  /// it takes precedence over the synthetic clock and `clock_step_ms` is ignored.
   clock : (() -> Int64)?
   /// Empty raw-input polls to wait after the script has drained before cancel.
   /// Clamped to at least 1 at use-site in `replay`, so a 0 (or negative) value
   /// cannot fire cancellation before the scripted input is processed and
   /// rendered.
   drain_empty_polls : Int
+  /// Per-call advance (ms) of the synthetic monotonic clock used when `clock` is
+  /// `None`: every read of the runtime clock adds this many milliseconds. The
+  /// runtime fires at most one scheduled `Cmd::after` tick per armed timer per
+  /// empty drain poll, so a `clock_step_ms` at least as large as a component's tick
+  /// interval makes that timer due on every poll — making `drain_empty_polls` the
+  /// deterministic tick budget for end-to-end timer replays. Clamped to at least 1
+  /// at use-site in `replay_clock` so the synthetic clock always advances. Default
+  /// 20 preserves the historical fallback step.
+  clock_step_ms : Int
 }
 
 ///|
@@ -41,10 +51,17 @@ pub(all) struct ReplayResult[Model] {
 /// clock, and a 4-poll post-script drain window.
 ///
 /// `clock` is `None` here; determinism does not come from this default but from
-/// `replay`, which falls back to `replay_clock`'s monotonic +20ms counter when
-/// no clock is supplied.
+/// `replay`, which falls back to `replay_clock`'s monotonic counter (stepping by
+/// `clock_step_ms`, default 20) when no clock is supplied.
 pub fn ReplayOptions::default() -> ReplayOptions {
-  { width: 80, height: 24, raw_ansi: false, clock: None, drain_empty_polls: 4 }
+  {
+    width: 80,
+    height: 24,
+    raw_ansi: false,
+    clock: None,
+    drain_empty_polls: 4,
+    clock_step_ms: 20,
+  }
 }
 
 ///|
@@ -73,6 +90,39 @@ pub fn ReplayOptions::with_clock(
   clock : () -> Int64,
 ) -> ReplayOptions {
   { ..self, clock: Some(clock) }
+}
+
+///|
+/// Return options with a different synthetic-clock step: the per-call advance (ms)
+/// of the monotonic clock `replay` uses when no explicit `clock` is set.
+///
+/// Clamped to at least 1, mirroring the floor `replay_clock` enforces at use-site,
+/// so the synthetic clock always advances. Pair a step at least as large as a
+/// component's tick interval with `with_drain_empty_polls` to make that timer fire
+/// once per drain poll: the step makes each scheduled `Cmd::after`
+/// deadline due on the next poll, and the drain window then sets how many ticks
+/// are captured. Ignored when an explicit `clock` is supplied via `with_clock`.
+pub fn ReplayOptions::with_clock_step_ms(
+  self : ReplayOptions,
+  clock_step_ms : Int,
+) -> ReplayOptions {
+  { ..self, clock_step_ms: clock_step_ms.max(1) }
+}
+
+///|
+/// Return options with a different post-script drain window: the number of empty
+/// raw-input polls `replay` waits for after the script drains before cancelling.
+///
+/// Clamped to at least 1, mirroring the floor `replay` already enforces at
+/// use-site. This builder is the *ergonomic* way to widen the drain (e.g. to let
+/// a slow render settle): the `pub(all)` field can still be set directly with a
+/// raw record update, and the use-site clamp keeps that path safe too — so the
+/// builder is a convenience for the common case, not a safety gate.
+pub fn ReplayOptions::with_drain_empty_polls(
+  self : ReplayOptions,
+  drain_empty_polls : Int,
+) -> ReplayOptions {
+  { ..self, drain_empty_polls: drain_empty_polls.max(1) }
 }
 
 ///|
@@ -335,8 +385,25 @@ fn skip_string_control(chars : Array[Char], start : Int) -> Int {
 }
 
 ///|
+/// The program-exit teardown SGR the runtime writes through its view-reset
+/// sequence when `Program::run` returns: reset-foreground (`ESC [ 39 m`)
+/// immediately followed by reset-background (`ESC [ 49 m`). The surrounding
+/// cursor/OSC/mouse controls are dropped by `normalize` already, but this SGR
+/// pair survives the SGR-preserving filter and would otherwise tail every
+/// normalized stream, so `normalize` strips it as a trailing barnacle.
+fn teardown_reset_sgr() -> String {
+  @pippa.reset_foreground_color() + @pippa.reset_background_color()
+}
+
+///|
 /// Strip runtime cursor, clear-screen, alternate-screen, synchronized-output,
 /// OSC, and DCS controls while preserving SGR styling and printable text.
+///
+/// The one SGR exception is the program-exit teardown reset pair
+/// (`reset_foreground_color` + `reset_background_color`): when it appears as the
+/// trailing bytes of the stream it is the runtime's view-reset barnacle, not
+/// content, so it is stripped. A mid-stream `39m`/`49m` (followed by more output)
+/// is left untouched.
 pub fn normalize(output : String) -> String {
   let chars = output.to_array()
   let buf = StringBuilder::new(size_hint=chars.length())
@@ -361,7 +428,22 @@ pub fn normalize(output : String) -> String {
       i = i + 1
     }
   }
-  buf.to_string()
+  let normalized = buf.to_string()
+  let teardown = teardown_reset_sgr()
+  if normalized.has_suffix(teardown) {
+    normalized[:normalized.length() - teardown.length()].to_owned()
+  } else {
+    normalized
+  }
+}
+
+///|
+/// Effective synthetic-clock step. Clamped to at least 1 ms so the monotonic
+/// counter always advances even if a raw record-update bypassed the
+/// `with_clock_step_ms` builder's floor with a 0 (or negative) value.
+#cfg(any(target="native", target="llvm"))
+fn effective_clock_step_ms(configured : Int) -> Int64 {
+  configured.max(1).to_int64()
 }
 
 ///|
@@ -370,9 +452,10 @@ fn replay_clock(opts : ReplayOptions) -> () -> Int64 {
   match opts.clock {
     Some(clock) => clock
     None => {
+      let step = effective_clock_step_ms(opts.clock_step_ms)
       let now = Ref(0L)
       fn() {
-        now.val = now.val + 20L
+        now.val = now.val + step
         now.val
       }
     }

@@ -1541,6 +1541,10 @@ fn view_cursor_position_suffix(
 ///|
 #cfg(any(target="native", target="llvm"))
 fn terminal_view_reset_sequence() -> String {
+  // Order load-bearing for @replay.normalize: the fg/bg reset SGR (ESC[39m,
+  // ESC[49m) must stay trailing (only OSC/CSI controls after it) so normalize can
+  // strip it as the teardown barnacle. A realistic-teardown tripwire test in the
+  // replay package pins this order.
   show_cursor() +
   set_cursor_style(Default) +
   clear_window_title() +
