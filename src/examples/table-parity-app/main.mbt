@@ -7,5 +7,7 @@ fn main {
     sub=@table_parity.table_parity_sub,
     should_quit=fn(model) { model.quitting },
   )
-  ignore(@pippa.Program::run(program))
+  if !@replay.maybe_run_replay(program) {
+    ignore(@pippa.Program::run(program))
+  }
 }

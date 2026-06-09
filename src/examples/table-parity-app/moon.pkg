@@ -1,5 +1,6 @@
 import {
   "brickfrog/pippa",
+  "brickfrog/pippa/replay",
   "brickfrog/pippa/examples/table-parity" @table_parity,
 }
 

@@ -2323,6 +2323,41 @@ test "pippa cancellation hook stops a headless program" {
 
 ///|
 #cfg(any(target="native", target="llvm"))
+test "pippa with_clock drives runtime timers deterministically" {
+  let clock_calls = Ref(0)
+  let seen : Ref[Array[Int64]] = Ref([])
+  let program : Program[Int, Int64] = Program::new(
+      init=fn() {
+        UpdateResult::new(
+          model=0,
+          cmd=Cmd::every(10, fn(tick) { tick.elapsed_ms }),
+        )
+      },
+      update=fn(model, msg) {
+        seen.val = [..seen.val, msg]
+        UpdateResult::new(model=model + 1, cmd=Cmd::none())
+      },
+      view=fn(_model) { "" },
+      should_quit=fn(model) { model >= 1 },
+    )
+    .headless()
+    .with_clock(fn() {
+      let call = clock_calls.val
+      clock_calls.val = call + 1
+      if call == 0 {
+        1000L
+      } else {
+        1010L
+      }
+    })
+  ignore(program.run())
+  assert_eq(seen.val.length(), 1)
+  assert_eq(seen.val[0], 10L)
+  assert_true(clock_calls.val >= 2)
+}
+
+///|
+#cfg(any(target="native", target="llvm"))
 test "pippa handle can release and restore terminal" {
   let handle_ref : Ref[ProgramHandle[Int]?] = Ref(None)
   let polled = Ref(false)

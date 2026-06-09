@@ -7,5 +7,7 @@ fn main {
     sub=@keymap_help_parity.keymap_help_parity_sub,
     should_quit=fn(model) { model.quitting },
   )
-  ignore(@pippa.Program::run(program))
+  if !@replay.maybe_run_replay(program) {
+    ignore(@pippa.Program::run(program))
+  }
 }
