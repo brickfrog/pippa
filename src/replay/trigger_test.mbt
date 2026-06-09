@@ -44,3 +44,48 @@ test "parse_replay_args treats --ansi as a raw alias and a bare --replay as empt
 test "parse_replay_args returns None without --replay" {
   assert_true(parse_replay_args(["--raw", "--size", "40x12"]) is None)
 }
+
+///|
+test "parse_replay_args does not swallow a following --flag as the --replay script" {
+  match parse_replay_args(["--replay", "--raw"]) {
+    Some(t) => {
+      // The following `--raw` is another option, not the script: no script is
+      // provided (same as a bare trailing `--replay`) and `--raw` still parses.
+      assert_eq(t.script, "")
+      assert_true(t.raw_ansi)
+      assert_eq(t.width, 80)
+      assert_eq(t.height, 24)
+    }
+    None => abort("expected a replay trigger")
+  }
+}
+
+///|
+test "parse_replay_args treats a following --size as no --replay script" {
+  match parse_replay_args(["--replay", "--size", "20x5"]) {
+    Some(t) => {
+      // `--replay` takes no value here; the `--size 20x5` that follows is parsed
+      // on its own rather than being consumed as the script token.
+      assert_eq(t.script, "")
+      assert_false(t.raw_ansi)
+      assert_eq(t.width, 20)
+      assert_eq(t.height, 5)
+    }
+    None => abort("expected a replay trigger")
+  }
+}
+
+///|
+test "parse_replay_args does not swallow a following --flag as the --size value" {
+  match parse_replay_args(["--replay=app", "--size", "--raw"]) {
+    Some(t) => {
+      // `--size` takes no value when the next token is another option, so the
+      // default 80x24 holds and the following `--raw` still parses.
+      assert_eq(t.script, "app")
+      assert_true(t.raw_ansi)
+      assert_eq(t.width, 80)
+      assert_eq(t.height, 24)
+    }
+    None => abort("expected a replay trigger")
+  }
+}

@@ -63,7 +63,9 @@ pub fn parse_replay_args(args : Array[String]) -> ReplayTrigger? {
     let arg = args[i]
     if arg == "--replay" {
       found = true
-      if i + 1 < args.length() {
+      // A following `--...` token is another option, not the script: treat this
+      // like a bare trailing `--replay` (no script) and let that flag parse.
+      if i + 1 < args.length() && !args[i + 1].has_prefix("--") {
         script = args[i + 1]
         i = i + 1
       }
@@ -73,7 +75,9 @@ pub fn parse_replay_args(args : Array[String]) -> ReplayTrigger? {
     } else if arg == "--raw" || arg == "--ansi" {
       raw_ansi = true
     } else if arg == "--size" {
-      if i + 1 < args.length() {
+      // Only consume the next argv as the size value when it is not another
+      // `--...` option; otherwise leave the default size and let that flag parse.
+      if i + 1 < args.length() && !args[i + 1].has_prefix("--") {
         match parse_size(args[i + 1]) {
           Some((w, h)) => {
             width = w
