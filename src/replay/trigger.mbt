@@ -112,9 +112,16 @@ pub fn parse_replay_args(args : Array[String]) -> ReplayTrigger? {
 /// - `PIPPA_REPLAY=<tokens>`: enable replay with the given key-token script.
 /// - `PIPPA_REPLAY_RAW=1`: keep raw runtime ANSI output.
 /// - `PIPPA_REPLAY_SIZE=<WxH>`: initial terminal size (default 80x24).
+///
+/// ⚠️ This reads the *ambient* environment, so an exported `PIPPA_REPLAY` in the
+/// surrounding shell silently flips every app built on `maybe_run_replay` into
+/// replay-and-exit (see the footgun caveat on `maybe_run_replay`). As a small
+/// guard, a blank `export PIPPA_REPLAY=` (empty value) is treated as absent so it
+/// cannot trigger an empty replay; any non-empty value still triggers, so prefer
+/// the explicit `--replay` CLI flag and unset the env vars in tests.
 fn replay_trigger_from_env() -> ReplayTrigger? {
   match @env.get_env_var("PIPPA_REPLAY") {
-    None => None
+    None | Some("") => None
     Some(script) => {
       let raw_ansi = match @env.get_env_var("PIPPA_REPLAY_RAW") {
         Some(value) => value != "" && value != "0"
@@ -134,6 +141,45 @@ fn replay_trigger_from_env() -> ReplayTrigger? {
 }
 
 ///|
+/// Per-frame delimiter line marking the start of frame `index` (0-based) in
+/// joined replay output. A printable, deterministic marker so cram fixtures can
+/// assert on an individual frame instead of one undelimited byte-mash.
+///
+/// `index` counts the non-empty captured output chunks `replay` recorded — it is
+/// NOT the update-step index, and the count differs between raw and normalized
+/// modes (normalization can reduce a control-only chunk to empty, which is then
+/// dropped). The marker is a plaintext sentinel with no escaping or collision
+/// guard: an app whose own view renders a literal `--- frame N ---` line is
+/// indistinguishable from this delimiter.
+fn frame_delimiter(index : Int) -> String {
+  "--- frame \{index} ---"
+}
+
+///|
+/// Join captured replay frames into a single printable stream, prefixing each
+/// frame with a numbered `frame_delimiter` line so frames stay per-frame
+/// separable in cram snapshots (F3).
+///
+/// This *assumes* captured frames carry no trailing newline — true for the
+/// headless runtime's rendered chunks today, but an assumption rather than a
+/// guarantee. Under it, a single `\n` separates each delimiter from its frame and
+/// each frame from the next delimiter, and the final newline is added by
+/// `println`; a frame that did end in `\n` would simply render a blank line ahead
+/// of the next delimiter.
+fn join_replay_frames(frames : Array[String]) -> String {
+  let buf = StringBuilder::new()
+  for i, frame in frames {
+    if i > 0 {
+      buf.write_string("\n")
+    }
+    buf.write_string(frame_delimiter(i))
+    buf.write_string("\n")
+    buf.write_string(frame)
+  }
+  buf.to_string()
+}
+
+///|
 /// Detect a replay trigger from process arguments or the environment, run a
 /// headless `replay`, print the captured frames to stdout, and report whether a
 /// replay was handled.
@@ -143,8 +189,19 @@ fn replay_trigger_from_env() -> ReplayTrigger? {
 /// - Env: `PIPPA_REPLAY=<tokens> PIPPA_REPLAY_RAW=1 PIPPA_REPLAY_SIZE=<WxH>`
 ///
 /// Output is normalized by default; `--raw`/`PIPPA_REPLAY_RAW` keeps raw ANSI.
-/// Returns `false` when no trigger is present, so callers fall through to the
-/// interactive `@pippa.Program::run` path with byte-identical behavior.
+/// Frames are joined with a printable `--- frame N ---` delimiter line so the
+/// per-frame boundaries stay separable (a cram fixture can assert on a single
+/// frame). Returns `false` when no trigger is present, so callers fall through to
+/// the interactive `@pippa.Program::run` path with byte-identical behavior.
+///
+/// ⚠️ FOOTGUN — the environment trigger is *ambient*. Because this consults
+/// `PIPPA_REPLAY` on every launch, any shell with `export PIPPA_REPLAY=...` set
+/// silently turns EVERY app built on `maybe_run_replay` into replay-and-exit
+/// instead of starting interactively — there is no per-app opt-in. Prefer the
+/// explicit `--replay` CLI flag, and in tests/CI unset `PIPPA_REPLAY`,
+/// `PIPPA_REPLAY_RAW`, and `PIPPA_REPLAY_SIZE` (the cram suite does this with
+/// `env -u` on every command). A blank `export PIPPA_REPLAY=` is ignored as a
+/// small guard, but any non-empty value still triggers.
 pub fn[Model, Msg] maybe_run_replay(
   program : @pippa.Program[Model, Msg],
 ) -> Bool {
@@ -159,7 +216,7 @@ pub fn[Model, Msg] maybe_run_replay(
         .with_window_size(t.width, t.height)
         .with_raw_ansi(t.raw_ansi)
       let result = replay(program, t.script, opts)
-      println(result.frames.join(""))
+      println(join_replay_frames(result.frames))
       true
     }
   }

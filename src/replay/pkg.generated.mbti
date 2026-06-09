@@ -34,6 +34,7 @@ pub(all) struct ReplayOptions {
 }
 pub fn ReplayOptions::default() -> Self
 pub fn ReplayOptions::with_clock(Self, () -> Int64) -> Self
+pub fn ReplayOptions::with_drain_empty_polls(Self, Int) -> Self
 pub fn ReplayOptions::with_raw_ansi(Self, Bool) -> Self
 pub fn ReplayOptions::with_window_size(Self, Int, Int) -> Self
 
