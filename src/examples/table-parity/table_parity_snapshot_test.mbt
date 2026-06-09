@@ -14,33 +14,14 @@ test "table parity replay snapshots row navigation and selection frames" {
     script~,
   )
 
-  inspect(
+  @debug.debug_inspect(
     frames,
     content=(
-      #|[Table Parity
-      #|ID │ Name 
-      #|──────────
-      #|[1mA  │ alpha[0m
-      #|B  │ bravo
-      #|C  │ charl
-      #|, Table Parity
-      #|ID │ Name 
-      #|──────────
-      #|A  │ alpha
-      #|[1mB  │ bravo[0m
-      #|C  │ charl
-      #|, Table Parity
-      #|ID │ Name 
-      #|──────────
-      #|C  │ charl
-      #|D  │ delta
-      #|[1mE  │ echo [0m
-      #|, Table Parity
-      #|ID │ Name 
-      #|──────────
-      #|C  │ charl
-      #|D  │ delta
-      #|[1m[4mE  │ echo [0m
+      #|[
+      #|  "Table Parity\nID │ Name \n──────────\n\u{1b}[1mA  │ alpha\u{1b}[0m\nB  │ bravo\nC  │ charl\n",
+      #|  "Table Parity\nID │ Name \n──────────\nA  │ alpha\n\u{1b}[1mB  │ bravo\u{1b}[0m\nC  │ charl\n",
+      #|  "Table Parity\nID │ Name \n──────────\nC  │ charl\nD  │ delta\n\u{1b}[1mE  │ echo \u{1b}[0m\n",
+      #|  "Table Parity\nID │ Name \n──────────\nC  │ charl\nD  │ delta\n\u{1b}[1m\u{1b}[4mE  │ echo \u{1b}[0m\n",
       #|]
     ),
   )

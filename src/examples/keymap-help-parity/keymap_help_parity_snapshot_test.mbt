@@ -14,61 +14,16 @@ test "keymap help parity replay frames snapshot help and navigation" {
     ],
   )
 
-  inspect(
+  @debug.debug_inspect(
     frames,
     content=(
-      #|[Task      
-      #|──────────
-      #|[1mwrite     [0m
-      #|review    
-      #|↑/k up • n next task • pgup/b page up • pgdn/f page down • C-u half page up • C-d half page down • home/g top • end/G bottom • enter select
-      #|, Task      
-      #|──────────
-      #|[1mwrite     [0m
-      #|review    
-      #|↑/k up • n next task • pgup/b page up • pgdn/f page down • C-u half page up • C-d half page down • home/g top • end/G bottom • enter select
-      #|, Task      
-      #|──────────
-      #|write     
-      #|[1mreview    [0m
-      #|↑/k up • n next task • pgup/b page up • pgdn/f page down • C-u half page up • C-d half page down • home/g top • end/G bottom • enter select
-      #|, Task      
-      #|──────────
-      #|write     
-      #|[1mreview    [0m
-      #|Movement
-      #|  ↑/k     up
-      #|  n       next task
-      #|  pgup/b  page up
-      #|  pgdn/f  page down
-      #|  C-u     half page up
-      #|  C-d     half page down
-      #|  home/g  top
-      #|  end/G   bottom
-      #|
-      #|Selection
-      #|  enter  select
-      #|, Task      
-      #|──────────
-      #|review    
-      #|[1mmerge     [0m
-      #|Movement
-      #|  ↑/k     up
-      #|  n       next task
-      #|  pgup/b  page up
-      #|  pgdn/f  page down
-      #|  C-u     half page up
-      #|  C-d     half page down
-      #|  home/g  top
-      #|  end/G   bottom
-      #|
-      #|Selection
-      #|  enter  select
-      #|, Task      
-      #|──────────
-      #|review    
-      #|[1mmerge     [0m
-      #|↑/k up • n next task • pgup/b page up • pgdn/f page down • C-u half page up • C-d half page down • home/g top • end/G bottom • enter select
+      #|[
+      #|  "Task      \n──────────\n\u{1b}[1mwrite     \u{1b}[0m\nreview    \n↑/k up • n next task • pgup/b page up • pgdn/f page down • C-u half page up • C-d half page down • home/g top • end/G bottom • enter select\n",
+      #|  "Task      \n──────────\n\u{1b}[1mwrite     \u{1b}[0m\nreview    \n↑/k up • n next task • pgup/b page up • pgdn/f page down • C-u half page up • C-d half page down • home/g top • end/G bottom • enter select\n",
+      #|  "Task      \n──────────\nwrite     \n\u{1b}[1mreview    \u{1b}[0m\n↑/k up • n next task • pgup/b page up • pgdn/f page down • C-u half page up • C-d half page down • home/g top • end/G bottom • enter select\n",
+      #|  "Task      \n──────────\nwrite     \n\u{1b}[1mreview    \u{1b}[0m\nMovement\n  ↑/k     up\n  n       next task\n  pgup/b  page up\n  pgdn/f  page down\n  C-u     half page up\n  C-d     half page down\n  home/g  top\n  end/G   bottom\n\nSelection\n  enter  select\n",
+      #|  "Task      \n──────────\nreview    \n\u{1b}[1mmerge     \u{1b}[0m\nMovement\n  ↑/k     up\n  n       next task\n  pgup/b  page up\n  pgdn/f  page down\n  C-u     half page up\n  C-d     half page down\n  home/g  top\n  end/G   bottom\n\nSelection\n  enter  select\n",
+      #|  "Task      \n──────────\nreview    \n\u{1b}[1mmerge     \u{1b}[0m\n↑/k up • n next task • pgup/b page up • pgdn/f page down • C-u half page up • C-d half page down • home/g top • end/G bottom • enter select\n",
       #|]
     ),
   )
