@@ -53,6 +53,8 @@ pub(all) struct Program[Model, Msg] {
   raw_input : (() -> Bytes)?
   /// Optional cancellation predicate polled by the runtime between waits.
   cancelled : (() -> Bool)?
+  /// Optional monotonic millisecond clock used by this program's runtime.
+  clock : (() -> Int64)?
   /// Maximum renderer FPS. Values outside 1..120 are clamped by the runtime.
   fps : Int
   /// Optional initial window width used to seed `on_resize`.
@@ -200,6 +202,7 @@ pub fn[Model, Msg] Program::new(
     input,
     raw_input,
     cancelled,
+    clock: None,
     fps,
     window_width,
     window_height,
@@ -302,6 +305,15 @@ pub fn[Model, Msg] Program::with_cancelled(
   cancelled : () -> Bool,
 ) -> Program[Model, Msg] {
   { ..self, cancelled: Some(cancelled) }
+}
+
+///|
+/// Use a deterministic monotonic millisecond clock while this program runs.
+pub fn[Model, Msg] Program::with_clock(
+  self : Program[Model, Msg],
+  clock : () -> Int64,
+) -> Program[Model, Msg] {
+  { ..self, clock: Some(clock) }
 }
 
 ///|
@@ -2486,6 +2498,19 @@ fn[Model, Msg] run_internal(
   program : Program[Model, Msg],
   on_start : (ProgramHandle[Msg]) -> Unit,
 ) -> RunResult[Model] {
+  let previous_clock = match program.clock {
+    Some(clock) => {
+      let previous = runtime_clock_override.val
+      runtime_clock_override.val = Some(clock)
+      Some(previous)
+    }
+    None => None
+  }
+  defer (match previous_clock {
+    Some(previous) => restore_runtime_clock(previous)
+    None => ()
+  })
+
   pippa_init_wakeup()
   defer pippa_close_wakeup()
 

@@ -493,6 +493,7 @@ pub(all) struct Program[Model, Msg] {
   input : (() -> Array[InputEvent])?
   raw_input : (() -> Bytes)?
   cancelled : (() -> Bool)?
+  clock : (() -> Int64)?
   fps : Int
   window_width : Int
   window_height : Int
@@ -513,6 +514,7 @@ pub fn[Model, Msg] Program::with_alt_screen(Self[Model, Msg], Bool) -> Self[Mode
 pub fn[Model, Msg] Program::with_bracketed_paste(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_cancelled(Self[Model, Msg], () -> Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_catch_interrupt(Self[Model, Msg], Bool) -> Self[Model, Msg]
+pub fn[Model, Msg] Program::with_clock(Self[Model, Msg], () -> Int64) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_exec_runner(Self[Model, Msg], (ExecProcess) -> ExecResult) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_focus_reporting(Self[Model, Msg], Bool) -> Self[Model, Msg]
 pub fn[Model, Msg] Program::with_fps(Self[Model, Msg], Int) -> Self[Model, Msg]
