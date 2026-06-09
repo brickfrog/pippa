@@ -76,6 +76,21 @@ pub fn ReplayOptions::with_clock(
 }
 
 ///|
+/// Return options with a different post-script drain window: the number of empty
+/// raw-input polls `replay` waits for after the script drains before cancelling.
+///
+/// Clamped to at least 1 so the loop cannot cancel before the scripted input is
+/// processed and rendered — the same floor `replay` enforces at use-site, kept
+/// here so callers can safely *widen* the drain (e.g. for a long async settle)
+/// without reaching for an unsafe raw record update to the `pub(all)` field.
+pub fn ReplayOptions::with_drain_empty_polls(
+  self : ReplayOptions,
+  drain_empty_polls : Int,
+) -> ReplayOptions {
+  { ..self, drain_empty_polls: drain_empty_polls.max(1) }
+}
+
+///|
 fn default_replay_context() -> @profile.RenderContext {
   @profile.RenderContext::default()
   .with_color_profile(@profile.TrueColor)
@@ -335,8 +350,25 @@ fn skip_string_control(chars : Array[Char], start : Int) -> Int {
 }
 
 ///|
+/// The program-exit teardown SGR the runtime writes through its view-reset
+/// sequence when `Program::run` returns: reset-foreground (`ESC [ 39 m`)
+/// immediately followed by reset-background (`ESC [ 49 m`). The surrounding
+/// cursor/OSC/mouse controls are dropped by `normalize` already, but this SGR
+/// pair survives the SGR-preserving filter and would otherwise tail every
+/// normalized stream, so `normalize` strips it as a trailing barnacle.
+fn teardown_reset_sgr() -> String {
+  @pippa.reset_foreground_color() + @pippa.reset_background_color()
+}
+
+///|
 /// Strip runtime cursor, clear-screen, alternate-screen, synchronized-output,
 /// OSC, and DCS controls while preserving SGR styling and printable text.
+///
+/// The one SGR exception is the program-exit teardown reset pair
+/// (`reset_foreground_color` + `reset_background_color`): when it appears as the
+/// trailing bytes of the stream it is the runtime's view-reset barnacle, not
+/// content, so it is stripped. A mid-stream `39m`/`49m` (followed by more output)
+/// is left untouched.
 pub fn normalize(output : String) -> String {
   let chars = output.to_array()
   let buf = StringBuilder::new(size_hint=chars.length())
@@ -361,7 +393,13 @@ pub fn normalize(output : String) -> String {
       i = i + 1
     }
   }
-  buf.to_string()
+  let normalized = buf.to_string()
+  let teardown = teardown_reset_sgr()
+  if normalized.has_suffix(teardown) {
+    normalized[:normalized.length() - teardown.length()].to_owned()
+  } else {
+    normalized
+  }
 }
 
 ///|

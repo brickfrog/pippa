@@ -26,10 +26,12 @@ They are run by `moon cram test cram/`, which is wired into CI as an **advisory
 
 Each app reaches replay mode through the shared trigger helper in
 `src/replay/trigger.mbt` (`maybe_run_replay`). When a trigger is present the app
-plays the scripted keystrokes through the headless runtime, prints the joined
+plays the scripted keystrokes through the headless runtime, prints the captured
 frames, and exits; otherwise it falls through to the normal interactive
-`@pippa.Program::run` path with byte-identical behavior. The trigger can be
-supplied two equivalent ways:
+`@pippa.Program::run` path with byte-identical behavior. Each captured frame is
+prefixed with a `--- frame N ---` delimiter line (0-based) so the per-frame
+boundaries stay separable and a fixture can assert on a single frame instead of
+one undelimited byte-mash. The trigger can be supplied two equivalent ways:
 
 | | CLI flag | Environment variable |
 | --- | --- | --- |
@@ -37,9 +39,22 @@ supplied two equivalent ways:
 | Keep raw ANSI output | `--raw` / `--ansi` | `PIPPA_REPLAY_RAW=1` |
 | Initial terminal size | `--size <WxH>` | `PIPPA_REPLAY_SIZE=<WxH>` (default `80x24`) |
 
+> ⚠️ **Footgun — the `PIPPA_REPLAY` environment trigger is *ambient*.**
+> `maybe_run_replay` consults `PIPPA_REPLAY` on **every** app launch, so any
+> shell that has `export PIPPA_REPLAY=...` set will silently turn **every** app
+> built on the helper — including every shipped `*-parity-app` — into
+> replay-and-exit instead of starting interactively. There is no per-app opt-in.
+> Prefer the explicit `--replay` CLI flag, and always unset `PIPPA_REPLAY`,
+> `PIPPA_REPLAY_RAW`, and `PIPPA_REPLAY_SIZE` in tests and CI (every cram command
+> below does this with `env -u`). A blank `export PIPPA_REPLAY=` is ignored as a
+> small guard, but any non-empty value still triggers.
+
 Output is **normalized** (control sequences stripped to readable text) by
 default; `--raw` / `PIPPA_REPLAY_RAW=1` keeps the raw runtime ANSI so escape
-sequences can be asserted directly.
+sequences can be asserted directly. Normalization also drops the program-exit
+teardown reset-SGR (`ESC[39m` `ESC[49m`) when it tails the stream, so a
+normalized frame ends on its own content rather than a teardown barnacle;
+mid-stream SGR color is preserved.
 
 ## What the suite covers
 

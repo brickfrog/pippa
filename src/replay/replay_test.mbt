@@ -245,3 +245,47 @@ test "replay with a bypassed zero drain still processes scripted input" {
   @test.assert_eq(zero.frames, safe.frames)
   assert_true(zero.frames.join("").contains("count=1"))
 }
+
+///|
+test "normalize strips the trailing program-exit teardown reset-SGR" {
+  // The runtime's view-reset teardown emits reset-foreground then
+  // reset-background at program exit, which `normalize` would otherwise keep as
+  // SGR and leave tailing every captured stream. Strip only that trailing
+  // teardown barnacle; the view's own `reset()` is kept.
+  let raw = @pippa.style().foreground_rgb(1, 2, 3).render("hi") +
+    @pippa.reset_foreground_color() +
+    @pippa.reset_background_color()
+  assert_eq(normalize(raw), @pippa.style().foreground_rgb(1, 2, 3).render("hi"))
+}
+
+///|
+test "normalize keeps a mid-stream 39m/49m that is not the trailing teardown" {
+  // A reset-foreground/background pair followed by more printable text is
+  // mid-stream color, not the exit teardown, so it must be preserved.
+  let raw = @pippa.reset_foreground_color() +
+    @pippa.reset_background_color() +
+    "tail"
+  assert_eq(
+    normalize(raw),
+    @pippa.reset_foreground_color() + @pippa.reset_background_color() + "tail",
+  )
+}
+
+///|
+test "with_drain_empty_polls clamps non-positive values and keeps larger windows" {
+  // The re-added safe builder clamps a 0/negative drain to the >=1 floor while a
+  // larger window passes through unchanged, so widening the drain no longer needs
+  // an unsafe raw record update.
+  assert_eq(
+    ReplayOptions::default().with_drain_empty_polls(0).drain_empty_polls,
+    1,
+  )
+  assert_eq(
+    ReplayOptions::default().with_drain_empty_polls(-3).drain_empty_polls,
+    1,
+  )
+  assert_eq(
+    ReplayOptions::default().with_drain_empty_polls(9).drain_empty_polls,
+    9,
+  )
+}
