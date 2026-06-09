@@ -2,6 +2,7 @@ import {
   "brickfrog/pippa",
   "brickfrog/pippa/profile",
   "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/env",
 }
 
 import {

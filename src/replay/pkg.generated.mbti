@@ -9,7 +9,11 @@ import {
 // Values
 pub fn encode(String) -> Bytes
 
+pub fn[Model, Msg] maybe_run_replay(@pippa.Program[Model, Msg]) -> Bool
+
 pub fn normalize(String) -> String
+
+pub fn parse_replay_args(Array[String]) -> ReplayTrigger?
 
 pub fn[Model, Msg] replay(@pippa.Program[Model, Msg], String, ReplayOptions) -> ReplayResult[Model]
 
@@ -39,6 +43,13 @@ pub(all) struct ReplayResult[Model] {
 pub(all) enum ReplayStep[Msg] {
   Input(@pippa.InputEvent)
   Message(Msg)
+}
+
+pub(all) struct ReplayTrigger {
+  script : String
+  raw_ansi : Bool
+  width : Int
+  height : Int
 }
 
 // Type aliases
