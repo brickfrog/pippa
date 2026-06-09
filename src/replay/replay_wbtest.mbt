@@ -44,6 +44,8 @@ test "replay_trigger_from_env ignores a blank PIPPA_REPLAY and honors a non-empt
     @env.unset_env_var("PIPPA_REPLAY")
     @env.unset_env_var("PIPPA_REPLAY_RAW")
     @env.unset_env_var("PIPPA_REPLAY_SIZE")
+    @env.unset_env_var("PIPPA_REPLAY_CLOCK_STEP")
+    @env.unset_env_var("PIPPA_REPLAY_DRAIN_POLLS")
   }
 
   clear_replay_env()
