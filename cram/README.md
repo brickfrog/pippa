@@ -110,9 +110,14 @@ Promote it to a required, blocking gate only once **both** hold:
 
 1. **The toolchain is hard-pinned and reproducible.** The official distribution
    currently serves only the rolling `latest`/`nightly` channels, so CI requests
-   `MOON_VERSION` but falls back to `latest` (see the header comment in
-   `.github/workflows/ci.yml`). Because the golden ANSI bytes depend on the exact
-   compiler/runtime, a rolling toolchain can drift the frames and flake the
+   `MOON_VERSION` as a *soft reference* and falls back to `latest` when the dated
+   build is unavailable (see the header comment in `.github/workflows/ci.yml`).
+   Each setup step reads the actually-resolved toolchain (`moon version`) and
+   only reports the version as pinned when it genuinely matches `MOON_VERSION`,
+   emitting a non-failing `::warning::` that CI is on a floating toolchain
+   otherwise — so the soft pin is reported honestly but **not yet enforced** on
+   any job (required or advisory). Because the golden ANSI bytes depend on the
+   exact compiler/runtime, a rolling toolchain can drift the frames and flake the
    suite. Promotion requires a hard pin — e.g. an archived/vendored toolchain or
    a cached `~/.moon` keyed on `MOON_VERSION` — with CI **failing** on a version
    mismatch instead of warning.
